@@ -1,6 +1,6 @@
 <%@ WebHandler Language="C#" Class="AjouterRetard" %>
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -13,38 +13,85 @@ public class AjouterRetard : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
-        
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
-        
+
         try
         {
             string body;
             using (var reader = new StreamReader(ctx.Request.InputStream))
                 body = reader.ReadToEnd();
-            
+
             var ser = new JavaScriptSerializer();
-            var data = ser.Deserialize<dynamic>(body);
-            
-            string matricule = data["matricule"];
-            string nom = data["nom"];
-            string classeNom = data["classe"];
-            DateTime date = DateTime.Parse(data["date"].ToString());
-            TimeSpan heurePrevue = TimeSpan.Parse(data["heurePrevue"].ToString());
-            TimeSpan heureArrivee = TimeSpan.Parse(data["heureArrivee"].ToString());
-            int duree = Convert.ToInt32(data["duree"]);
-            string motif = data.ContainsKey("motif") ? data["motif"].ToString() : "";
-            bool justifie = data.ContainsKey("justifie") ? Convert.ToBoolean(data["justifie"]) : false;
-            string justification = data.ContainsKey("justification") ? data["justification"].ToString() : "";
-            
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Données invalides\"}");
+                return;
+            }
+
+            string matricule = GetString(data, "matricule");
+            string nom = GetString(data, "nom");
+            string classeNom = GetString(data, "classe");
+            string dateStr = GetString(data, "date");
+            string heurePrevueStr = GetString(data, "heurePrevue");
+            string heureArriveeStr = GetString(data, "heureArrivee");
+            string dureeStr = GetString(data, "duree");
+            string motif = GetString(data, "motif");
+            bool justifie = GetBool(data, "justifie");
+            string justification = GetString(data, "justification");
+
+            if (string.IsNullOrEmpty(matricule) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(classeNom) ||
+                string.IsNullOrEmpty(dateStr) || string.IsNullOrEmpty(heurePrevueStr) || string.IsNullOrEmpty(heureArriveeStr) ||
+                string.IsNullOrEmpty(dureeStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Tous les champs sont obligatoires\"}");
+                return;
+            }
+
+            DateTime date;
+            if (!DateTime.TryParse(dateStr, out date))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Date invalide\"}");
+                return;
+            }
+
+            TimeSpan heurePrevue;
+            if (!TimeSpan.TryParse(heurePrevueStr, out heurePrevue))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Heure prévue invalide\"}");
+                return;
+            }
+
+            TimeSpan heureArrivee;
+            if (!TimeSpan.TryParse(heureArriveeStr, out heureArrivee))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Heure d'arrivée invalide\"}");
+                return;
+            }
+
+            int duree;
+            if (!int.TryParse(dureeStr, out duree))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Durée invalide\"}");
+                return;
+            }
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Chaîne de connexion non trouvée\"}");
+                return;
+            }
+
             int anneeId = GetCurrentAnneeId(connStr);
             int classeId = GetClasseIdByName(connStr, classeNom);
-            
+
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand(@"
                 INSERT INTO RETARDS (ID, ANNEE_ID, MATRICULE, NOM, CLASSE, DATE_RETARD, HEURE_PREVUE, HEURE_ARRIVEE, DUREE, MOTIF, JUSTIFIE, JUSTIFICATION, CREATED_AT)
@@ -58,13 +105,14 @@ public class AjouterRetard : IHttpHandler, IRequiresSessionState
                 cmd.Parameters.AddWithValue("@heurePrevue", heurePrevue);
                 cmd.Parameters.AddWithValue("@heureArrivee", heureArrivee);
                 cmd.Parameters.AddWithValue("@duree", duree);
-                cmd.Parameters.AddWithValue("@motif", motif);
+                cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
                 cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
-                cmd.Parameters.AddWithValue("@justification", justification);
+                cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
+
                 conn.Open();
                 cmd.ExecuteNonQuery();
             }
-            
+
             ctx.Response.Write("{\"success\":true,\"message\":\"Retard enregistré avec succès\"}");
         }
         catch (Exception ex)
@@ -73,7 +121,7 @@ public class AjouterRetard : IHttpHandler, IRequiresSessionState
             ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
-    
+
     private int GetCurrentAnneeId(string connStr)
     {
         using (var conn = new SqlConnection(connStr))
@@ -84,9 +132,10 @@ public class AjouterRetard : IHttpHandler, IRequiresSessionState
             return result != null ? Convert.ToInt32(result) : 1;
         }
     }
-    
+
     private int GetClasseIdByName(string connStr, string className)
     {
+        if (string.IsNullOrEmpty(className)) return 1;
         using (var conn = new SqlConnection(connStr))
         using (var cmd = new SqlCommand("SELECT TOP 1 ID FROM CLASSES WHERE NOM = @nom", conn))
         {
@@ -96,6 +145,23 @@ public class AjouterRetard : IHttpHandler, IRequiresSessionState
             return result != null ? Convert.ToInt32(result) : 1;
         }
     }
-    
+
+    private string GetString(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
+    }
+
+    private bool GetBool(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+        {
+            try { return Convert.ToBoolean(dict[key]); }
+            catch { return false; }
+        }
+        return false;
+    }
+
     public bool IsReusable { get { return false; } }
 }

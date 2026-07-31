@@ -1,7 +1,7 @@
 ﻿<%@ WebHandler Language="C#" Class="SupprimerBulletin" %>
 
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -16,14 +16,13 @@ public class SupprimerBulletin : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        JavaScriptSerializer ser = new JavaScriptSerializer();
-
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
+
+        JavaScriptSerializer ser = new JavaScriptSerializer();
 
         if (ctx.Request.HttpMethod != "POST")
         {
@@ -38,16 +37,18 @@ public class SupprimerBulletin : IHttpHandler, IRequiresSessionState
             using (var reader = new StreamReader(ctx.Request.InputStream))
                 body = reader.ReadToEnd();
 
-            var payload = ser.Deserialize<IdPayload>(body);
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
 
-            if (payload == null || string.IsNullOrWhiteSpace(payload.ID))
+            if (data == null || !data.ContainsKey("ID") || data["ID"] == null)
                 throw new ArgumentException("ID du bulletin invalide.");
 
             Guid bulletinId;
-            if (!Guid.TryParse(payload.ID, out bulletinId))
+            if (!Guid.TryParse(data["ID"].ToString(), out bulletinId))
                 throw new ArgumentException("ID du bulletin invalide (format GUID attendu).");
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Erreur de connexion");
 
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand("DELETE FROM BULLETINS WHERE ID = @id", conn))
@@ -64,16 +65,14 @@ public class SupprimerBulletin : IHttpHandler, IRequiresSessionState
         catch (ArgumentException ex)
         {
             ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 
     public bool IsReusable { get { return false; } }
-
-    private class IdPayload { public string ID { get; set; } }
 }

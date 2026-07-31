@@ -24,9 +24,8 @@ async function addEventFromTemplate(templateId) {
         
         if (data.success) {
             showToast('Événement ajouté avec succès', 'success');
-            await loadEvents();
-            await loadUpcomingEvents();
-            await loadStatistics();
+            // ✅ Recharger uniquement le calendrier
+            await refreshCalendar();
         } else {
             showToast(data.message || 'Erreur lors de l\'ajout', 'error');
         }
@@ -114,45 +113,18 @@ async function showUpcomingEventDetail(eventId) {
         
         Swal.fire({
             title: event.TITRE || 'Événement',
-            html: `
-                <div style="text-align:left; padding:10px 0;">
-                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                        <span style="width:20px; height:20px; border-radius:4px; background:${color}; display:inline-block;"></span>
-                        <span style="font-size:13px; color:#6c757d;">${event.TYPE || 'Événement'}</span>
-                    </div>
-                    <div style="margin-bottom:8px;">
-                        <i class="far fa-calendar-alt" style="width:20px; color:#6c757d;"></i>
-                        <span style="font-size:14px;">${dateStr}</span>
-                    </div>
-                    <div style="margin-bottom:8px;">
-                        <i class="far fa-clock" style="width:20px; color:#6c757d;"></i>
-                        <span style="font-size:14px;">${timeStr}</span>
-                    </div>
-                    ${event.LIEU ? `
-                        <div style="margin-bottom:8px;">
-                            <i class="fas fa-map-marker-alt" style="width:20px; color:#6c757d;"></i>
-                            <span style="font-size:14px;">${escapeHtml(event.LIEU)}</span>
-                        </div>
-                    ` : ''}
-                    ${event.PUBLIQUE && event.PUBLIQUE !== 'all' ? `
-                        <div style="margin-bottom:8px;">
-                            <i class="fas fa-users" style="width:20px; color:#6c757d;"></i>
-                            <span style="font-size:14px;">Public : ${publiqueLabels[event.PUBLIQUE] || event.PUBLIQUE}</span>
-                        </div>
-                    ` : ''}
-                    ${event.URL ? `
-                        <div style="margin-bottom:8px;">
-                            <i class="fas fa-link" style="width:20px; color:#6c757d;"></i>
-                            <a href="${event.URL}" target="_blank" style="font-size:14px; color:#007bff;">${event.URL}</a>
-                        </div>
-                    ` : ''}
-                    ${event.DESCRIPTION ? `
-                        <div style="margin-top:12px; padding-top:12px; border-top:1px solid #dee2e6;">
-                            <div style="font-size:13px; color:#495057;">${escapeHtml(event.DESCRIPTION)}</div>
-                        </div>
-                    ` : ''}
-                </div>
-            `,
+            html: '<div style="text-align:left; padding:10px 0;">' +
+                '<div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">' +
+                '<span style="width:20px; height:20px; border-radius:4px; background:' + color + '; display:inline-block;"></span>' +
+                '<span style="font-size:13px; color:#6c757d;">' + (event.TYPE || 'Événement') + '</span>' +
+                '</div>' +
+                '<div style="margin-bottom:8px;"><i class="far fa-calendar-alt" style="width:20px; color:#6c757d;"></i><span style="font-size:14px;">' + dateStr + '</span></div>' +
+                '<div style="margin-bottom:8px;"><i class="far fa-clock" style="width:20px; color:#6c757d;"></i><span style="font-size:14px;">' + timeStr + '</span></div>' +
+                (event.LIEU ? '<div style="margin-bottom:8px;"><i class="fas fa-map-marker-alt" style="width:20px; color:#6c757d;"></i><span style="font-size:14px;">' + escapeHtml(event.LIEU) + '</span></div>' : '') +
+                (event.PUBLIQUE && event.PUBLIQUE !== 'all' ? '<div style="margin-bottom:8px;"><i class="fas fa-users" style="width:20px; color:#6c757d;"></i><span style="font-size:14px;">Public : ' + (publiqueLabels[event.PUBLIQUE] || event.PUBLIQUE) + '</span></div>' : '') +
+                (event.URL ? '<div style="margin-bottom:8px;"><i class="fas fa-link" style="width:20px; color:#6c757d;"></i><a href="' + event.URL + '" target="_blank" style="font-size:14px; color:#007bff;">' + event.URL + '</a></div>' : '') +
+                (event.DESCRIPTION ? '<div style="margin-top:12px; padding-top:12px; border-top:1px solid #dee2e6;"><div style="font-size:13px; color:#495057;">' + escapeHtml(event.DESCRIPTION) + '</div></div>' : '') +
+                '</div>',
             icon: 'info',
             confirmButtonText: 'Fermer',
             confirmButtonColor: '#1e3a2f'
@@ -190,34 +162,32 @@ function showEventDetail(event) {
         'personnel': 'Personnel'
     };
     
-    var html = `
-        <div class="detail-event" style="border-left: 5px solid ${event.backgroundColor};">
-            <h4>${event.title}</h4>
-            <div class="detail-meta">
-                <span class="detail-type">${getTypeLabel(type)}</span>
-                <span class="detail-date">📅 ${formatEventDate(event.start)}</span>
-                ${startDate ? `<span class="detail-time">🕐 ${formatEventTime(event.start)}</span>` : ''}
-                ${endDate ? `<span class="detail-time">➜ ${formatEventTime(event.end)}</span>` : ''}
-            </div>
-    `;
+    var html = '<div class="detail-event" style="border-left: 5px solid ' + event.backgroundColor + ';">' +
+        '<h4>' + event.title + '</h4>' +
+        '<div class="detail-meta">' +
+        '<span class="detail-type">' + getTypeLabel(type) + '</span>' +
+        '<span class="detail-date">📅 ' + formatEventDate(event.start) + '</span>' +
+        (startDate ? '<span class="detail-time">🕐 ' + formatEventTime(event.start) + '</span>' : '') +
+        (endDate ? '<span class="detail-time">➜ ' + formatEventTime(event.end) + '</span>' : '') +
+        '</div>';
     
     if (location) {
-        html += `<div class="detail-location">📍 ${location}</div>`;
+        html += '<div class="detail-location">📍 ' + location + '</div>';
     }
     
     if (publique && publique !== 'all') {
-        html += `<div class="detail-audience">👥 Public : ${publiqueLabels[publique] || publique}</div>`;
+        html += '<div class="detail-audience">👥 Public : ' + (publiqueLabels[publique] || publique) + '</div>';
     }
     
     if (url) {
-        html += `<div class="detail-url">🔗 <a href="${url}" target="_blank">${url}</a></div>`;
+        html += '<div class="detail-url">🔗 <a href="' + url + '" target="_blank">' + url + '</a></div>';
     }
     
     if (description) {
-        html += `<div class="detail-description">${description}</div>`;
+        html += '<div class="detail-description">' + description + '</div>';
     }
     
-    html += `</div>`;
+    html += '</div>';
     
     body.innerHTML = html;
     
@@ -250,3 +220,13 @@ function editDetail() {
     // Fonction appelée via le bouton dans le modal
     // Le onclick est défini dynamiquement dans showEventDetail
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPOSITION GLOBALE
+// ─────────────────────────────────────────────────────────────────────────────
+
+window.addEventFromTemplate = addEventFromTemplate;
+window.addEventFromSidebar = addEventFromSidebar;
+window.showUpcomingEventDetail = showUpcomingEventDetail;
+window.showEventDetail = showEventDetail;
+window.editDetail = editDetail;

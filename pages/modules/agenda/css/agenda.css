@@ -1004,3 +1004,10 @@
         padding: 10px;
     }
 }
+
+.nav-pills .nav-link.active,
+.nav-pills .show > .nav-link {
+    background-color: #007bff !important;
+    color: #fff !important;
+    border-radius: 0.25rem;
+}

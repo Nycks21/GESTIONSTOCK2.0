@@ -1,7 +1,6 @@
-<%@ WebHandler Language="C#" Class="DeleteEvent" %>
+﻿<%@ WebHandler Language="C#" Class="DeleteEvent" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,22 +13,21 @@ public class DeleteEvent : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        if (!AuthHelper.HasPermission("agenda"))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
@@ -40,14 +38,20 @@ public class DeleteEvent : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            string id = data.ContainsKey("id") ? data["id"].ToString() : "";
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Données JSON invalides\"}");
+                return;
+            }
+
+            string id = GetString(data, "id", "");
             if (string.IsNullOrEmpty(id))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant\"}");
                 return;
             }
 
-            int userId = Convert.ToInt32(ctx.Session["IDUSER"]);
+            int userId = AuthHelper.GetUserId(ctx);
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -77,9 +81,15 @@ public class DeleteEvent : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key, string defaultValue)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return defaultValue;
     }
 
     public bool IsReusable { get { return false; } }

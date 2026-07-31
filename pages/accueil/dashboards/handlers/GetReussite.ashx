@@ -1,18 +1,38 @@
-<%@ WebHandler Language="C#" Class="GetReussite" %>
+﻿<%@ WebHandler Language="C#" Class="GetReussite" %>
 using System;
 using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
 using System.Collections.Generic;
+using System.Web.SessionState;   // ✅ AJOUT
 
-public class GetReussite : IHttpHandler
+public class GetReussite : IHttpHandler, IRequiresSessionState   // ✅ AJOUT
 {
-    private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+    private static readonly string connStr;
+
+    static GetReussite()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
 
     public void ProcessRequest(HttpContext context)
     {
         context.Response.ContentType = "application/json";
+
+        if (!AuthHelper.IsAuthenticated(context))
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        int role = AuthHelper.GetUserRole(context);
+        if (role != 0 && role != 1)
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+            return;
+        }
 
         try
         {
@@ -86,9 +106,9 @@ public class GetReussite : IHttpHandler
                 context.Response.Write(new JavaScriptSerializer().Serialize(result));
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            var result = new { success = false, message = ex.Message, data = new List<object>() };
+            var result = new { success = false, message = "Erreur serveur", data = new List<object>() };
             context.Response.Write(new JavaScriptSerializer().Serialize(result));
         }
     }

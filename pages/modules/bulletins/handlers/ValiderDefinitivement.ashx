@@ -1,19 +1,12 @@
 <%@ WebHandler Language="C#" Class="ValiderDefinitivement" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
 using System.Web.Script.Serialization;
 using System.Web.SessionState;
 
-/// <summary>
-/// Rôle unique : passer STATUT = 'Validé' sur les bulletins d'une classe/
-/// matière/période qui ont au moins une note et qui ne sont pas déjà validés.
-/// Une fois validé, le statut ne peut plus être modifié (les handlers
-/// ModifierBulletin et ValiderDefinitivement le vérifient tous les deux).
-/// </summary>
 public class ValiderDefinitivement : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
@@ -21,85 +14,51 @@ public class ValiderDefinitivement : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            // ── Authentification ──────────────────────────────────────────────
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            // ── Lecture du corps ──────────────────────────────────────────────
-            // On remet la position à 0 car certains modules HTTP ASP.NET
-            // (ex: requestValidationMode, des HttpModules personnalisés)
-            // peuvent avoir partiellement lu l'InputStream avant d'arriver ici.
-            string body = "";
-            try
-            {
-                if (ctx.Request.InputStream.CanSeek)
-                    ctx.Request.InputStream.Position = 0;
-
-                using (var reader = new StreamReader(ctx.Request.InputStream, System.Text.Encoding.UTF8, false, 4096, true))
-                    body = reader.ReadToEnd();
-            }
-            catch { /* on laisse body = "" et on tombera sur le check ci-dessous */ }
+            // Lire le corps
+            string body;
+            using (var reader = new StreamReader(ctx.Request.InputStream))
+                body = reader.ReadToEnd();
 
             if (string.IsNullOrWhiteSpace(body))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête vide — vérifiez que Content-Type:application/json est bien envoyé\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête vide\"}");
                 return;
             }
 
             var ser = new JavaScriptSerializer();
-            Dictionary<string, object> data;
-            try
-            {
-                data = ser.Deserialize<Dictionary<string, object>>(body);
-            }
-            catch (Exception parseEx)
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"JSON invalide : " + parseEx.Message.Replace("\"", "'") + "\"}");
-                return;
-            }
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
 
             if (data == null)
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"JSON invalide\"}");
                 return;
             }
 
-            // ── Validation des paramètres ─────────────────────────────────────
-            // Utilisation de int.TryParse pour éviter une exception non gérée
-            // si classeId arrivait sous une forme inattendue (chaîne vide,
-            // texte, null), ce qui se serait manifesté comme une erreur 500
-            // générique peu exploitable côté client.
-            if (!data.ContainsKey("classeId") || !data.ContainsKey("matiereId") || !data.ContainsKey("periodeId"))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Paramètres manquants (classeId, matiereId, periodeId)\"}");
-                return;
-            }
+            // Récupérer les paramètres
+            int classeId = GetInt(data, "classeId");
+            string matiereId = GetString(data, "matiereId");
+            string periode = GetString(data, "periodeId");
 
-            int classeId;
-            if (!int.TryParse(Convert.ToString(data["classeId"]), out classeId) || classeId <= 0)
+            if (classeId <= 0)
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Identifiant de classe invalide\"}");
                 return;
             }
-
-            string matiereId = Convert.ToString(data["matiereId"]).Trim();
-            string periode   = Convert.ToString(data["periodeId"]).Trim();
-
             if (string.IsNullOrEmpty(matiereId))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Identifiant de matière invalide\"}");
                 return;
             }
 
-            // Validation de la période contre la contrainte CHECK SQL
-            // CHK_PERIODE (T1, T2, T3, Sem1, Sem2) pour renvoyer un message
-            // clair plutôt qu'une exception SQL brute ou 0 ligne affectée.
+            // Validation de la période
             var periodesValides = new[] { "T1", "T2", "T3", "Sem1", "Sem2" };
             if (!Array.Exists(periodesValides, p => p == periode))
             {
@@ -107,15 +66,27 @@ public class ValiderDefinitivement : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            // ── Exécution SQL ─────────────────────────────────────────────────
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            Guid matiereGuid;
+            if (!Guid.TryParse(matiereId, out matiereGuid))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Identifiant de matière invalide\"}");
+                return;
+            }
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+                return;
+            }
+
             int updatedCount;
 
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
 
-                const string sql = @"
+                string sql = @"
                     UPDATE BULLETINS
                     SET    STATUT     = 'Validé',
                            UPDATED_AT = GETDATE()
@@ -128,29 +99,38 @@ public class ValiderDefinitivement : IHttpHandler, IRequiresSessionState
 
                 using (var cmd = new SqlCommand(sql, conn))
                 {
-                    cmd.Parameters.AddWithValue("@classeId",  classeId);
-                    cmd.Parameters.AddWithValue("@matiereId", matiereId);
-                    cmd.Parameters.AddWithValue("@periode",   periode);
+                    cmd.Parameters.AddWithValue("@classeId", classeId);
+                    cmd.Parameters.AddWithValue("@matiereId", matiereGuid);
+                    cmd.Parameters.AddWithValue("@periode", periode);
                     updatedCount = cmd.ExecuteNonQuery();
                 }
             }
 
-            // ── Réponse ───────────────────────────────────────────────────────
-            // Le champ "updated" permet à bulletins.js de distinguer :
-            //   - 0  → aucun bulletin éligible (notes non sauvegardées ?)
-            //   - >0 → N bulletins verrouillés avec succès
-            ctx.Response.Write(
-                "{\"success\":true,\"updated\":" + updatedCount + "}"
-            );
+            ctx.Response.Write("{\"success\":true,\"updated\":" + updatedCount + "}");
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string msg = ex.Message.Replace("\"", "'")
-                                   .Replace("\r", " ")
-                                   .Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + msg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
+    }
+
+    private int GetInt(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+        {
+            int val;
+            if (int.TryParse(dict[key].ToString(), out val))
+                return val;
+        }
+        return 0;
     }
 
     public bool IsReusable { get { return false; } }

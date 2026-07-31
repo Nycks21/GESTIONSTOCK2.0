@@ -1,6 +1,6 @@
 <%@ WebHandler Language="C#" Class="MoveEmploi" %>
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -13,10 +13,10 @@ public class MoveEmploi : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
@@ -35,7 +35,12 @@ public class MoveEmploi : IHttpHandler, IRequiresSessionState
             return;
         }
 
-        string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+        string connStr = AuthHelper.ConnectionString;
+        if (string.IsNullOrEmpty(connStr))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+            return;
+        }
 
         try
         {
@@ -45,25 +50,19 @@ public class MoveEmploi : IHttpHandler, IRequiresSessionState
 
                 if (swap)
                 {
-                    // Échange : récupérer les deux enregistrements
                     var source = GetCell(conn, classe, sourceDay, sourceHour);
                     var target = GetCell(conn, classe, targetDay, targetHour);
-
-                    // Mettre à jour : source <- target et target <- source
                     UpdateCell(conn, classe, sourceDay, sourceHour, target);
                     UpdateCell(conn, classe, targetDay, targetHour, source);
                 }
                 else
                 {
-                    // Déplacement simple : supprimer la cible (si elle existe) puis déplacer la source
-                    // On supprime d'abord l'éventuel enregistrement cible
                     DeleteCell(conn, classe, targetDay, targetHour);
-                    // Puis on déplace la source vers la cible
                     MoveCell(conn, classe, sourceDay, sourceHour, targetDay, targetHour);
                 }
             }
 
-            ctx.Response.Write("{\"success\":true}");
+            ctx.Response.Write("{\"success\":true,\"message\":\"Emploi déplacé avec succès\"}");
         }
         catch (Exception ex)
         {
@@ -96,10 +95,7 @@ public class MoveEmploi : IHttpHandler, IRequiresSessionState
                         description = rdr["DESCRIPTION"] == DBNull.Value ? "" : rdr["DESCRIPTION"].ToString()
                     };
                 }
-                else
-                {
-                    return null;
-                }
+                return null;
             }
         }
     }
@@ -108,7 +104,6 @@ public class MoveEmploi : IHttpHandler, IRequiresSessionState
     {
         if (cell == null)
         {
-            // Si la cellule source est nulle, on supprime simplement la cible
             DeleteCell(conn, classe, jour, heureDebut);
             return;
         }
@@ -156,14 +151,11 @@ public class MoveEmploi : IHttpHandler, IRequiresSessionState
 
     private void MoveCell(SqlConnection conn, string classe, string sourceJour, string sourceHeure, string targetJour, string targetHeure)
     {
-        // Récupérer la source
         var source = GetCell(conn, classe, sourceJour, sourceHeure);
         if (source == null) return;
 
-        // Supprimer la source
         DeleteCell(conn, classe, sourceJour, sourceHeure);
 
-        // Insérer dans la cible
         string sql = @"
             INSERT INTO EMPLOI_TEMPS (CLASSE_ID, JOUR, HEURE_DEBUT, HEURE_FIN, MATIERE_ID, PROFESSEUR, SALLE, COULEUR, TYPE, URL, DESCRIPTION, CREATED_AT)
             VALUES (@classe, @jour, @heureDebut, @heureFin, @matiere, @prof, @salle, @couleur, @type, @url, @description, GETDATE())";

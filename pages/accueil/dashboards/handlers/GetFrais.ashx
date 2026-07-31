@@ -5,14 +5,34 @@ using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
 using System.Collections.Generic;
+using System.Web.SessionState;   // ✅ AJOUT
 
-public class GetFrais : IHttpHandler
+public class GetFrais : IHttpHandler, IRequiresSessionState   // ✅ AJOUT
 {
-    private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+    private static readonly string connStr;
+
+    static GetFrais()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
 
     public void ProcessRequest(HttpContext context)
     {
         context.Response.ContentType = "application/json";
+
+        if (!AuthHelper.IsAuthenticated(context))
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        int role = AuthHelper.GetUserRole(context);
+        if (role != 0 && role != 1)
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+            return;
+        }
 
         try
         {
@@ -20,20 +40,18 @@ public class GetFrais : IHttpHandler
             {
                 conn.Open();
 
-                // 1. Récupérer le TOTAL global des frais (somme des TOTAL)
                 double totalGlobal = 0;
                 string totalSql = "SELECT ISNULL(SUM(TOTAL), 0) FROM FRAIS";
                 using (SqlCommand cmd = new SqlCommand(totalSql, conn))
                 {
                     object obj = cmd.ExecuteScalar();
-                    totalGlobal = Convert.ToDouble(obj) / 1000; // en kAr
+                    totalGlobal = Convert.ToDouble(obj) / 1000;
                 }
 
-                // 2. Générer les 6 derniers mois
                 var labels = new List<string>();
-                var payes = new List<double>();      // paiements mensuels
-                var restes = new List<double>();     // reste = totalGlobal - cumul
-                var cumuls = new List<double>();     // cumul des paiements
+                var payes = new List<double>();
+                var restes = new List<double>();
+                var cumuls = new List<double>();
 
                 for (int i = 5; i >= 0; i--)
                 {
@@ -42,7 +60,6 @@ public class GetFrais : IHttpHandler
                     string annee = monthDate.ToString("yyyy");
                     labels.Add(monthDate.ToString("MM/yyyy"));
 
-                    // Récupérer la somme des paiements pour ce mois
                     double paiementMois = 0;
                     string paiementSql = @"
                         SELECT ISNULL(SUM(MONTANT), 0)
@@ -57,16 +74,11 @@ public class GetFrais : IHttpHandler
                     }
 
                     payes.Add(paiementMois);
-
-                    // Cumul des paiements
                     double cumul = (cumuls.Count > 0) ? cumuls[cumuls.Count - 1] + paiementMois : paiementMois;
                     cumuls.Add(cumul);
-
-                    // Reste = totalGlobal - cumul
                     restes.Add(totalGlobal - cumul);
                 }
 
-                // ✅ Données de démonstration si aucun paiement n'a été trouvé
                 if (labels.Count == 0 || payes.TrueForAll(p => p == 0))
                 {
                     labels = new List<string> { "02/2026", "03/2026", "04/2026", "05/2026", "06/2026", "07/2026" };
@@ -75,22 +87,21 @@ public class GetFrais : IHttpHandler
                     restes = new List<double> { 88000, 74500, 60500, 47700, 32700, 16700 };
                 }
 
-                // 3. Retourner les données (renommer la variable pour éviter conflit)
                 var dataResult = new
                 {
                     success = true,
                     labels = labels,
                     payes = payes,
-                    impayes = restes,   // reste à payer
-                    totals = cumuls     // cumul des paiements
+                    impayes = restes,
+                    totals = cumuls
                 };
 
                 context.Response.Write(new JavaScriptSerializer().Serialize(dataResult));
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            context.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message }));
+            context.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = "Erreur serveur" }));
         }
     }
 

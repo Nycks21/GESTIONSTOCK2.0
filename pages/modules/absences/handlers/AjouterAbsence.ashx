@@ -13,118 +13,92 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
-        
+
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-            
             string body;
             using (var reader = new StreamReader(ctx.Request.InputStream))
                 body = reader.ReadToEnd();
-            
-            // Débogage : afficher le body reçu
-            System.Diagnostics.Debug.WriteLine("Body reçu: " + body);
-            
+
             var ser = new JavaScriptSerializer();
-            var data = ser.Deserialize<dynamic>(body);
-            
-            // Vérifier que toutes les clés existent (sans opérateur ?.)
-            if (!data.ContainsKey("matricule") || string.IsNullOrEmpty(data["matricule"] != null ? data["matricule"].ToString() : ""))
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Données invalides\"}");
+                return;
+            }
+
+            // Extraction sécurisée (sans ?.)
+            string matricule = GetString(data, "matricule");
+            string nom = GetString(data, "nom");
+            string classeNom = GetString(data, "classe");
+            string dateDebutStr = GetString(data, "dateDebut");
+            string dateFinStr = GetString(data, "dateFin");
+            string motif = GetString(data, "motif");
+            bool justifie = GetBool(data, "justifie");
+            string justification = GetString(data, "justification");
+
+            if (string.IsNullOrEmpty(matricule))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Matricule manquant\"}");
                 return;
             }
-            
-            if (!data.ContainsKey("nom") || string.IsNullOrEmpty(data["nom"] != null ? data["nom"].ToString() : ""))
+            if (string.IsNullOrEmpty(nom))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Nom manquant\"}");
                 return;
             }
-            
-            if (!data.ContainsKey("classe") || string.IsNullOrEmpty(data["classe"] != null ? data["classe"].ToString() : ""))
+            if (string.IsNullOrEmpty(classeNom))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Classe manquante\"}");
                 return;
             }
-            
-            if (!data.ContainsKey("dateDebut") || string.IsNullOrEmpty(data["dateDebut"] != null ? data["dateDebut"].ToString() : ""))
+            if (string.IsNullOrEmpty(dateDebutStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Date de début manquante\"}");
                 return;
             }
-            
-            if (!data.ContainsKey("dateFin") || string.IsNullOrEmpty(data["dateFin"] != null ? data["dateFin"].ToString() : ""))
+            if (string.IsNullOrEmpty(dateFinStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Date de fin manquante\"}");
                 return;
             }
-            
-            string matricule = data["matricule"].ToString();
-            string nom = data["nom"].ToString();
-            string classeNom = data["classe"].ToString();
-            
-            // Parsing des dates
+
             DateTime dateDebut;
             DateTime dateFin;
-            
-            if (!DateTime.TryParse(data["dateDebut"].ToString(), out dateDebut))
+            if (!DateTime.TryParse(dateDebutStr, out dateDebut))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date de début invalide: " + data["dateDebut"].ToString() + "\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date de début invalide\"}");
                 return;
             }
-            
-            if (!DateTime.TryParse(data["dateFin"].ToString(), out dateFin))
+            if (!DateTime.TryParse(dateFinStr, out dateFin))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date de fin invalide: " + data["dateFin"].ToString() + "\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date de fin invalide\"}");
                 return;
             }
-            
-            string motif = "";
-            if (data.ContainsKey("motif") && data["motif"] != null)
-            {
-                motif = data["motif"].ToString();
-            }
-            
-            bool justifie = false;
-            if (data.ContainsKey("justifie") && data["justifie"] != null)
-            {
-                justifie = Convert.ToBoolean(data["justifie"]);
-            }
-            
-            string justification = "";
-            if (data.ContainsKey("justification") && data["justification"] != null)
-            {
-                justification = data["justification"].ToString();
-            }
-            
-            // Récupérer la chaîne de connexion
-            string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
-            {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-            }
-            
+
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Chaîne de connexion non trouvée\"}");
                 return;
             }
-            
+
             int anneeId = GetCurrentAnneeId(connStr);
             int classeId = GetClasseIdByName(connStr, classeNom);
-            
-            // Débogage (sans interpolation)
-            System.Diagnostics.Debug.WriteLine("Insertion: matricule=" + matricule + ", nom=" + nom + ", classeId=" + classeId + ", dateDebut=" + dateDebut.ToString() + ", dateFin=" + dateFin.ToString());
-            
+
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                
+
                 // Vérifier que l'élève existe
                 string checkEleveSql = "SELECT COUNT(*) FROM ELEVES WHERE MATRICULE = @matricule";
                 using (var checkCmd = new SqlCommand(checkEleveSql, conn))
@@ -137,37 +111,11 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
                         return;
                     }
                 }
-                
-                // Vérifier que l'année existe
-                string checkAnneeSql = "SELECT COUNT(*) FROM RANNEE WHERE ID = @anneeId";
-                using (var checkCmd = new SqlCommand(checkAnneeSql, conn))
-                {
-                    checkCmd.Parameters.AddWithValue("@anneeId", anneeId);
-                    int count = (int)checkCmd.ExecuteScalar();
-                    if (count == 0)
-                    {
-                        ctx.Response.Write("{\"success\":false,\"message\":\"Année non trouvée: " + anneeId + "\"}");
-                        return;
-                    }
-                }
-                
-                // Vérifier que la classe existe
-                string checkClasseSql = "SELECT COUNT(*) FROM CLASSES WHERE ID = @classeId";
-                using (var checkCmd = new SqlCommand(checkClasseSql, conn))
-                {
-                    checkCmd.Parameters.AddWithValue("@classeId", classeId);
-                    int count = (int)checkCmd.ExecuteScalar();
-                    if (count == 0)
-                    {
-                        ctx.Response.Write("{\"success\":false,\"message\":\"Classe non trouvée: " + classeId + " (nom: " + classeNom + ")\"}");
-                        return;
-                    }
-                }
-                
+
                 string insertSql = @"
                     INSERT INTO ABSENCES (ID, ANNEE_ID, MATRICULE, NOM, CLASSE, DATE_DEBUT, DATE_FIN, MOTIF, JUSTIFIE, JUSTIFICATION, CREATED_AT)
                     VALUES (NEWID(), @anneeId, @matricule, @nom, @classeId, @dateDebut, @dateFin, @motif, @justifie, @justification, GETDATE())";
-                
+
                 using (var cmd = new SqlCommand(insertSql, conn))
                 {
                     cmd.Parameters.AddWithValue("@anneeId", anneeId);
@@ -176,36 +124,23 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@classeId", classeId);
                     cmd.Parameters.AddWithValue("@dateDebut", dateDebut);
                     cmd.Parameters.AddWithValue("@dateFin", dateFin);
-                    
-                    if (string.IsNullOrEmpty(motif))
-                        cmd.Parameters.AddWithValue("@motif", DBNull.Value);
-                    else
-                        cmd.Parameters.AddWithValue("@motif", motif);
-                    
+                    cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
                     cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
-                    
-                    if (string.IsNullOrEmpty(justification))
-                        cmd.Parameters.AddWithValue("@justification", DBNull.Value);
-                    else
-                        cmd.Parameters.AddWithValue("@justification", justification);
-                    
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    System.Diagnostics.Debug.WriteLine("Lignes insérées: " + rowsAffected);
+                    cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
+
+                    cmd.ExecuteNonQuery();
                 }
             }
-            
+
             ctx.Response.Write("{\"success\":true,\"message\":\"Absence enregistrée avec succès\"}");
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string errorMsg = ex.Message.Replace("\"", "\\\"").Replace("\r", "").Replace("\n", " ");
-            System.Diagnostics.Debug.WriteLine("Erreur: " + errorMsg);
-            System.Diagnostics.Debug.WriteLine("StackTrace: " + ex.StackTrace);
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + errorMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
-    
+
     private int GetCurrentAnneeId(string connStr)
     {
         using (var conn = new SqlConnection(connStr))
@@ -216,29 +151,36 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
             return result != null ? Convert.ToInt32(result) : 1;
         }
     }
-    
+
     private int GetClasseIdByName(string connStr, string className)
     {
-        if (string.IsNullOrEmpty(className))
-        {
-            System.Diagnostics.Debug.WriteLine("className est null ou vide, retourne 1");
-            return 1;
-        }
-        
+        if (string.IsNullOrEmpty(className)) return 1;
         using (var conn = new SqlConnection(connStr))
         using (var cmd = new SqlCommand("SELECT TOP 1 ID FROM CLASSES WHERE NOM = @nom", conn))
         {
             cmd.Parameters.AddWithValue("@nom", className);
             conn.Open();
             object result = cmd.ExecuteScalar();
-            if (result == null)
-            {
-                System.Diagnostics.Debug.WriteLine("Classe '" + className + "' non trouvée, retourne 1");
-                return 1;
-            }
-            return Convert.ToInt32(result);
+            return result != null ? Convert.ToInt32(result) : 1;
         }
     }
-    
+
+    private string GetString(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
+    }
+
+    private bool GetBool(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+        {
+            try { return Convert.ToBoolean(dict[key]); }
+            catch { return false; }
+        }
+        return false;
+    }
+
     public bool IsReusable { get { return false; } }
 }

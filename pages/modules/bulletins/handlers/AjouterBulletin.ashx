@@ -1,7 +1,7 @@
 ﻿<%@ WebHandler Language="C#" Class="AjouterBulletin" %>
 
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -10,22 +10,20 @@ using System.Web.SessionState;
 
 public class AjouterBulletin : IHttpHandler, IRequiresSessionState
 {
-    private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        JavaScriptSerializer ser = new JavaScriptSerializer();
-
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
+
+        JavaScriptSerializer ser = new JavaScriptSerializer();
 
         try
         {
@@ -33,24 +31,39 @@ public class AjouterBulletin : IHttpHandler, IRequiresSessionState
             using (var reader = new StreamReader(ctx.Request.InputStream))
                 body = reader.ReadToEnd();
 
-            var payload = ser.Deserialize<BulletinPayload>(body);
-            if (payload == null) throw new ArgumentException("Données invalides.");
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
+            if (data == null)
+                throw new ArgumentException("Données invalides.");
 
-            if (string.IsNullOrEmpty(payload.MATRICULE)) throw new ArgumentException("Le matricule est obligatoire.");
-            if (string.IsNullOrEmpty(payload.MATIERE_ID)) throw new ArgumentException("La matière est obligatoire.");
-            if (string.IsNullOrEmpty(payload.PERIODE)) throw new ArgumentException("La période est obligatoire.");
+            string matricule = GetString(data, "MATRICULE");
+            string matiereIdStr = GetString(data, "MATIERE_ID");
+            string periode = GetString(data, "PERIODE");
+            decimal? note1 = GetDecimal(data, "NOTE1");
+            decimal? note2 = GetDecimal(data, "NOTE2");
+            decimal? noteProjet = GetDecimal(data, "NOTE_PROJET");
+            decimal? totalNote = GetDecimal(data, "TOTAL_NOTE");
+            string appreciation = GetString(data, "APPRECIATION");
+
+            if (string.IsNullOrEmpty(matricule))
+                throw new ArgumentException("Le matricule est obligatoire.");
+            if (string.IsNullOrEmpty(matiereIdStr))
+                throw new ArgumentException("La matière est obligatoire.");
+            if (string.IsNullOrEmpty(periode))
+                throw new ArgumentException("La période est obligatoire.");
+
+            Guid matiereId;
+            if (!Guid.TryParse(matiereIdStr, out matiereId))
+                throw new ArgumentException("MATIERE_ID invalide (format GUID attendu).");
 
             // Calculer TOTAL_NOTE si non fourni
-            decimal totalNote = 0;
-            if (payload.TOTAL_NOTE.HasValue)
+            if (!totalNote.HasValue)
             {
-                totalNote = payload.TOTAL_NOTE.Value;
+                totalNote = CalculerTotalNote(note1, note2, noteProjet);
             }
-            else
-            {
-                // Calcul automatique si les coefficients sont disponibles
-                totalNote = CalculerTotalNote(payload);
-            }
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -61,13 +74,13 @@ public class AjouterBulletin : IHttpHandler, IRequiresSessionState
                                     WHERE ELEVE_MATRICULE = @matricule 
                                     AND MATIERE_ID = @matiereId 
                                     AND PERIODE = @periode";
-                
+
                 using (var checkCmd = new SqlCommand(checkSql, conn))
                 {
-                    checkCmd.Parameters.AddWithValue("@matricule", payload.MATRICULE);
-                    checkCmd.Parameters.AddWithValue("@matiereId", new Guid(payload.MATIERE_ID));
-                    checkCmd.Parameters.AddWithValue("@periode", payload.PERIODE);
-                    
+                    checkCmd.Parameters.AddWithValue("@matricule", matricule);
+                    checkCmd.Parameters.AddWithValue("@matiereId", matiereId);
+                    checkCmd.Parameters.AddWithValue("@periode", periode);
+
                     int existing = Convert.ToInt32(checkCmd.ExecuteScalar());
                     if (existing > 0)
                     {
@@ -76,69 +89,78 @@ public class AjouterBulletin : IHttpHandler, IRequiresSessionState
                     }
                 }
 
-                // Insérer avec TOTAL_NOTE
                 string insertSql = @"INSERT INTO BULLETINS 
                     (ID, ELEVE_MATRICULE, MATIERE_ID, NOTE1, NOTE2, NOTE_PROJET, TOTAL_NOTE, APPRECIATION, PERIODE, STATUT, CREATED_AT, UPDATED_AT) 
                     VALUES (NEWID(), @matricule, @matiereId, @note1, @note2, @noteProjet, @totalNote, @appreciation, @periode, 'Non saisi', GETDATE(), GETDATE())";
-                
+
                 using (var cmd = new SqlCommand(insertSql, conn))
                 {
-                    cmd.Parameters.AddWithValue("@matricule", payload.MATRICULE);
-                    cmd.Parameters.AddWithValue("@matiereId", new Guid(payload.MATIERE_ID));
-                    cmd.Parameters.AddWithValue("@note1", payload.NOTE1.HasValue ? (object)payload.NOTE1.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@note2", payload.NOTE2.HasValue ? (object)payload.NOTE2.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@noteProjet", payload.NOTE_PROJET.HasValue ? (object)payload.NOTE_PROJET.Value : DBNull.Value);
-                    cmd.Parameters.AddWithValue("@totalNote", totalNote);
-                    cmd.Parameters.AddWithValue("@appreciation", string.IsNullOrEmpty(payload.APPRECIATION) ? (object)DBNull.Value : payload.APPRECIATION);
-                    cmd.Parameters.AddWithValue("@periode", payload.PERIODE);
-                    
+                    cmd.Parameters.AddWithValue("@matricule", matricule);
+                    cmd.Parameters.AddWithValue("@matiereId", matiereId);
+                    cmd.Parameters.AddWithValue("@note1", note1.HasValue ? (object)note1.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@note2", note2.HasValue ? (object)note2.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@noteProjet", noteProjet.HasValue ? (object)noteProjet.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@totalNote", totalNote.HasValue ? (object)totalNote.Value : DBNull.Value);
+                    cmd.Parameters.AddWithValue("@appreciation", string.IsNullOrEmpty(appreciation) ? (object)DBNull.Value : appreciation);
+                    cmd.Parameters.AddWithValue("@periode", periode);
+
                     cmd.ExecuteNonQuery();
                 }
             }
 
             ctx.Response.Write("{\"success\":true,\"message\":\"Bulletin ajouté avec succès.\"}");
         }
+        catch (ArgumentException ex)
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
+        }
         catch (SqlException ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur base de données: " + ser.Serialize(ex.Message) + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur base de données\"}");
         }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = (ex is ArgumentException) ? 400 : 500;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 
-    private decimal CalculerTotalNote(BulletinPayload payload)
+    private decimal CalculerTotalNote(decimal? note1, decimal? note2, decimal? noteProjet)
     {
-        // Valeurs par défaut si coefficients non disponibles
         decimal coeff1 = 1;
         decimal coeff2 = 2;
         decimal coeffProjet = 1;
-        
+
         decimal total = 0;
-        if (payload.NOTE1.HasValue && payload.NOTE1.Value >= 0 && payload.NOTE1.Value <= 20)
-            total += payload.NOTE1.Value * coeff1;
-        if (payload.NOTE2.HasValue && payload.NOTE2.Value >= 0 && payload.NOTE2.Value <= 20)
-            total += payload.NOTE2.Value * coeff2;
-        if (payload.NOTE_PROJET.HasValue && payload.NOTE_PROJET.Value >= 0 && payload.NOTE_PROJET.Value <= 20)
-            total += payload.NOTE_PROJET.Value * coeffProjet;
-        
+        if (note1.HasValue && note1.Value >= 0 && note1.Value <= 20)
+            total += note1.Value * coeff1;
+        if (note2.HasValue && note2.Value >= 0 && note2.Value <= 20)
+            total += note2.Value * coeff2;
+        if (noteProjet.HasValue && noteProjet.Value >= 0 && noteProjet.Value <= 20)
+            total += noteProjet.Value * coeffProjet;
+
         return total;
     }
 
-    public bool IsReusable { get { return false; } }
-    
-    private class BulletinPayload
+    private string GetString(Dictionary<string, object> dict, string key)
     {
-        public string MATRICULE { get; set; }
-        public string MATIERE_ID { get; set; }
-        public decimal? NOTE1 { get; set; }
-        public decimal? NOTE2 { get; set; }
-        public decimal? NOTE_PROJET { get; set; }
-        public decimal? TOTAL_NOTE { get; set; }  // ✅ Nouveau champ
-        public string APPRECIATION { get; set; }
-        public string PERIODE { get; set; }
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
     }
+
+    private decimal? GetDecimal(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+        {
+            decimal val;
+            if (decimal.TryParse(dict[key].ToString(), out val))
+                return val;
+        }
+        return null;
+    }
+
+    public bool IsReusable { get { return false; } }
 }

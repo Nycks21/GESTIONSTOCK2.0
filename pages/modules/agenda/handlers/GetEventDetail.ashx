@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="GetEventDetail" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,29 +13,23 @@ public class GetEventDetail : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        // ✅ Vérifier la permission agenda
+        if (!AuthHelper.HasPermission("agenda"))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            // ✅ Vérifier la permission agenda
-            if (!AuthHelper.HasPermission("agenda"))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
-                return;
-            }
-
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
@@ -56,24 +49,11 @@ public class GetEventDetail : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                // ✅ Requête corrigée : filtre uniquement sur l'ID (sans restriction IDUSER)
                 string sql = @"
                     SELECT 
-                        ID,
-                        TEMPLATE_ID,
-                        IDUSER,
-                        TITRE,
-                        DATE_DEBUT,
-                        DATE_FIN,
-                        COULEUR,
-                        HEURE_DEBUT,
-                        HEURE_FIN,
-                        DESCRIPTION,
-                        TYPE,
-                        LIEU,
-                        PUBLIQUE,
-                        URL,
-                        CREATED_AT
+                        ID, TEMPLATE_ID, IDUSER, TITRE, DATE_DEBUT, DATE_FIN,
+                        COULEUR, HEURE_DEBUT, HEURE_FIN, DESCRIPTION,
+                        TYPE, LIEU, PUBLIQUE, URL, CREATED_AT
                     FROM CALENDAREVENTS
                     WHERE ID = @id";
 
@@ -122,8 +102,7 @@ public class GetEventDetail : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 

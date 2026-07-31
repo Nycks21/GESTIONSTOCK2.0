@@ -1,4 +1,4 @@
-// js/calendar.js - Version corrigée (même code, pas de modification)
+// js/calendar.js
 'use strict';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,6 +38,13 @@ function initCalendar() {
                 };
             }
         });
+    }
+
+    // ✅ Vérifier que calendar n'existe pas déjà
+    if (typeof calendar !== 'undefined' && calendar !== null) {
+        try {
+            calendar.destroy();
+        } catch(e) {}
     }
 
     calendar = new Calendar(calendarEl, {
@@ -105,7 +112,6 @@ function initCalendar() {
             info.el.classList.add('event-type-' + type);
             var tooltip = document.createElement('div');
             tooltip.className = 'event-tooltip';
-            // ✅ Utiliser window.typeLabels
             var labels = window.typeLabels || {};
             var label = labels[type] || type || 'Événement';
             var loc = info.event.extendedProps.location ? '<br>📍 ' + info.event.extendedProps.location : '';
@@ -123,6 +129,9 @@ function initCalendar() {
     });
 
     calendar.render();
+    
+    // ✅ Exposer calendar globalement
+    window.calendar = calendar;
 }
 
 function navigateToDate(dateStr) {
@@ -135,3 +144,4 @@ function navigateToDate(dateStr) {
 // Exposer globalement
 window.initCalendar = initCalendar;
 window.navigateToDate = navigateToDate;
+window.calendar = calendar;

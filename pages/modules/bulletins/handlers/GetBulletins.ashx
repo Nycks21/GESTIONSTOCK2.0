@@ -1,7 +1,6 @@
-<%@ WebHandler Language="C#" Class="GetBulletins" %>
+﻿<%@ WebHandler Language="C#" Class="GetBulletins" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -14,20 +13,18 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
-        ctx.Response.Cache.SetCacheability(HttpCacheability.NoCache);
-        ctx.Response.TrySkipIisCustomErrors = true;
+        ctx.Response.Cache.SetNoStore();
+
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
 
         var ser = new JavaScriptSerializer();
 
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
             string body;
             using (var reader = new StreamReader(ctx.Request.InputStream))
                 body = reader.ReadToEnd();
@@ -39,19 +36,7 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            Dictionary<string, object> data = null;
-
-            try
-            {
-                data = ser.Deserialize<Dictionary<string, object>>(body);
-            }
-            catch (Exception ex)
-            {
-                ctx.Response.StatusCode = 400;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de parsing JSON: " + ex.Message.Replace("\"", "'") + "\"}");
-                return;
-            }
-
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
             if (data == null)
             {
                 ctx.Response.StatusCode = 400;
@@ -59,44 +44,23 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            int classeId = 0;
-            string matiereId = "";
-            string periode = "";
+            // Récupérer les paramètres
+            int classeId = GetInt(data, "classeId");
+            string matiereId = GetString(data, "matiereId");
+            string periode = GetString(data, "periodeId");
 
-            if (data.ContainsKey("classeId") && data["classeId"] != null)
+            if (classeId <= 0)
             {
-                if (!int.TryParse(data["classeId"].ToString(), out classeId))
-                {
-                    ctx.Response.StatusCode = 400;
-                    ctx.Response.Write("{\"success\":false,\"message\":\"classeId invalide\"}");
-                    return;
-                }
-            }
-            else
-            {
-                ctx.Response.StatusCode = 400;
-                ctx.Response.Write("{\"success\":false,\"message\":\"classeId manquant\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"classeId invalide\"}");
                 return;
             }
-
-            if (data.ContainsKey("matiereId") && data["matiereId"] != null)
+            if (string.IsNullOrEmpty(matiereId))
             {
-                matiereId = data["matiereId"].ToString();
-            }
-            else
-            {
-                ctx.Response.StatusCode = 400;
                 ctx.Response.Write("{\"success\":false,\"message\":\"matiereId manquant\"}");
                 return;
             }
-
-            if (data.ContainsKey("periodeId") && data["periodeId"] != null)
+            if (string.IsNullOrEmpty(periode))
             {
-                periode = data["periodeId"].ToString();
-            }
-            else
-            {
-                ctx.Response.StatusCode = 400;
                 ctx.Response.Write("{\"success\":false,\"message\":\"periodeId manquant\"}");
                 return;
             }
@@ -104,21 +68,15 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
             Guid matiereGuid;
             if (!Guid.TryParse(matiereId, out matiereGuid))
             {
-                ctx.Response.StatusCode = 400;
                 ctx.Response.Write("{\"success\":false,\"message\":\"matiereId invalide (format GUID attendu)\"}");
                 return;
             }
 
-            string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
-            {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.StatusCode = 500;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Chaîne de connexion non trouvée\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
                 return;
             }
 
@@ -155,7 +113,7 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
                     }
                 }
 
-                // 2. Récupérer les élèves avec leurs notes et TOTAL_NOTE
+                // 2. Récupérer les élèves avec leurs notes
                 string sql = @"
                     SELECT
                         e.MATRICULE,
@@ -164,17 +122,14 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
                         b.NOTE1,
                         b.NOTE2,
                         b.NOTE_PROJET,
-                        b.TOTAL_NOTE,    -- ✅ Ajout de TOTAL_NOTE
+                        b.TOTAL_NOTE,
                         b.APPRECIATION,
-                        b.STATUT,
-                        b.DATE_EVAL1,
-                        b.DATE_EVAL2,
-                        b.DATE_EVAL_PROJET
+                        b.STATUT
                     FROM ELEVES e
                     LEFT JOIN BULLETINS b
                         ON b.ELEVE_MATRICULE = e.MATRICULE
-                       AND b.MATIERE_ID      = @matiereId
-                       AND b.PERIODE         = @periode
+                       AND b.MATIERE_ID = @matiereId
+                       AND b.PERIODE = @periode
                     WHERE e.CLASSE = @classeId
                       AND e.STATUT = 'actif'
                     ORDER BY e.NOM ASC";
@@ -196,12 +151,9 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
                             eleve["Note1"] = rdr["NOTE1"] is DBNull ? null : (object)Convert.ToDecimal(rdr["NOTE1"]);
                             eleve["Note2"] = rdr["NOTE2"] is DBNull ? null : (object)Convert.ToDecimal(rdr["NOTE2"]);
                             eleve["NoteProjet"] = rdr["NOTE_PROJET"] is DBNull ? null : (object)Convert.ToDecimal(rdr["NOTE_PROJET"]);
-                            eleve["TotalNote"] = rdr["TOTAL_NOTE"] is DBNull ? null : (object)Convert.ToDecimal(rdr["TOTAL_NOTE"]); // ✅ TOTAL_NOTE
+                            eleve["TotalNote"] = rdr["TOTAL_NOTE"] is DBNull ? null : (object)Convert.ToDecimal(rdr["TOTAL_NOTE"]);
                             eleve["Appreciation"] = rdr["APPRECIATION"] is DBNull ? "" : rdr["APPRECIATION"].ToString();
                             eleve["Statut"] = rdr["STATUT"] is DBNull ? "Non saisi" : rdr["STATUT"].ToString();
-                            eleve["DateEval1"] = rdr["DATE_EVAL1"] is DBNull ? null : (object)((DateTime)rdr["DATE_EVAL1"]).ToString("yyyy-MM-dd");
-                            eleve["DateEval2"] = rdr["DATE_EVAL2"] is DBNull ? null : (object)((DateTime)rdr["DATE_EVAL2"]).ToString("yyyy-MM-dd");
-                            eleve["DateEvalProjet"] = rdr["DATE_EVAL_PROJET"] is DBNull ? null : (object)((DateTime)rdr["DATE_EVAL_PROJET"]).ToString("yyyy-MM-dd");
                             eleves.Add(eleve);
                         }
                     }
@@ -223,17 +175,29 @@ public class GetBulletins : IHttpHandler, IRequiresSessionState
 
             ctx.Response.Write(ser.Serialize(result));
         }
-        catch (SqlException sqlEx)
-        {
-            ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur SQL: " + sqlEx.Message.Replace("\"", "'") + "\", \"errorCode\": " + sqlEx.Number + "}");
-        }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
+    }
+
+    private int GetInt(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+        {
+            int val;
+            if (int.TryParse(dict[key].ToString(), out val))
+                return val;
+        }
+        return 0;
     }
 
     public bool IsReusable { get { return false; } }

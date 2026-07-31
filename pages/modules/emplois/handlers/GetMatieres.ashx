@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="GetMatieres" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,10 +13,10 @@ public class GetMatieres : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
@@ -28,7 +27,13 @@ public class GetMatieres : IHttpHandler, IRequiresSessionState
             return;
         }
 
-        string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+        string connStr = AuthHelper.ConnectionString;
+        if (string.IsNullOrEmpty(connStr))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+            return;
+        }
+
         var list = new List<object>();
 
         try
@@ -36,6 +41,8 @@ public class GetMatieres : IHttpHandler, IRequiresSessionState
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
+                int userRole = AuthHelper.GetUserRole(ctx);
+                bool isProfessor = userRole == 3;
                 string sql = @"
                     SELECT 
                         m.ID, 
@@ -44,11 +51,22 @@ public class GetMatieres : IHttpHandler, IRequiresSessionState
                         u.NOM AS ENSEIGNANT_NOM
                     FROM MATIERES m
                     LEFT JOIN USERS u ON m.ENSEIGNANT = u.IDUSER
-                    WHERE m.CLASSE_ID = @classe
-                    ORDER BY m.NOM";
+                    WHERE m.CLASSE_ID = @classe";
+
+                if (isProfessor)
+                {
+                    sql += " AND m.ENSEIGNANT = @professeurId";
+                }
+
+                sql += " ORDER BY m.NOM";
+
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@classe", classeId);
+                    if (isProfessor)
+                    {
+                        cmd.Parameters.AddWithValue("@professeurId", AuthHelper.GetUserId(ctx));
+                    }
                     using (var rdr = cmd.ExecuteReader())
                     {
                         while (rdr.Read())

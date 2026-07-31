@@ -1,6 +1,6 @@
 ﻿<%@ WebHandler Language="C#" Class="ModifierAbsence" %>
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -14,10 +14,9 @@ public class ModifierAbsence : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
@@ -28,87 +27,90 @@ public class ModifierAbsence : IHttpHandler, IRequiresSessionState
                 body = reader.ReadToEnd();
 
             var ser = new JavaScriptSerializer();
-            var data = ser.Deserialize<dynamic>(body);
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
 
-            if (data == null)
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Données invalides\"}");
-                return;
-            }
-
-            // Vérifier que l'ID existe
-            if (!data.ContainsKey("id") || data["id"] == null)
+            if (data == null || !data.ContainsKey("id") || data["id"] == null)
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant\"}");
                 return;
             }
 
-            Guid absenceId = Guid.Parse(data["id"].ToString());
-            string matricule = data.ContainsKey("matricule") ? data["matricule"].ToString() : "";
-            string nom = data.ContainsKey("nom") ? data["nom"].ToString() : "";
-            string classeNom = data.ContainsKey("classe") ? data["classe"].ToString() : "";
-            
-            DateTime dateDebut = DateTime.Now;
-            if (data.ContainsKey("dateDebut") && data["dateDebut"] != null)
+            Guid absenceId;
+            if (!Guid.TryParse(data["id"].ToString(), out absenceId))
             {
-                dateDebut = DateTime.Parse(data["dateDebut"].ToString());
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID invalide\"}");
+                return;
             }
-            
-            DateTime dateFin = dateDebut;
-            if (data.ContainsKey("dateFin") && data["dateFin"] != null)
-            {
-                dateFin = DateTime.Parse(data["dateFin"].ToString());
-            }
-            
-            string motif = data.ContainsKey("motif") ? data["motif"].ToString() : "";
-            bool justifie = data.ContainsKey("justifie") && Convert.ToBoolean(data["justifie"]);
-            string justification = data.ContainsKey("justification") ? data["justification"].ToString() : "";
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string matricule = GetString(data, "matricule");
+            string nom = GetString(data, "nom");
+            string classeNom = GetString(data, "classe");
+            string dateDebutStr = GetString(data, "dateDebut");
+            string dateFinStr = GetString(data, "dateFin");
+            string motif = GetString(data, "motif");
+            bool justifie = GetBool(data, "justifie");
+            string justification = GetString(data, "justification");
+
+            if (string.IsNullOrEmpty(matricule) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(classeNom) ||
+                string.IsNullOrEmpty(dateDebutStr) || string.IsNullOrEmpty(dateFinStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Tous les champs sont obligatoires\"}");
+                return;
+            }
+
+            DateTime dateDebut, dateFin;
+            if (!DateTime.TryParse(dateDebutStr, out dateDebut) || !DateTime.TryParse(dateFinStr, out dateFin))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date invalide\"}");
+                return;
+            }
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+                return;
+            }
+
             int anneeId = GetCurrentAnneeId(connStr);
             int classeId = GetClasseIdByName(connStr, classeNom);
 
             using (var conn = new SqlConnection(connStr))
+            using (var cmd = new SqlCommand(@"
+                UPDATE ABSENCES 
+                SET ANNEE_ID = @anneeId,
+                    MATRICULE = @matricule,
+                    NOM = @nom,
+                    CLASSE = @classeId,
+                    DATE_DEBUT = @dateDebut,
+                    DATE_FIN = @dateFin,
+                    MOTIF = @motif,
+                    JUSTIFIE = @justifie,
+                    JUSTIFICATION = @justification,
+                    UPDATED_AT = GETDATE()
+                WHERE ID = @id", conn))
             {
+                cmd.Parameters.AddWithValue("@id", absenceId);
+                cmd.Parameters.AddWithValue("@anneeId", anneeId);
+                cmd.Parameters.AddWithValue("@matricule", matricule);
+                cmd.Parameters.AddWithValue("@nom", nom);
+                cmd.Parameters.AddWithValue("@classeId", classeId);
+                cmd.Parameters.AddWithValue("@dateDebut", dateDebut);
+                cmd.Parameters.AddWithValue("@dateFin", dateFin);
+                cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
+                cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
+                cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
+
                 conn.Open();
-                
-                using (var cmd = new SqlCommand(@"
-                    UPDATE ABSENCES 
-                    SET ANNEE_ID = @anneeId,
-                        MATRICULE = @matricule,
-                        NOM = @nom,
-                        CLASSE = @classeId,
-                        DATE_DEBUT = @dateDebut,
-                        DATE_FIN = @dateFin,
-                        MOTIF = @motif,
-                        JUSTIFIE = @justifie,
-                        JUSTIFICATION = @justification,
-                        UPDATED_AT = GETDATE()
-                    WHERE ID = @id", conn))
+                int rows = cmd.ExecuteNonQuery();
+                if (rows == 0)
                 {
-                    cmd.Parameters.AddWithValue("@id", absenceId);
-                    cmd.Parameters.AddWithValue("@anneeId", anneeId);
-                    cmd.Parameters.AddWithValue("@matricule", matricule);
-                    cmd.Parameters.AddWithValue("@nom", nom);
-                    cmd.Parameters.AddWithValue("@classeId", classeId);
-                    cmd.Parameters.AddWithValue("@dateDebut", dateDebut);
-                    cmd.Parameters.AddWithValue("@dateFin", dateFin);
-                    cmd.Parameters.AddWithValue("@motif", motif);
-                    cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
-                    cmd.Parameters.AddWithValue("@justification", justification);
-                    
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    
-                    if (rowsAffected > 0)
-                    {
-                        ctx.Response.Write("{\"success\":true,\"message\":\"Absence modifiée avec succès\"}");
-                    }
-                    else
-                    {
-                        ctx.Response.Write("{\"success\":false,\"message\":\"Aucune modification effectuée\"}");
-                    }
+                    ctx.Response.Write("{\"success\":false,\"message\":\"Aucune modification effectuée\"}");
+                    return;
                 }
             }
+
+            ctx.Response.Write("{\"success\":true,\"message\":\"Absence modifiée avec succès\"}");
         }
         catch (Exception ex)
         {
@@ -137,10 +139,9 @@ public class ModifierAbsence : IHttpHandler, IRequiresSessionState
 
     private int GetClasseIdByName(string connStr, string className)
     {
+        if (string.IsNullOrEmpty(className)) return 1;
         try
         {
-            if (string.IsNullOrEmpty(className)) return 1;
-            
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand("SELECT TOP 1 ID FROM CLASSES WHERE NOM = @nom", conn))
             {
@@ -154,6 +155,23 @@ public class ModifierAbsence : IHttpHandler, IRequiresSessionState
         {
             return 1;
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
+    }
+
+    private bool GetBool(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+        {
+            try { return Convert.ToBoolean(dict[key]); }
+            catch { return false; }
+        }
+        return false;
     }
 
     public bool IsReusable { get { return false; } }

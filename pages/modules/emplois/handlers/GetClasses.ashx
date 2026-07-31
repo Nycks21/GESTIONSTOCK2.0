@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="GetClasses" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,32 +13,46 @@ public class GetClasses : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
         var list = new List<object>();
-        string connStr = "";
-        if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
-        {
-            connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-        }
+        string connStr = AuthHelper.ConnectionString;
 
         if (string.IsNullOrEmpty(connStr))
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Chaîne de connexion manquante (MaConnexion)\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Chaîne de connexion manquante\"}");
             return;
         }
 
         try
         {
             using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand("SELECT ID, NOM FROM CLASSES ORDER BY NOM", conn))
+            using (var cmd = new SqlCommand())
             {
+                cmd.Connection = conn;
+
+                int userRole = AuthHelper.GetUserRole(ctx);
+                if (userRole == 3)
+                {
+                    // Professeur : ne renvoyer que les classes liées à ses matières
+                    cmd.CommandText = @"SELECT DISTINCT c.ID, c.NOM
+                                         FROM CLASSES c
+                                         INNER JOIN MATIERES m ON m.CLASSE_ID = c.ID
+                                         WHERE m.ENSEIGNANT = @professeurId
+                                         ORDER BY c.NOM";
+                    cmd.Parameters.AddWithValue("@professeurId", AuthHelper.GetUserId(ctx));
+                }
+                else
+                {
+                    cmd.CommandText = "SELECT ID, NOM FROM CLASSES ORDER BY NOM";
+                }
+
                 conn.Open();
                 using (var rdr = cmd.ExecuteReader())
                 {

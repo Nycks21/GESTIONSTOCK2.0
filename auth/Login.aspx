@@ -305,7 +305,7 @@
             </div>
             <div class="card-body">
                 <p class="login-box-msg">Connexion</p>
-                <form id="form1" runat="server">
+                <form id="form1" runat="server" style="gap:10px;">
                     <asp:HiddenField ID="hfTimerEnabled" runat="server" Value="false" />
                     <asp:Label ID="lblLicenceInfo" runat="server" ForeColor="#856404" CssClass="mb-2 d-block licence-warning"
                         Font-Bold="true" Visible="false"></asp:Label>
@@ -336,14 +336,6 @@
                     </div>
                     <div id="capsLockWarning" style="display:none;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:4px 10px;font-size:12px;margin-bottom:12px;">
                         <i class="fas fa-exclamation-triangle"></i> Verrouillage majuscules activé
-                    </div>
-                    <div class="row mb-3">
-                        <div class="col-12">
-                            <div class="icheck-primary">
-                                <input type="checkbox" id="chkRememberMe" />
-                                <label for="chkRememberMe">Se souvenir de moi</label>
-                            </div>
-                        </div>
                     </div>
                     <div class="row">
                         <div class="col-12">

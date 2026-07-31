@@ -5,24 +5,43 @@ using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
 using System.Collections.Generic;
+using System.Web.SessionState;   // ✅ AJOUT
 
-public class GetAbsencesFrequentes : IHttpHandler
+public class GetAbsencesFrequentes : IHttpHandler, IRequiresSessionState   // ✅ AJOUT
 {
-    private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+    private static readonly string connStr;
+
+    static GetAbsencesFrequentes()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
 
     public void ProcessRequest(HttpContext context)
     {
         context.Response.ContentType = "application/json";
+
+        // ✅ Vérification centralisée
+        if (!AuthHelper.IsAuthenticated(context))
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        int role = AuthHelper.GetUserRole(context);
+        if (role != 0 && role != 1)
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+            return;
+        }
 
         try
         {
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
-
                 var data = new List<object>();
 
-                // ✅ Requête incluant les retards, triée par retards décroissant
                 string sql = @"
                     SELECT TOP 5
                         ISNULL(e.NOM, 'Inconnu') AS NOM,
@@ -65,7 +84,6 @@ public class GetAbsencesFrequentes : IHttpHandler
                     }
                 }
 
-                // Données de démonstration si aucune donnée réelle
                 if (data.Count == 0)
                 {
                     data.Add(new { nom = "RAKOTO Jean", classe = "6ème A", nb = 0, retards = 3, statut = "Normal" });
@@ -76,11 +94,11 @@ public class GetAbsencesFrequentes : IHttpHandler
                 context.Response.Write(new JavaScriptSerializer().Serialize(result));
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             var demoData = new List<object>();
             demoData.Add(new { nom = "Exemple Élève", classe = "6ème A", nb = 0, retards = 2, statut = "Normal" });
-            var result = new { success = false, message = ex.Message, data = demoData };
+            var result = new { success = false, message = "Erreur serveur", data = demoData };
             context.Response.Write(new JavaScriptSerializer().Serialize(result));
         }
     }

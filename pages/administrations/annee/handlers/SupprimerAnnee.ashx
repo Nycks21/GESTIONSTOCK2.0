@@ -10,19 +10,37 @@ using System.Web.SessionState;
 
 public class SupprimerAnnee : IHttpHandler, IRequiresSessionState
 {
+    private static readonly string connStr;
+
+    static SupprimerAnnee()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
+
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
         JavaScriptSerializer ser = new JavaScriptSerializer();
 
-        // Vérification de la session
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Vérification d'authentification simplifiée
+        if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
         {
             ctx.Response.StatusCode = 401;
             ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        // ✅ Vérification du rôle (SuperAdmin ou Admin)
+        object roleObj = ctx.Session["USERROLE"];
+        int role = (roleObj != null) ? Convert.ToInt32(roleObj) : -1;
+        if (role != 0 && role != 1)
+        {
+            ctx.Response.StatusCode = 403;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
             return;
         }
 
@@ -44,10 +62,8 @@ public class SupprimerAnnee : IHttpHandler, IRequiresSessionState
             if (payload == null || payload.ID <= 0)
                 throw new ArgumentException("ID d'année invalide.");
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand("DELETE FROM [dbo].[RANNEE] WHERE ID = @id", conn))
+            using (var cmd = new SqlCommand("DELETE FROM [dbo].[RANNEE] WHERE ID = @id", conn))
             {
                 cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = payload.ID;
                 conn.Open();
@@ -63,16 +79,15 @@ public class SupprimerAnnee : IHttpHandler, IRequiresSessionState
             ctx.Response.StatusCode = 400;
             ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize("Erreur serveur") + "}");
         }
     }
 
     public bool IsReusable { get { return false; } }
 
-    // ID est un INT (auto-increment), pas un GUID
     private class IdPayload
     {
         public int ID { get; set; }

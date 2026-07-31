@@ -1,6 +1,6 @@
 <%@ WebHandler Language="C#" Class="JustifierRetard" %>
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -14,10 +14,9 @@ public class JustifierRetard : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
@@ -28,11 +27,34 @@ public class JustifierRetard : IHttpHandler, IRequiresSessionState
                 body = reader.ReadToEnd();
 
             var ser = new JavaScriptSerializer();
-            var data = ser.Deserialize<dynamic>(body);
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
 
-            Guid retardId = Guid.Parse(data["id"].ToString());
-            string justification = data["justification"].ToString();
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            if (data == null || !data.ContainsKey("id") || data["id"] == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant\"}");
+                return;
+            }
+
+            Guid retardId;
+            if (!Guid.TryParse(data["id"].ToString(), out retardId))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID invalide\"}");
+                return;
+            }
+
+            string justification = data.ContainsKey("justification") ? data["justification"].ToString() : "";
+            if (string.IsNullOrEmpty(justification))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"La justification est requise\"}");
+                return;
+            }
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+                return;
+            }
 
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand(@"

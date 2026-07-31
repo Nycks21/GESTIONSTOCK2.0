@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="GetStatistics" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,22 +13,21 @@ public class GetStatistics : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        if (!AuthHelper.HasPermission("agenda"))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
@@ -56,35 +54,32 @@ public class GetStatistics : IHttpHandler, IRequiresSessionState
                     }
                 }
 
-                // ✅ Statistiques du mois en cours (TOUS les événements)
+                // Statistiques du mois en cours
                 string sqlMonth = @"
                     SELECT COUNT(*) 
                     FROM CALENDAREVENTS 
                     WHERE MONTH(DATE_DEBUT) = MONTH(GETDATE())
                       AND YEAR(DATE_DEBUT) = YEAR(GETDATE())";
-
                 using (var cmd = new SqlCommand(sqlMonth, conn))
                 {
                     monthEvents = (int)cmd.ExecuteScalar();
                 }
 
-                // ✅ Événements à venir (TOUS les événements)
+                // Événements à venir
                 string sqlUpcoming = @"
                     SELECT COUNT(*) 
                     FROM CALENDAREVENTS 
                     WHERE DATE_DEBUT >= GETDATE()";
-
                 using (var cmd = new SqlCommand(sqlUpcoming, conn))
                 {
                     upcoming = (int)cmd.ExecuteScalar();
                 }
 
-                // ✅ Événements terminés (TOUS les événements)
+                // Événements terminés
                 string sqlPast = @"
                     SELECT COUNT(*) 
                     FROM CALENDAREVENTS 
                     WHERE DATE_FIN < GETDATE()";
-
                 using (var cmd = new SqlCommand(sqlPast, conn))
                 {
                     past = (int)cmd.ExecuteScalar();
@@ -102,8 +97,7 @@ public class GetStatistics : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 

@@ -27,6 +27,33 @@ Emploi.loaders = {
             });
     },
 
+    loadProfesseurs: function() {
+        var select = document.getElementById('professeurFilter');
+        if (!select) return Promise.resolve([]);
+
+        return fetch(API_EMPLOI.getProfesseurs, { credentials: 'include' })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (!data || !data.success) {
+                    select.innerHTML = '<option value="">-- Sélectionner un professeur --</option>';
+                    return [];
+                }
+                select.innerHTML = '<option value="">-- Sélectionner un professeur --</option>';
+                data.data.forEach(function(p) {
+                    var opt = document.createElement('option');
+                    opt.value = p.ID;
+                    opt.textContent = p.NOM;
+                    select.appendChild(opt);
+                });
+                return data.data;
+            })
+            .catch(function(err) {
+                console.error('loadProfesseurs', err);
+                select.innerHTML = '<option value="">-- Sélectionner un professeur --</option>';
+                return [];
+            });
+    },
+
     loadMatieresForClasse: function(classeId) {
         if (!classeId) {
             var sel = document.getElementById('editMatiere');
@@ -85,20 +112,42 @@ Emploi.loaders = {
     },
 
     loadEmploi: function() {
+        var modeSelect = document.getElementById('displayMode');
+        var professeurSelect = document.getElementById('professeurFilter');
         var classe = document.getElementById('classeFilter').value;
-        if (!classe) {
+        var mode = modeSelect ? modeSelect.value : 'class_all';
+        var professeurId = professeurSelect ? professeurSelect.value : '';
+
+        if ((mode === 'my_in_class' || mode === 'class_all') && !classe) {
             Emploi.utils.showToast('Veuillez sélectionner une classe.', 'info');
             return;
         }
+
+        if (mode === 'specific_prof' && !professeurId) {
+            Emploi.utils.showToast('Veuillez sélectionner un professeur.', 'info');
+            return;
+        }
+
+        if (mode === 'my_all' || mode === 'specific_prof') {
+            classe = '';
+        }
+
         Emploi.state.currentClasse = classe;
         Emploi.utils.showSpinner();
 
         var editClasseSel = document.getElementById('editClasse');
-        if (editClasseSel) {
+        if (editClasseSel && classe) {
             editClasseSel.value = classe;
         }
 
-        var url = API_EMPLOI.getEmploi + '?classe=' + encodeURIComponent(classe);
+        var url = API_EMPLOI.getEmploi + '?mode=' + encodeURIComponent(mode);
+        if (classe) {
+            url += '&classe=' + encodeURIComponent(classe);
+        }
+        if (professeurId) {
+            url += '&professeur=' + encodeURIComponent(professeurId);
+        }
+
         fetch(url, { credentials: 'include' })
             .then(function(res) { return res.json(); })
             .then(function(data) {
@@ -107,6 +156,8 @@ Emploi.loaders = {
                     Emploi.ui.renderTable();
                 } else {
                     Emploi.utils.showToast(data.message || 'Impossible de charger l\'emploi.', 'danger');
+                    Emploi.state.emploiData = {};
+                    Emploi.ui.renderTable();
                 }
             })
             .catch(function(err) {

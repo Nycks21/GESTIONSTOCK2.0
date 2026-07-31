@@ -1,7 +1,6 @@
-<%@ WebHandler Language="C#" Class="UpdateEvent" %>
+﻿<%@ WebHandler Language="C#" Class="UpdateEvent" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,22 +13,21 @@ public class UpdateEvent : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        if (!AuthHelper.HasPermission("agenda"))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
@@ -40,25 +38,31 @@ public class UpdateEvent : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            string id = data.ContainsKey("id") ? data["id"].ToString() : "";
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Données JSON invalides\"}");
+                return;
+            }
+
+            string id = GetString(data, "id", "");
             if (string.IsNullOrEmpty(id))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant\"}");
                 return;
             }
 
-            int userId = Convert.ToInt32(ctx.Session["IDUSER"]);
-            string title = data.ContainsKey("title") ? data["title"].ToString() : "Sans titre";
-            string type = data.ContainsKey("type") ? data["type"].ToString() : "autre";
-            string start = data.ContainsKey("start") ? data["start"].ToString() : null;
-            string end = data.ContainsKey("end") ? data["end"].ToString() : null;
-            string color = data.ContainsKey("color") ? data["color"].ToString() : "#6f42c1";
-            string description = data.ContainsKey("description") ? data["description"].ToString() : "";
-            string location = data.ContainsKey("location") ? data["location"].ToString() : "";
-            string publique = data.ContainsKey("publique") ? data["publique"].ToString() : "all";
-            string url = data.ContainsKey("url") ? data["url"].ToString() : "";
-            string heureDebut = data.ContainsKey("heureDebut") ? data["heureDebut"].ToString() : "";
-            string heureFin = data.ContainsKey("heureFin") ? data["heureFin"].ToString() : "";
+            int userId = AuthHelper.GetUserId(ctx);
+            string title = GetString(data, "title", "Sans titre");
+            string type = GetString(data, "type", "autre");
+            string start = GetString(data, "start", null);
+            string end = GetString(data, "end", null);
+            string color = GetString(data, "color", "#6f42c1");
+            string description = GetString(data, "description", "");
+            string location = GetString(data, "location", "");
+            string publique = GetString(data, "publique", "all");
+            string url = GetString(data, "url", "");
+            string heureDebut = GetString(data, "heureDebut", "");
+            string heureFin = GetString(data, "heureFin", "");
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -97,8 +101,29 @@ public class UpdateEvent : IHttpHandler, IRequiresSessionState
                 {
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@title", title);
-                    cmd.Parameters.AddWithValue("@start", string.IsNullOrEmpty(start) ? (object)DBNull.Value : DateTime.Parse(start));
-                    cmd.Parameters.AddWithValue("@end", string.IsNullOrEmpty(end) ? (object)DBNull.Value : DateTime.Parse(end));
+
+                    if (string.IsNullOrEmpty(start))
+                        cmd.Parameters.AddWithValue("@start", DBNull.Value);
+                    else
+                    {
+                        DateTime startDate;
+                        if (DateTime.TryParse(start, out startDate))
+                            cmd.Parameters.AddWithValue("@start", startDate);
+                        else
+                            cmd.Parameters.AddWithValue("@start", DBNull.Value);
+                    }
+
+                    if (string.IsNullOrEmpty(end))
+                        cmd.Parameters.AddWithValue("@end", DBNull.Value);
+                    else
+                    {
+                        DateTime endDate;
+                        if (DateTime.TryParse(end, out endDate))
+                            cmd.Parameters.AddWithValue("@end", endDate);
+                        else
+                            cmd.Parameters.AddWithValue("@end", DBNull.Value);
+                    }
+
                     cmd.Parameters.AddWithValue("@color", color);
                     cmd.Parameters.AddWithValue("@heureDebut", string.IsNullOrEmpty(heureDebut) ? (object)DBNull.Value : heureDebut);
                     cmd.Parameters.AddWithValue("@heureFin", string.IsNullOrEmpty(heureFin) ? (object)DBNull.Value : heureFin);
@@ -121,9 +146,15 @@ public class UpdateEvent : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key, string defaultValue)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return defaultValue;
     }
 
     public bool IsReusable { get { return false; } }

@@ -10,19 +10,37 @@ using System.Web.SessionState;
 
 public class ModifierAnnee : IHttpHandler, IRequiresSessionState
 {
+    private static readonly string connStr;
+
+    static ModifierAnnee()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
+
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
         JavaScriptSerializer ser = new JavaScriptSerializer();
 
-        // Vérification de la session
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Vérification d'authentification simplifiée
+        if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
         {
             ctx.Response.StatusCode = 401;
             ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        // ✅ Vérification du rôle (SuperAdmin ou Admin)
+        object roleObj = ctx.Session["USERROLE"];
+        int role = (roleObj != null) ? Convert.ToInt32(roleObj) : -1;
+        if (role != 0 && role != 1)
+        {
+            ctx.Response.StatusCode = 403;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
             return;
         }
 
@@ -44,11 +62,9 @@ public class ModifierAnnee : IHttpHandler, IRequiresSessionState
             if (payload == null)
                 throw new ArgumentException("Les données envoyées sont vides ou invalides.");
 
-            // Validation de l'ID (INT)
             if (payload.ID <= 0)
                 throw new ArgumentException("ID d'année invalide.");
 
-            // Validation des champs obligatoires
             if (string.IsNullOrWhiteSpace(payload.ANNEE))
                 throw new ArgumentException("L'année scolaire est obligatoire.");
 
@@ -62,11 +78,8 @@ public class ModifierAnnee : IHttpHandler, IRequiresSessionState
 
             bool cloture = (payload.CLOTURE == "Inactif" || payload.CLOTURE == "1" || payload.CLOTURE == "true");
 
-            // Si clôturée, enregistrer la date de clôture ; sinon, la mettre à NULL
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand(
+            using (var cmd = new SqlCommand(
                 @"UPDATE [dbo].[RANNEE]
                   SET    ANNEE        = @annee,
                          DATE_DEBUT   = @dateDebut,
@@ -77,11 +90,11 @@ public class ModifierAnnee : IHttpHandler, IRequiresSessionState
                                              ELSE DATE_CLOTURE END
                   WHERE  ID = @id", conn))
             {
-                cmd.Parameters.Add("@id",        System.Data.SqlDbType.Int).Value          = payload.ID;
-                cmd.Parameters.Add("@annee",     System.Data.SqlDbType.NVarChar, 50).Value = payload.ANNEE.Trim();
-                cmd.Parameters.Add("@dateDebut", System.Data.SqlDbType.Date).Value         = dateDebut;
-                cmd.Parameters.Add("@dateFin",   System.Data.SqlDbType.Date).Value         = dateFin;
-                cmd.Parameters.Add("@cloture",   System.Data.SqlDbType.Bit).Value          = cloture;
+                cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = payload.ID;
+                cmd.Parameters.Add("@annee", System.Data.SqlDbType.NVarChar, 50).Value = payload.ANNEE.Trim();
+                cmd.Parameters.Add("@dateDebut", System.Data.SqlDbType.Date).Value = dateDebut;
+                cmd.Parameters.Add("@dateFin", System.Data.SqlDbType.Date).Value = dateFin;
+                cmd.Parameters.Add("@cloture", System.Data.SqlDbType.Bit).Value = cloture;
 
                 conn.Open();
                 int rows = cmd.ExecuteNonQuery();
@@ -96,13 +109,16 @@ public class ModifierAnnee : IHttpHandler, IRequiresSessionState
             ctx.Response.StatusCode = 400;
             ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
         }
-        catch (Exception ex)
+        catch (SqlException ex)
         {
             ctx.Response.StatusCode = 500;
-            string msg = ex.Message.Contains("UNIQUE")
-                ? "Cette année scolaire existe déjà."
-                : ex.Message;
+            string msg = (ex.Number == 2627) ? "Cette année scolaire existe déjà." : "Erreur de base de données.";
             ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(msg) + "}");
+        }
+        catch (Exception)
+        {
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize("Erreur serveur") + "}");
         }
     }
 
@@ -110,10 +126,10 @@ public class ModifierAnnee : IHttpHandler, IRequiresSessionState
 
     private class AnneePayload
     {
-        public int    ID         { get; set; }
-        public string ANNEE      { get; set; }
+        public int ID { get; set; }
+        public string ANNEE { get; set; }
         public string DATE_DEBUT { get; set; }
-        public string DATE_FIN   { get; set; }
-        public string CLOTURE    { get; set; }
+        public string DATE_FIN { get; set; }
+        public string CLOTURE { get; set; }
     }
 }

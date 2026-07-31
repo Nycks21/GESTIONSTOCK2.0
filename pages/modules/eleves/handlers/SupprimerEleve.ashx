@@ -13,15 +13,14 @@ public class SupprimerEleve : IHttpHandler, IRequiresSessionState
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        JavaScriptSerializer ser = new JavaScriptSerializer();
+        var ser = new JavaScriptSerializer();
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
@@ -43,15 +42,16 @@ public class SupprimerEleve : IHttpHandler, IRequiresSessionState
             if (payload == null || string.IsNullOrWhiteSpace(payload.ID))
                 throw new ArgumentException("ID d'élève invalide.");
 
-            // ID élève est un GUID
             Guid eleveGuid;
             if (!Guid.TryParse(payload.ID, out eleveGuid))
                 throw new ArgumentException("ID d'élève invalide (format GUID attendu).");
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand("DELETE FROM [dbo].[ELEVES] WHERE ID = @id", conn))
+            using (var cmd = new SqlCommand("DELETE FROM [dbo].[ELEVES] WHERE ID = @id", conn))
             {
                 cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = eleveGuid;
                 conn.Open();
@@ -62,19 +62,22 @@ public class SupprimerEleve : IHttpHandler, IRequiresSessionState
 
             ctx.Response.Write("{\"success\":true,\"message\":\"Élève supprimé avec succès.\"}");
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException argEx)
         {
             ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + argEx.Message.Replace("\"", "\\\"") + "\"}");
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 
     public bool IsReusable { get { return false; } }
 
-    private class IdPayload { public string ID { get; set; } }
+    private class IdPayload
+    {
+        public string ID { get; set; }
+    }
 }

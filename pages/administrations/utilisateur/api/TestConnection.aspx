@@ -1,5 +1,6 @@
 <%@ Page Language="C#" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
+<%@ Import Namespace="System.Configuration" %>
 
 <script runat="server">
 protected void Page_Load(object sender, EventArgs e)
@@ -9,7 +10,20 @@ protected void Page_Load(object sender, EventArgs e)
     
     try
     {
-        string connectionString = "Data Source=MAHEFA_DESKTOP\\SQLECOLE;Initial Catalog=master;User ID=sa;Password=admin123;";
+        // ✅ Vérification d'authentification - SuperAdmin uniquement
+        if (!AuthHelper.RequireApiAuth(Context, 0))
+        {
+            Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+        
+        // ✅ Utiliser la chaîne de connexion depuis Web.config
+        string connectionString = ConfigurationManager.ConnectionStrings["MasterConnection"]?.ConnectionString;
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            Response.Write("{\"success\":false,\"message\":\"Erreur de configuration\"}");
+            return;
+        }
         
         using (SqlConnection conn = new SqlConnection(connectionString))
         {
@@ -19,7 +33,20 @@ protected void Page_Load(object sender, EventArgs e)
     }
     catch (Exception ex)
     {
-        Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "'") + "\"}");
+        // ✅ Log sans exposer les détails
+        LogError(ex);
+        Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
     }
+}
+
+private void LogError(Exception ex)
+{
+    try
+    {
+        string logFile = Server.MapPath("~/App_Data/connection_errors.log");
+        string entry = $"[{DateTime.Now}] {ex.Message}\n---\n";
+        File.AppendAllText(logFile, entry);
+    }
+    catch { }
 }
 </script>

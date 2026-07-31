@@ -10,19 +10,37 @@ using System.Web.SessionState;
 
 public class AjouterAnnee : IHttpHandler, IRequiresSessionState
 {
+    private static readonly string connStr;
+
+    static AjouterAnnee()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
+
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
         JavaScriptSerializer ser = new JavaScriptSerializer();
 
-        // Vérification de la session
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Vérification d'authentification simplifiée
+        if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
         {
             ctx.Response.StatusCode = 401;
             ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        // ✅ Vérification du rôle (SuperAdmin ou Admin)
+        object roleObj = ctx.Session["USERROLE"];
+        int role = (roleObj != null) ? Convert.ToInt32(roleObj) : -1;
+        if (role != 0 && role != 1)
+        {
+            ctx.Response.StatusCode = 403;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
             return;
         }
 
@@ -44,7 +62,6 @@ public class AjouterAnnee : IHttpHandler, IRequiresSessionState
             if (payload == null)
                 throw new ArgumentException("Les données envoyées sont vides ou invalides.");
 
-            // Validation des champs obligatoires
             if (string.IsNullOrWhiteSpace(payload.ANNEE))
                 throw new ArgumentException("L'année scolaire est obligatoire.");
 
@@ -58,19 +75,17 @@ public class AjouterAnnee : IHttpHandler, IRequiresSessionState
 
             bool cloture = (payload.CLOTURE == "Inactif" || payload.CLOTURE == "1" || payload.CLOTURE == "true");
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand(
+            using (var cmd = new SqlCommand(
                 @"INSERT INTO [dbo].[RANNEE]
                     (ANNEE, DATE_DEBUT, DATE_FIN, CLOTURE, CREATED_AT)
                   VALUES
                     (@annee, @dateDebut, @dateFin, @cloture, GETDATE())", conn))
             {
-                cmd.Parameters.Add("@annee",     System.Data.SqlDbType.NVarChar, 50).Value = payload.ANNEE.Trim();
-                cmd.Parameters.Add("@dateDebut", System.Data.SqlDbType.Date).Value         = dateDebut;
-                cmd.Parameters.Add("@dateFin",   System.Data.SqlDbType.Date).Value         = dateFin;
-                cmd.Parameters.Add("@cloture",   System.Data.SqlDbType.Bit).Value          = cloture;
+                cmd.Parameters.Add("@annee", System.Data.SqlDbType.NVarChar, 50).Value = payload.ANNEE.Trim();
+                cmd.Parameters.Add("@dateDebut", System.Data.SqlDbType.Date).Value = dateDebut;
+                cmd.Parameters.Add("@dateFin", System.Data.SqlDbType.Date).Value = dateFin;
+                cmd.Parameters.Add("@cloture", System.Data.SqlDbType.Bit).Value = cloture;
 
                 conn.Open();
                 cmd.ExecuteNonQuery();
@@ -83,13 +98,16 @@ public class AjouterAnnee : IHttpHandler, IRequiresSessionState
             ctx.Response.StatusCode = 400;
             ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
         }
+        catch (SqlException ex)
+        {
+            ctx.Response.StatusCode = 500;
+            string msg = (ex.Number == 2627) ? "Cette année scolaire existe déjà." : "Erreur de base de données.";
+            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(msg) + "}");
+        }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string msg = ex.Message.Contains("UNIQUE")
-                ? "Cette année scolaire existe déjà."
-                : ex.Message;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(msg) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize("Erreur serveur") + "}");
         }
     }
 
@@ -97,9 +115,9 @@ public class AjouterAnnee : IHttpHandler, IRequiresSessionState
 
     private class AnneePayload
     {
-        public string ANNEE      { get; set; }
+        public string ANNEE { get; set; }
         public string DATE_DEBUT { get; set; }
-        public string DATE_FIN   { get; set; }
-        public string CLOTURE    { get; set; }
+        public string DATE_FIN { get; set; }
+        public string CLOTURE { get; set; }
     }
 }

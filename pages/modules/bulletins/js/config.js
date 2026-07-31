@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 var API_BULLETINS = {
-    getMatieres: '../../parametres/matieres/handlers/GetMatieres.ashx',
+    getMatieres: 'handlers/GetMatieres.ashx',
     getBulletins: 'handlers/GetBulletins.ashx',
     saveCoeffs: 'handlers/SaveCoeffs.ashx',
     modifierBulletin: 'handlers/ModifierBulletin.ashx',

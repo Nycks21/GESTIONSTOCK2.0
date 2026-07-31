@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Web;                    // ✅ AJOUT
 using System.Web.UI;
 
 public partial class utilisateurs : System.Web.UI.Page
@@ -14,11 +15,11 @@ public partial class utilisateurs : System.Web.UI.Page
         // Ajouter une classe CSS au body via JavaScript
         if (AuthHelper.IsSuperAdmin())
         {
-            // Enregistrer un script pour ajouter la classe au body
             string script = "document.body.classList.add('superadmin-mode');";
             ClientScript.RegisterStartupScript(this.GetType(), "superadmin", script, true);
         }
-        
-        hfUserRole.Value = AuthHelper.GetUserRole();
+
+        // ✅ Maintenant HttpContext est reconnu
+        hfUserRole.Value = AuthHelper.GetUserRole(HttpContext.Current).ToString();
     }
 }

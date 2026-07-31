@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="GetEmploi" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,28 +13,67 @@ public class GetEmploi : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
+        string mode = ctx.Request.QueryString["mode"] ?? "class_all";
         string classeId = ctx.Request.QueryString["classe"];
-        if (string.IsNullOrEmpty(classeId))
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Paramètre classe manquant\"}");
-            return;
-        }
+        string requestedProfId = ctx.Request.QueryString["professeur"];
 
         var dict = new Dictionary<string, object>();
-        string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+        string connStr = AuthHelper.ConnectionString;
+
+        if (string.IsNullOrEmpty(connStr))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+            return;
+        }
 
         try
         {
+            int userRole = AuthHelper.GetUserRole(ctx);
+            bool isProfessor = userRole == 3;
+            int currentUserId = AuthHelper.GetUserId(ctx);
+            int selectedProfId;
+            int.TryParse(requestedProfId, out selectedProfId);
+            if (!string.IsNullOrEmpty(mode))
+            {
+                mode = mode.ToLowerInvariant();
+            }
+            else
+            {
+                mode = "class_all";
+            }
+
+            if (!isProfessor)
+            {
+                if (mode == "my_in_class" || mode == "my_all")
+                {
+                    mode = "class_all";
+                }
+            }
+
+            if ((mode == "my_in_class" || mode == "class_all") && string.IsNullOrEmpty(classeId))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Paramètre classe manquant\"}");
+                return;
+            }
+
+            if (mode == "specific_prof" && selectedProfId <= 0)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Paramètre professeur manquant\"}");
+                return;
+            }
+
             using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand(
-                @"SELECT 
+            using (var cmd = new SqlCommand())
+            {
+                cmd.Connection = conn;
+                cmd.CommandText = @"SELECT 
                     e.JOUR, 
                     e.HEURE_DEBUT, 
                     e.HEURE_FIN, 
@@ -49,10 +87,32 @@ public class GetEmploi : IHttpHandler, IRequiresSessionState
                     e.DESCRIPTION 
                   FROM EMPLOI_TEMPS e
                   LEFT JOIN MATIERES m ON e.MATIERE_ID = m.ID
-                  WHERE e.CLASSE_ID = @classeId",
-                conn))
-            {
-                cmd.Parameters.AddWithValue("@classeId", classeId);
+                  WHERE 1=1";
+
+                if (!string.IsNullOrEmpty(classeId))
+                {
+                    cmd.CommandText += " AND e.CLASSE_ID = @classeId";
+                    cmd.Parameters.AddWithValue("@classeId", classeId);
+                }
+
+                if (mode == "my_in_class" || mode == "my_all")
+                {
+                    cmd.CommandText += " AND e.PROFESSEUR = @professeurId";
+                    cmd.Parameters.AddWithValue("@professeurId", currentUserId);
+                }
+                else if (mode == "specific_prof")
+                {
+                    cmd.CommandText += " AND e.PROFESSEUR = @professeurId";
+                    cmd.Parameters.AddWithValue("@professeurId", selectedProfId);
+                }
+                else if (isProfessor && mode == "class_all")
+                {
+                    cmd.CommandText += " AND EXISTS(SELECT 1 FROM MATIERES mt WHERE mt.CLASSE_ID = e.CLASSE_ID AND mt.ENSEIGNANT = @professeurId)";
+                    cmd.Parameters.AddWithValue("@professeurId", currentUserId);
+                }
+
+                cmd.CommandText += " ORDER BY e.JOUR, e.HEURE_DEBUT";
+
                 conn.Open();
                 using (var rdr = cmd.ExecuteReader())
                 {

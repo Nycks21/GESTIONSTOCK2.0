@@ -75,9 +75,8 @@ async function saveEvent() {
         if (data.success) {
             showToast(id ? 'Événement modifié avec succès' : 'Événement ajouté avec succès', 'success');
             closeEventModal();
-            await loadEvents();
-            await loadUpcomingEvents();
-            await loadStatistics();
+            // ✅ Recharger uniquement le calendrier
+            await refreshCalendar();
         } else {
             showToast(data.message || 'Erreur lors de l\'enregistrement', 'error');
         }
@@ -135,13 +134,12 @@ async function deleteEvent(e) {
         
         var data = await response.json();
         
-        if (data.warning) {
+        if (data.success) {
             closeEventModal();
             closeConfirmDeleteModal();
             showToast('Événement supprimé avec succès', 'success');
-            await loadEvents();
-            await loadUpcomingEvents();
-            await loadStatistics();
+            // ✅ Recharger uniquement le calendrier
+            await refreshCalendar();
         } else {
             showToast(data.message || 'Erreur lors de la suppression', 'error');
         }
@@ -187,9 +185,8 @@ async function saveEventFromDrop(eventData) {
         
         if (data.success) {
             showToast('Événement ajouté avec succès', 'success');
-            await loadEvents();
-            await loadUpcomingEvents();
-            await loadStatistics();
+            // ✅ Recharger uniquement le calendrier
+            await refreshCalendar();
         } else {
             showToast(data.message || 'Erreur', 'error');
         }
@@ -208,7 +205,7 @@ async function updateEventDate(event) {
     try {
         if (event.end && event.end < event.start) {
             showToast('La date de fin ne peut pas être antérieure à la date de début', 'warning');
-            await loadEvents();
+            await refreshCalendar();
             return;
         }
         
@@ -229,11 +226,20 @@ async function updateEventDate(event) {
         var data = await response.json();
         if (!data.success) {
             showToast('Erreur lors de la mise à jour de la date', 'error');
-            loadEvents();
+            await refreshCalendar();
         }
     } catch (e) {
         console.error('Erreur updateEventDate:', e);
         showToast('Erreur de connexion: ' + e.message, 'error');
-        loadEvents();
+        await refreshCalendar();
     }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPOSER LES FONCTIONS GLOBALEMENT
+// ─────────────────────────────────────────────────────────────────────────────
+
+window.saveEvent = saveEvent;
+window.deleteEvent = deleteEvent;
+window.saveEventFromDrop = saveEventFromDrop;
+window.updateEventDate = updateEventDate;

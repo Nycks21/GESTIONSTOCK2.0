@@ -18,19 +18,13 @@ public class ModifierEleve : IHttpHandler, IRequiresSessionState
 
         var ser = new JavaScriptSerializer();
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
-        // Récupérer l'ID de l'utilisateur connecté
-        int userId = 0;
-        if (ctx.Session["IDUSER"] != null)
-        {
-            userId = Convert.ToInt32(ctx.Session["IDUSER"]);
-        }
+        int userId = AuthHelper.GetUserId(ctx);
 
         try
         {
@@ -46,19 +40,18 @@ public class ModifierEleve : IHttpHandler, IRequiresSessionState
                 throw new ArgumentException("ID d'élève invalide.");
 
             int classeId;
-            if (payload.CLASSE == null || !int.TryParse(payload.CLASSE.ToString(), out classeId))
+            if (!int.TryParse(payload.CLASSE, out classeId))
                 throw new ArgumentException("Classe invalide.");
 
             DateTime? dateNaiss = null;
             if (!string.IsNullOrEmpty(payload.DATE_NAISSANCE))
             {
                 DateTime d;
-                if (DateTime.TryParse(payload.DATE_NAISSANCE, out d)) dateNaiss = d;
+                if (DateTime.TryParse(payload.DATE_NAISSANCE, out d))
+                    dateNaiss = d;
             }
 
-            string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
                 throw new Exception("Chaîne de connexion non trouvée.");
 
@@ -82,33 +75,39 @@ public class ModifierEleve : IHttpHandler, IRequiresSessionState
                 cmd.Parameters.AddWithValue("@nom", payload.NOM.Trim());
                 cmd.Parameters.AddWithValue("@classe", classeId);
 
-                // Gestion des nulls sans opérateur ?. (compatible .NET 4.0)
-                object emailParam = (payload.EMAIL != null) ? (object)payload.EMAIL.Trim() : DBNull.Value;
+                object emailParam = (string.IsNullOrEmpty(payload.EMAIL)) ? (object)DBNull.Value : payload.EMAIL.Trim();
                 cmd.Parameters.AddWithValue("@email", emailParam);
 
-                object telParam = (payload.TELEPHONE != null) ? (object)payload.TELEPHONE.Trim() : DBNull.Value;
+                object telParam = (string.IsNullOrEmpty(payload.TELEPHONE)) ? (object)DBNull.Value : payload.TELEPHONE.Trim();
                 cmd.Parameters.AddWithValue("@tel", telParam);
 
-                cmd.Parameters.AddWithValue("@statut", string.IsNullOrEmpty(payload.STATUT) ? "actif" : payload.STATUT.Trim().ToLower());
-                cmd.Parameters.AddWithValue("@genre", string.IsNullOrEmpty(payload.GENRE) ? "M" : payload.GENRE.Trim().ToUpper().Substring(0, 1));
+                string statut = string.IsNullOrEmpty(payload.STATUT) ? "actif" : payload.STATUT.Trim().ToLower();
+                cmd.Parameters.AddWithValue("@statut", statut);
+
+                string genre = string.IsNullOrEmpty(payload.GENRE) ? "M" : payload.GENRE.Trim().ToUpper().Substring(0, 1);
+                cmd.Parameters.AddWithValue("@genre", genre);
+
                 cmd.Parameters.AddWithValue("@dateNaiss", dateNaiss.HasValue ? (object)dateNaiss.Value : DBNull.Value);
                 cmd.Parameters.AddWithValue("@adresse", payload.ADRESSE.Trim());
                 cmd.Parameters.AddWithValue("@parent", payload.PARENT.Trim());
-
-                // Traçabilité
                 cmd.Parameters.AddWithValue("@updatedBy", userId);
 
                 conn.Open();
-                if (cmd.ExecuteNonQuery() == 0) throw new Exception("Élève introuvable ou aucune modification effectuée.");
+                if (cmd.ExecuteNonQuery() == 0)
+                    throw new Exception("Élève introuvable ou aucune modification effectuée.");
             }
 
             ctx.Response.Write("{\"success\":true,\"message\":\"Profil élève mis à jour avec succès.\"}");
         }
+        catch (ArgumentException argEx)
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + argEx.Message.Replace("\"", "\\\"") + "\"}");
+        }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string msg = ex.Message.Replace("\"", "\\\"");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + msg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 

@@ -16,6 +16,13 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
+        // ✅ Vérification d'authentification - Admin ou SuperAdmin
+        if (!AuthHelper.RequireApiAuth(Context, 1)) // 1 = Admin
+        {
+            WriteResponse(false, "Accès non autorisé");
+            return;
+        }
+
         if (Request.HttpMethod == "OPTIONS")
         {
             Response.StatusCode = 200;
@@ -51,7 +58,7 @@ protected void Page_Load(object sender, EventArgs e)
         }
         catch (Exception ex)
         {
-            WriteResponse(false, "Format JSON invalide: " + ex.Message);
+            WriteResponse(false, "Format JSON invalide");
             return;
         }
 
@@ -69,6 +76,12 @@ protected void Page_Load(object sender, EventArgs e)
         int roleId = GetIntValue(data, "ROLEID", 1);
         int active = GetIntValue(data, "ACTIVE", 1);
         
+        // ✅ Validation des entrées
+        if (!ValidateUserData(username, nom, password, email, roleId))
+        {
+            return;
+        }
+
         List<string> permissions = new List<string>();
         if (data.ContainsKey("PERMISSIONS") && data["PERMISSIONS"] != null)
         {
@@ -82,42 +95,11 @@ protected void Page_Load(object sender, EventArgs e)
             }
         }
 
-        if (string.IsNullOrEmpty(username))
-        {
-            WriteResponse(false, "Le nom d'utilisateur est requis");
-            return;
-        }
-        if (string.IsNullOrEmpty(nom))
-        {
-            WriteResponse(false, "Le nom complet est requis");
-            return;
-        }
-        if (string.IsNullOrEmpty(password))
-        {
-            WriteResponse(false, "Le mot de passe est requis");
-            return;
-        }
-        if (password.Length < 8)
-        {
-            WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
-            return;
-        }
-        if (string.IsNullOrEmpty(email))
-        {
-            WriteResponse(false, "L'email est requis");
-            return;
-        }
-
-        if (!IsValidEmail(email))
-        {
-            WriteResponse(false, "Format d'email invalide");
-            return;
-        }
-
         using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
 
+            // ✅ Vérifier si l'utilisateur existe déjà
             using (SqlCommand checkCmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE USERNAME = @USERNAME", conn))
             {
                 checkCmd.Parameters.AddWithValue("@USERNAME", username);
@@ -139,7 +121,7 @@ protected void Page_Load(object sender, EventArgs e)
             {
                 cmd.Parameters.AddWithValue("@USERNAME", username);
                 cmd.Parameters.AddWithValue("@NOM", nom);
-                cmd.Parameters.AddWithValue("@PWD", password);  // Mot de passe en clair
+                cmd.Parameters.AddWithValue("@PWD", password); // Mot de passe en clair (comme demandé)
                 cmd.Parameters.AddWithValue("@EMAIL", email);
                 cmd.Parameters.AddWithValue("@ROLEID", roleId);
                 cmd.Parameters.AddWithValue("@TELEPHONE", string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone);
@@ -147,6 +129,9 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.Parameters.AddWithValue("@MENU_PERMISSIONS", permissionsJson);
 
                 int newUserId = (int)cmd.ExecuteScalar();
+                
+                // ✅ Journalisation de l'action
+                LogSecurityAction(conn, AuthHelper.GetUserId(Context), "USER_CREATE", "Création de l'utilisateur " + username);
                 
                 WriteResponse(true, "Utilisateur ajouté avec succès", newUserId);
             }
@@ -164,14 +149,80 @@ protected void Page_Load(object sender, EventArgs e)
         }
         else
         {
-            WriteResponse(false, "Erreur SQL: " + ex.Message);
+            // ✅ Log sans exposer les détails
+            LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message);
+            WriteResponse(false, "Erreur de base de données");
         }
     }
     catch (Exception ex)
     {
         Response.StatusCode = 500;
-        WriteResponse(false, ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " "));
+        LogSecurityAction(null, AuthHelper.GetUserId(Context), "SYSTEM_ERROR", ex.Message);
+        WriteResponse(false, "Erreur système");
     }
+}
+
+// ✅ Validation des données
+private bool ValidateUserData(string username, string nom, string password, string email, int roleId)
+{
+    if (string.IsNullOrEmpty(username))
+    {
+        WriteResponse(false, "Le nom d'utilisateur est requis");
+        return false;
+    }
+    if (username.Length < 3 || username.Length > 50)
+    {
+        WriteResponse(false, "Le nom d'utilisateur doit contenir entre 3 et 50 caractères");
+        return false;
+    }
+    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-zA-Z0-9_]+$"))
+    {
+        WriteResponse(false, "Le nom d'utilisateur contient des caractères invalides");
+        return false;
+    }
+    
+    if (string.IsNullOrEmpty(nom))
+    {
+        WriteResponse(false, "Le nom complet est requis");
+        return false;
+    }
+    if (nom.Length > 100)
+    {
+        WriteResponse(false, "Le nom complet est trop long");
+        return false;
+    }
+    
+    if (string.IsNullOrEmpty(password))
+    {
+        WriteResponse(false, "Le mot de passe est requis");
+        return false;
+    }
+    if (password.Length < 8)
+    {
+        WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
+        return false;
+    }
+    
+    if (string.IsNullOrEmpty(email))
+    {
+        WriteResponse(false, "L'email est requis");
+        return false;
+    }
+    if (!IsValidEmail(email))
+    {
+        WriteResponse(false, "Format d'email invalide");
+        return false;
+    }
+    
+    // ✅ Rôles autorisés
+    int[] allowedRoles = { 0, 1, 2, 3, 4 };
+    if (!Array.Exists(allowedRoles, r => r == roleId))
+    {
+        WriteResponse(false, "Rôle invalide");
+        return false;
+    }
+    
+    return true;
 }
 
 private string GetStringValue(Dictionary<string, object> data, string key)
@@ -221,5 +272,34 @@ private void WriteResponse(bool success, string message, int userId = 0)
         response["userId"] = userId;
     }
     Response.Write(serializer.Serialize(response));
+}
+
+// ✅ Journalisation de sécurité
+private void LogSecurityAction(SqlConnection conn, int userId, string action, string details)
+{
+    try
+    {
+        bool closeConn = conn == null;
+        if (closeConn)
+        {
+            conn = new SqlConnection(connStr);
+            conn.Open();
+        }
+        
+        string sql = @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
+                       VALUES (@UserId, @Action, @Details, @IP, GETDATE())";
+        using (SqlCommand cmd = new SqlCommand(sql, conn))
+        {
+            cmd.Parameters.AddWithValue("@UserId", userId);
+            cmd.Parameters.AddWithValue("@Action", action);
+            cmd.Parameters.AddWithValue("@Details", details);
+            cmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
+            cmd.ExecuteNonQuery();
+        }
+        
+        if (closeConn)
+            conn.Close();
+    }
+    catch { /* Ne pas échouer si le log échoue */ }
 }
 </script>

@@ -5,21 +5,41 @@ using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
 using System.Collections.Generic;
+using System.Web.SessionState;   // ✅ AJOUT
 
-public class GetActivite : IHttpHandler
+public class GetActivite : IHttpHandler, IRequiresSessionState   // ✅ AJOUT
 {
-    private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+    private static readonly string connStr;
+
+    static GetActivite()
+    {
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        connStr = (connSetting != null) ? connSetting.ConnectionString : "";
+    }
 
     public void ProcessRequest(HttpContext context)
     {
         context.Response.ContentType = "application/json";
+
+        if (!AuthHelper.IsAuthenticated(context))
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
+
+        // ✅ Même vérification de rôle que les autres handlers du dashboard
+        int role = AuthHelper.GetUserRole(context);
+        if (role != 0 && role != 1)
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+            return;
+        }
 
         try
         {
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
-
                 var data = new List<object>();
 
                 // Dernières absences
@@ -43,14 +63,7 @@ public class GetActivite : IHttpHandler
                         string detail = reader["DETAIL"] != DBNull.Value ? reader["DETAIL"].ToString() : "Un élève";
                         string temps = reader["TEMPS"].ToString();
                         string type = reader["TYPE"].ToString();
-                        
-                        data.Add(new
-                        {
-                            texte = texte,
-                            detail = detail,
-                            temps = temps,
-                            type = type
-                        });
+                        data.Add(new { texte = texte, detail = detail, temps = temps, type = type });
                     }
                 }
 
@@ -75,14 +88,7 @@ public class GetActivite : IHttpHandler
                         string detail = reader["DETAIL"] != DBNull.Value ? reader["DETAIL"].ToString() : "Un élève";
                         string temps = reader["TEMPS"].ToString();
                         string type = reader["TYPE"].ToString();
-                        
-                        data.Add(new
-                        {
-                            texte = texte,
-                            detail = detail,
-                            temps = temps,
-                            type = type
-                        });
+                        data.Add(new { texte = texte, detail = detail, temps = temps, type = type });
                     }
                 }
 
@@ -107,18 +113,10 @@ public class GetActivite : IHttpHandler
                         string detail = reader["DETAIL"] != DBNull.Value ? reader["DETAIL"].ToString() : "Un élève";
                         string temps = reader["TEMPS"].ToString();
                         string type = reader["TYPE"].ToString();
-                        
-                        data.Add(new
-                        {
-                            texte = texte,
-                            detail = detail,
-                            temps = temps,
-                            type = type
-                        });
+                        data.Add(new { texte = texte, detail = detail, temps = temps, type = type });
                     }
                 }
 
-                // Données de démonstration si aucune activité
                 if (data.Count == 0)
                 {
                     data.Add(new { texte = "Bienvenue", detail = "Tableau de bord chargé", temps = "maintenant", type = "info" });
@@ -128,7 +126,7 @@ public class GetActivite : IHttpHandler
                 context.Response.Write(new JavaScriptSerializer().Serialize(result));
             }
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             var data = new List<object>();
             data.Add(new { texte = "Bienvenue", detail = "Tableau de bord chargé", temps = "maintenant", type = "info" });

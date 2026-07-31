@@ -1,6 +1,6 @@
 <%@ WebHandler Language="C#" Class="DeleteEmploi" %>
 using System;
-using System.Configuration;
+using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,10 +14,10 @@ public class DeleteEmploi : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
@@ -31,11 +31,17 @@ public class DeleteEmploi : IHttpHandler, IRequiresSessionState
         try
         {
             var serializer = new JavaScriptSerializer();
-            var data = serializer.Deserialize<dynamic>(json);
+            var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            string classe = data["classe"];
-            string jour = data["jour"];
-            string heureDebut = data["heureDebut"];
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Données JSON invalides\"}");
+                return;
+            }
+
+            string classe = GetString(data, "classe");
+            string jour = GetString(data, "jour");
+            string heureDebut = GetString(data, "heureDebut");
 
             if (string.IsNullOrEmpty(classe) || string.IsNullOrEmpty(jour) || string.IsNullOrEmpty(heureDebut))
             {
@@ -43,7 +49,13 @@ public class DeleteEmploi : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+                return;
+            }
+
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
@@ -57,13 +69,20 @@ public class DeleteEmploi : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            ctx.Response.Write("{\"success\":true}");
+            ctx.Response.Write("{\"success\":true,\"message\":\"Emploi supprimé avec succès\"}");
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
             ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return "";
     }
 
     public bool IsReusable { get { return false; } }

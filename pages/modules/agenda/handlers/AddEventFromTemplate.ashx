@@ -1,7 +1,6 @@
-<%@ WebHandler Language="C#" Class="AddEventFromTemplate" %>
+﻿<%@ WebHandler Language="C#" Class="AddEventFromTemplate" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,22 +13,21 @@ public class AddEventFromTemplate : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        if (!AuthHelper.HasPermission("agenda"))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
@@ -40,14 +38,20 @@ public class AddEventFromTemplate : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            string templateId = data.ContainsKey("templateId") ? data["templateId"].ToString() : "";
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Données JSON invalides\"}");
+                return;
+            }
+
+            string templateId = GetString(data, "templateId", "");
             if (string.IsNullOrEmpty(templateId))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID du template manquant\"}");
                 return;
             }
 
-            int userId = Convert.ToInt32(ctx.Session["IDUSER"]);
+            int userId = AuthHelper.GetUserId(ctx);
             string id = Guid.NewGuid().ToString();
 
             using (var conn = new SqlConnection(connStr))
@@ -69,38 +73,12 @@ public class AddEventFromTemplate : IHttpHandler, IRequiresSessionState
 
                 string sql = @"
                     INSERT INTO CALENDAREVENTS (
-                        ID,
-                        IDUSER,
-                        TEMPLATE_ID,
-                        TITRE,
-                        DATE_DEBUT,
-                        DATE_FIN,
-                        COULEUR,
-                        HEURE_DEBUT,
-                        HEURE_FIN,
-                        DESCRIPTION,
-                        TYPE,
-                        LIEU,
-                        PUBLIQUE,
-                        URL,
-                        CREATED_AT
+                        ID, IDUSER, TEMPLATE_ID, TITRE, DATE_DEBUT, DATE_FIN,
+                        COULEUR, HEURE_DEBUT, HEURE_FIN, DESCRIPTION, TYPE, LIEU, PUBLIQUE, URL, CREATED_AT
                     )
                     SELECT 
-                        @id,
-                        @userId,
-                        @templateId,
-                        NOM,
-                        GETDATE(),
-                        GETDATE(),
-                        COULEUR,
-                        HEURE_DEBUT,
-                        HEURE_FIN,
-                        DESCRIPTION,
-                        TYPE,
-                        LIEU,
-                        PUBLIQUE,
-                        URL,
-                        GETDATE()
+                        @id, @userId, @templateId, NOM, GETDATE(), GETDATE(),
+                        COULEUR, HEURE_DEBUT, HEURE_FIN, DESCRIPTION, TYPE, LIEU, PUBLIQUE, URL, GETDATE()
                     FROM EVENTTEMPLATES 
                     WHERE ID = @templateId";
 
@@ -123,9 +101,15 @@ public class AddEventFromTemplate : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
+    }
+
+    private string GetString(Dictionary<string, object> dict, string key, string defaultValue)
+    {
+        if (dict.ContainsKey(key) && dict[key] != null)
+            return dict[key].ToString();
+        return defaultValue;
     }
 
     public bool IsReusable { get { return false; } }

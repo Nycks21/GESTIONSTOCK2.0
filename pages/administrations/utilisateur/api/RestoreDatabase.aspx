@@ -3,6 +3,7 @@
 <%@ Import Namespace="System.Data" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.IO" %>
+<%@ Import Namespace="System.Configuration" %>
 
 <script runat="server">
 protected void Page_Load(object sender, EventArgs e)
@@ -13,14 +14,20 @@ protected void Page_Load(object sender, EventArgs e)
     
     try
     {
-        // Lire le corps de la requête
+        // ✅ Vérification d'authentification - SuperAdmin uniquement
+        if (!AuthHelper.RequireApiAuth(Context, 0))
+        {
+            Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        // ✅ Lire le corps de la requête
         string jsonBody = "";
         using (var reader = new StreamReader(Request.InputStream))
         {
             jsonBody = reader.ReadToEnd();
         }
         
-        // Analyser le JSON
         var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
         var data = serializer.Deserialize<Dictionary<string, object>>(jsonBody);
         
@@ -33,23 +40,37 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
         
-        // Remplacer les / par des \ pour Windows
+        // ✅ Vérifier que le chemin est sécurisé
+        if (!IsSecurePath(filePath))
+        {
+            Response.Write("{\"success\":false,\"message\":\"Chemin de fichier invalide\"}");
+            return;
+        }
+        
         string windowsPath = filePath.Replace("/", "\\");
         
         if (!File.Exists(windowsPath))
         {
-            Response.Write("{\"success\":false,\"message\":\"Le fichier n'existe pas: " + windowsPath + "\"}");
+            Response.Write("{\"success\":false,\"message\":\"Le fichier n'existe pas\"}");
             return;
         }
         
-        // ✅ CHAÎNE DE CONNEXION HARDCODÉE - Remplacez par vos identifiants
-        string connectionString = "Data Source=MAHEFA_DESKTOP\\SQLECOLE;Initial Catalog=master;User ID=sa;Password=admin123;";
+        // ✅ Utiliser la chaîne de connexion depuis Web.config
+        string connectionString = ConfigurationManager.ConnectionStrings["MasterConnection"]?.ConnectionString;
+        if (string.IsNullOrEmpty(connectionString))
+        {
+            Response.Write("{\"success\":false,\"message\":\"Erreur de configuration\"}");
+            return;
+        }
         
         using (SqlConnection conn = new SqlConnection(connectionString))
         {
             conn.Open();
             
-            // ÉTAPE 1: Forcer la déconnexion de tous les utilisateurs
+            // Journalisation
+            LogRestoreAction(conn, databaseName, windowsPath);
+            
+            // ÉTAPE 1: Forcer la déconnexion
             string killUsersSql = @"
                 DECLARE @kill varchar(8000) = '';
                 SELECT @kill = @kill + 'KILL ' + CONVERT(varchar(5), spid) + ';'
@@ -69,7 +90,7 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.ExecuteNonQuery();
             }
             
-            // ÉTAPE 2: Mettre la base en mode SINGLE_USER
+            // ÉTAPE 2: Mode SINGLE_USER
             string setSingleUserSql = @"
                 ALTER DATABASE [" + databaseName + @"]
                 SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
@@ -80,7 +101,7 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.ExecuteNonQuery();
             }
             
-            // ÉTAPE 3: Restaurer la base
+            // ÉTAPE 3: Restaurer
             string restoreSql = @"
                 RESTORE DATABASE [" + databaseName + @"]
                 FROM DISK = N'" + windowsPath.Replace("'", "''") + @"'
@@ -93,7 +114,7 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.ExecuteNonQuery();
             }
             
-            // ÉTAPE 4: Remettre la base en mode MULTI_USER
+            // ÉTAPE 4: Mode MULTI_USER
             string setMultiUserSql = @"
                 ALTER DATABASE [" + databaseName + @"]
                 SET MULTI_USER;
@@ -104,13 +125,54 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.ExecuteNonQuery();
             }
             
-            Response.Write("{\"success\":true,\"message\":\"Restauration r\u00e9ussie\"}");
+            Response.Write("{\"success\":true,\"message\":\"Restauration réussie\"}");
         }
     }
     catch (Exception ex)
     {
-        string safeMessage = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
-        Response.Write("{\"success\":false,\"message\":\"" + safeMessage + "\"}");
+        // ✅ Log sans exposer les détails
+        LogError(ex);
+        Response.Write("{\"success\":false,\"message\":\"Erreur lors de la restauration\"}");
     }
+}
+
+// ✅ Validation du chemin
+private bool IsSecurePath(string path)
+{
+    if (string.IsNullOrEmpty(path)) return false;
+    // Éviter les traversées de répertoires
+    if (path.Contains("..")) return false;
+    // Vérifier l'extension
+    string ext = Path.GetExtension(path).ToLower();
+    return ext == ".bak" || ext == ".backup";
+}
+
+// ✅ Journalisation
+private void LogRestoreAction(SqlConnection conn, string databaseName, string filePath)
+{
+    try
+    {
+        string sql = @"INSERT INTO ADMIN_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
+                       VALUES (@UserId, 'RESTORE_DATABASE', @Details, @IP, GETDATE())";
+        using (SqlCommand cmd = new SqlCommand(sql, conn))
+        {
+            cmd.Parameters.AddWithValue("@UserId", AuthHelper.GetUserId(Context));
+            cmd.Parameters.AddWithValue("@Details", $"Restauration de {databaseName} depuis {filePath}");
+            cmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
+            cmd.ExecuteNonQuery();
+        }
+    }
+    catch { }
+}
+
+private void LogError(Exception ex)
+{
+    try
+    {
+        string logFile = Server.MapPath("~/App_Data/restore_errors.log");
+        string entry = $"[{DateTime.Now}] {ex.Message}\n{ex.StackTrace}\n---\n";
+        File.AppendAllText(logFile, entry);
+    }
+    catch { }
 }
 </script>

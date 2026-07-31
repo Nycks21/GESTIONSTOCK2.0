@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="GetUpcomingEvents" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,22 +13,21 @@ public class GetUpcomingEvents : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        if (!AuthHelper.HasPermission("agenda"))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
         try
         {
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-            {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-                return;
-            }
-
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = AuthHelper.ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
@@ -42,7 +40,6 @@ public class GetUpcomingEvents : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                // Vérifier si la table existe
                 string checkTable = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'CALENDAREVENTS'";
                 using (var checkCmd = new SqlCommand(checkTable, conn))
                 {
@@ -54,24 +51,12 @@ public class GetUpcomingEvents : IHttpHandler, IRequiresSessionState
                     }
                 }
 
-                // ✅ Suppression du filtre IDUSER et ajout de TOP 10 + DATE_DEBUT >= GETDATE()
                 string sql = @"
                     SELECT TOP 10
-                        ce.ID,
-                        ce.TEMPLATE_ID,
-                        ce.IDUSER,
-                        ce.TITRE,
-                        ce.DATE_DEBUT,
-                        ce.DATE_FIN,
-                        ce.COULEUR,
-                        ce.HEURE_DEBUT,
-                        ce.HEURE_FIN,
-                        ce.DESCRIPTION,
-                        ce.TYPE,
-                        ce.LIEU,
-                        ce.PUBLIQUE,
-                        ce.URL,
-                        ce.CREATED_AT,
+                        ce.ID, ce.TEMPLATE_ID, ce.IDUSER, ce.TITRE,
+                        ce.DATE_DEBUT, ce.DATE_FIN, ce.COULEUR,
+                        ce.HEURE_DEBUT, ce.HEURE_FIN, ce.DESCRIPTION,
+                        ce.TYPE, ce.LIEU, ce.PUBLIQUE, ce.URL, ce.CREATED_AT,
                         CASE 
                             WHEN ce.TEMPLATE_ID IS NOT NULL THEN (SELECT NOM FROM EVENTTEMPLATES WHERE ID = ce.TEMPLATE_ID)
                             ELSE 'Personnalisé'
@@ -116,8 +101,7 @@ public class GetUpcomingEvents : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            string safeMsg = ex.Message.Replace("\"", "'").Replace("\r", " ").Replace("\n", " ");
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + safeMsg + "\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 

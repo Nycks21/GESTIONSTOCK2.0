@@ -1,7 +1,6 @@
 ﻿<%@ WebHandler Language="C#" Class="GetAbsences" %>
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -13,17 +12,22 @@ public class GetAbsences : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
-        
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
-        
+
         var list = new List<object>();
-        string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-        
+        string connStr = AuthHelper.ConnectionString;
+
+        if (string.IsNullOrEmpty(connStr))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur de connexion\"}");
+            return;
+        }
+
         try
         {
             using (var conn = new SqlConnection(connStr))
@@ -37,21 +41,24 @@ public class GetAbsences : IHttpHandler, IRequiresSessionState
                 ORDER BY a.DATE_DEBUT DESC", conn))
             {
                 conn.Open();
-                var rdr = cmd.ExecuteReader();
-                while (rdr.Read())
+                using (var rdr = cmd.ExecuteReader())
                 {
-                    list.Add(new {
-                        ID = rdr["ID"].ToString(),
-                        MATRICULE = rdr["MATRICULE"].ToString(),
-                        NOM = rdr["NOM"].ToString(),
-                        CLASSE_NOM = rdr["CLASSE_NOM"].ToString(),
-                        DATE_DEBUT = Convert.ToDateTime(rdr["DATE_DEBUT"]).ToString("yyyy-MM-dd"),
-                        DATE_FIN = rdr["DATE_FIN"] != DBNull.Value ? Convert.ToDateTime(rdr["DATE_FIN"]).ToString("yyyy-MM-dd") : "",
-                        DUREE = rdr["DUREE"].ToString(),
-                        MOTIF = rdr["MOTIF_AFFICHAGE"].ToString(),
-                        JUSTIFIE = Convert.ToBoolean(rdr["JUSTIFIE"]),
-                        JUSTIFICATION = rdr["JUSTIFICATION"].ToString()
-                    });
+                    while (rdr.Read())
+                    {
+                        list.Add(new
+                        {
+                            ID = rdr["ID"].ToString(),
+                            MATRICULE = rdr["MATRICULE"].ToString(),
+                            NOM = rdr["NOM"].ToString(),
+                            CLASSE_NOM = rdr["CLASSE_NOM"].ToString(),
+                            DATE_DEBUT = Convert.ToDateTime(rdr["DATE_DEBUT"]).ToString("yyyy-MM-dd"),
+                            DATE_FIN = rdr["DATE_FIN"] != DBNull.Value ? Convert.ToDateTime(rdr["DATE_FIN"]).ToString("yyyy-MM-dd") : "",
+                            DUREE = rdr["DUREE"].ToString(),
+                            MOTIF = rdr["MOTIF_AFFICHAGE"].ToString(),
+                            JUSTIFIE = Convert.ToBoolean(rdr["JUSTIFIE"]),
+                            JUSTIFICATION = rdr["JUSTIFICATION"].ToString()
+                        });
+                    }
                 }
             }
             ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, data = list }));
@@ -62,5 +69,6 @@ public class GetAbsences : IHttpHandler, IRequiresSessionState
             ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
+
     public bool IsReusable { get { return false; } }
 }

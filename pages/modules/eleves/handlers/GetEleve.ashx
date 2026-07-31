@@ -2,8 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Configuration;
-using System.Data;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,24 +12,25 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
         try
         {
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
+
             var list = new List<object>();
 
             using (var conn = new SqlConnection(connStr))
             {
-                // Note : e.CLASSE est l'ID de la classe (INT) qui lie vers c.ID (INT)
                 string sql = @"SELECT e.ID,
                                       a.ANNEE, 
                                       e.MATRICULE, 
@@ -59,16 +58,11 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
                         {
                             list.Add(new
                             {
-                                // 1. ID ELEVE est un GUID
                                 ID             = reader.IsDBNull(0) ? "" : reader.GetGuid(0).ToString(),
-                                
                                 ANNEE_TEXTE    = reader.IsDBNull(1) ? "" : reader.GetString(1),
                                 MATRICULE      = reader.IsDBNull(2) ? "" : reader.GetString(2),
                                 NOM            = reader.IsDBNull(3) ? "" : reader.GetString(3),
-                                
-                                // 2. ID CLASSE est un INT
                                 ID_CLASSE      = reader.IsDBNull(4) ? 0 : reader.GetInt32(4),
-                                
                                 CLASSE_NOM     = reader.IsDBNull(5) ? "N/A" : reader.GetString(5),
                                 EMAIL          = reader.IsDBNull(6) ? "" : reader.GetString(6),
                                 TELEPHONE      = reader.IsDBNull(7) ? "" : reader.GetString(7),
@@ -88,10 +82,7 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { 
-                success = false, 
-                message = "Erreur serveur : " + ex.Message 
-            }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
     }
 

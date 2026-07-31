@@ -55,6 +55,7 @@
 
 <body class="hold-transition" data-version="<%=AuthHelper.Version %>">
     <form id="form1" runat="server">
+        <input type="hidden" id="hfUserRole" value="<%= AuthHelper.GetUserRole(HttpContext.Current) %>" />
         <div class="wrapper">
             <!-- TOPBAR & SIDEBAR -->
             <%= AuthHelper.RenderTopBarHTML() %>
@@ -106,12 +107,22 @@
                                     </div>
                                 </div>
                                 <div class="dash-card-body">
-                                    <!-- Filtre classe -->
+                                    <!-- Filtre classe + mode d'affichage -->
                                     <div class="emploi-filters">
                                         <div class="filter-group">
                                             <label for="classeFilter">Classe</label>
                                             <select id="classeFilter" class="form-control">
                                                 <option value="">-- Choisir une classe --</option>
+                                            </select>
+                                        </div>
+                                        <div class="filter-group">
+                                            <label for="displayMode">Mode d'affichage</label>
+                                            <select id="displayMode" class="form-control"></select>
+                                        </div>
+                                        <div class="filter-group" id="professeurFilterGroup" style="display:none;">
+                                            <label for="professeurFilter">Professeur</label>
+                                            <select id="professeurFilter" class="form-control">
+                                                <option value="">-- Sélectionner un professeur --</option>
                                             </select>
                                         </div>
                                     </div>
