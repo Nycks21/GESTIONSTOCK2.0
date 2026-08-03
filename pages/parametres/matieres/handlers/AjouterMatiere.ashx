@@ -11,26 +11,26 @@ public class AjouterMatiere : IHttpHandler, IRequiresSessionState
 {
     private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
 
-    public void ProcessRequest(HttpContext context)
+    public void ProcessRequest(HttpContext ctx)
     {
         // ✅ Sécurité : 4 vérifications essentielles
     
     // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
+    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
     {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
         return;
     }
     
     // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
+    if (!AuthHelper.RequireApiAuth(ctx))
     {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
+        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
         return;
     }
     
     // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
+    int role = AuthHelper.GetUserRole(ctx);
     if (role < 0 || role > 1) // Permissions minimales selon le handler
     {
         context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
@@ -38,23 +38,23 @@ public class AjouterMatiere : IHttpHandler, IRequiresSessionState
     }
     
     // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
+    string method = ctx.Request.HttpMethod.ToUpper();
     if (method == "POST" || method == "PUT" || method == "DELETE")
     {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
+        string token = ctx.Request.Headers["X-CSRF-Token"];
+        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
         if (string.IsNullOrEmpty(token) || token != sessionToken)
         {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
             return;
         }
     }
-        context.Response.ContentType = "application/json";
-        context.Response.Charset = "utf-8";
+        ctx.Response.ContentType = "application/json";
+        ctx.Response.Charset = "utf-8";
 
         try
         {
-            string jsonBody = new System.IO.StreamReader(context.Request.InputStream).ReadToEnd();
+            string jsonBody = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<dynamic>(jsonBody);
 

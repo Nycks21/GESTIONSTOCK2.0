@@ -1,5 +1,6 @@
 <%@ WebHandler Language="C#" Class="AjouterTarifEcolage" %>
 using System;
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
 using System.IO;
@@ -11,46 +12,10 @@ public class AjouterTarifEcolage : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
         {
             ctx.Response.StatusCode = 401;
             ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
@@ -64,13 +29,17 @@ public class AjouterTarifEcolage : IHttpHandler, IRequiresSessionState
                 body = reader.ReadToEnd();
 
             var ser = new JavaScriptSerializer();
-            var data = ser.Deserialize<dynamic>(body);
+            var data = ser.Deserialize<Dictionary<string, object>>(body);
 
-            int anneeId       = Convert.ToInt32(data["anneeId"]);
-            int classeId      = Convert.ToInt32(data["classeId"]);
-            decimal montant   = Convert.ToDecimal(data["montant"]);
-            string description= data.ContainsKey("description") ? data["description"].ToString() : "";
-            bool statut       = data.ContainsKey("statut") ? Convert.ToBoolean(data["statut"]) : true;
+            int anneeId = Convert.ToInt32(data["anneeId"]);
+            int classeId = Convert.ToInt32(data["classeId"]);
+            decimal montant = Convert.ToDecimal(data["montant"]);
+            string description = "";
+            if (data.ContainsKey("description") && data["description"] != null)
+                description = data["description"].ToString();
+            bool statut = true;
+            if (data.ContainsKey("statut") && data["statut"] != null)
+                statut = Convert.ToBoolean(data["statut"]);
 
             if (anneeId <= 0 || classeId <= 0)
             {
@@ -83,17 +52,22 @@ public class AjouterTarifEcolage : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = "";
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
+            {
+                connStr = connSetting.ConnectionString;
+            }
 
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
 
-                // Vérification doublon : même année + même classe
+                // Vérification doublon
                 string checkSql = "SELECT COUNT(*) FROM TARIFS_ECOLAGE WHERE ANNEE_ID = @anneeId AND CLASSE_ID = @classeId";
                 using (var checkCmd = new SqlCommand(checkSql, conn))
                 {
-                    checkCmd.Parameters.AddWithValue("@anneeId",  anneeId);
+                    checkCmd.Parameters.AddWithValue("@anneeId", anneeId);
                     checkCmd.Parameters.AddWithValue("@classeId", classeId);
                     int existing = (int)checkCmd.ExecuteScalar();
                     if (existing > 0)
@@ -107,11 +81,11 @@ public class AjouterTarifEcolage : IHttpHandler, IRequiresSessionState
                     INSERT INTO TARIFS_ECOLAGE (ID, ANNEE_ID, CLASSE_ID, MONTANT, DESCRIPTION, STATUT, CREATED_AT)
                     VALUES (NEWID(), @anneeId, @classeId, @montant, @description, @statut, GETDATE())", conn))
                 {
-                    cmd.Parameters.AddWithValue("@anneeId",     anneeId);
-                    cmd.Parameters.AddWithValue("@classeId",    classeId);
-                    cmd.Parameters.AddWithValue("@montant",     montant);
+                    cmd.Parameters.AddWithValue("@anneeId", anneeId);
+                    cmd.Parameters.AddWithValue("@classeId", classeId);
+                    cmd.Parameters.AddWithValue("@montant", montant);
                     cmd.Parameters.AddWithValue("@description", description);
-                    cmd.Parameters.AddWithValue("@statut",      statut ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@statut", statut ? 1 : 0);
                     cmd.ExecuteNonQuery();
                 }
             }
@@ -125,5 +99,8 @@ public class AjouterTarifEcolage : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

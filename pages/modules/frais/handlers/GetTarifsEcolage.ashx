@@ -11,42 +11,6 @@ public class GetTarifsEcolage : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
@@ -78,20 +42,6 @@ public class GetTarifsEcolage : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
                 
-                // Vérifier si la table TARIFS_ECOLAGE existe
-                string checkTableQuery = "SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'TARIFS_ECOLAGE'";
-                int tableExists = 0;
-                using (var checkCmd = new SqlCommand(checkTableQuery, conn))
-                {
-                    tableExists = (int)checkCmd.ExecuteScalar();
-                }
-                
-                if (tableExists == 0)
-                {
-                    ctx.Response.Write("{\"success\":true,\"data\":[]}");
-                    return;
-                }
-                
                 string query = @"
                     SELECT t.ID, t.ANNEE_ID, ISNULL(r.ANNEE, '') AS ANNEE_TEXTE, 
                            t.CLASSE_ID, ISNULL(c.NOM, '') AS CLASSE_NOM,
@@ -120,24 +70,28 @@ public class GetTarifsEcolage : IHttpHandler, IRequiresSessionState
                     {
                         while (rdr.Read())
                         {
-                            list.Add(new {
-                                ID = rdr["ID"].ToString(),
-                                ANNEE_ID = Convert.ToInt32(rdr["ANNEE_ID"]),
-                                ANNEE_TEXTE = rdr["ANNEE_TEXTE"].ToString(),
-                                CLASSE_ID = Convert.ToInt32(rdr["CLASSE_ID"]),
-                                CLASSE_NOM = rdr["CLASSE_NOM"].ToString(),
-                                MONTANT = Convert.ToDecimal(rdr["MONTANT"]),
-                                DESCRIPTION = rdr["DESCRIPTION"].ToString(),
-                                STATUT = Convert.ToBoolean(rdr["STATUT"]),
-                                CREATED_AT = rdr["CREATED_AT"].ToString()
-                            });
+                            var item = new Dictionary<string, object>();
+                            item["ID"] = rdr["ID"].ToString();
+                            item["ANNEE_ID"] = Convert.ToInt32(rdr["ANNEE_ID"]);
+                            item["ANNEE_TEXTE"] = rdr["ANNEE_TEXTE"].ToString();
+                            item["CLASSE_ID"] = Convert.ToInt32(rdr["CLASSE_ID"]);
+                            item["CLASSE_NOM"] = rdr["CLASSE_NOM"].ToString();
+                            item["MONTANT"] = Convert.ToDecimal(rdr["MONTANT"]);
+                            item["DESCRIPTION"] = rdr["DESCRIPTION"].ToString();
+                            item["STATUT"] = Convert.ToBoolean(rdr["STATUT"]);
+                            item["CREATED_AT"] = rdr["CREATED_AT"].ToString();
+                            list.Add(item);
                         }
                     }
                 }
             }
             
+            var result = new Dictionary<string, object>();
+            result["success"] = true;
+            result["data"] = list;
+            
             var serializer = new JavaScriptSerializer();
-            ctx.Response.Write(serializer.Serialize(new { success = true, data = list }));
+            ctx.Response.Write(serializer.Serialize(result));
         }
         catch (Exception ex)
         {
@@ -146,5 +100,8 @@ public class GetTarifsEcolage : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

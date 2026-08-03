@@ -2,7 +2,19 @@
 var Emploi = Emploi || {};
 
 Emploi.loaders = {
+    updateAddButtonVisibility: function() {
+        var btnAdd = document.getElementById('btnAddEmploi');
+        if (!btnAdd) return;
+
+        var roleInput = document.getElementById('hfUserRole');
+        var roleValue = roleInput ? parseInt(roleInput.value, 10) : -1;
+        var isAuthorized = roleValue === 0 || roleValue === 1 || roleValue === 4;
+
+        btnAdd.style.display = isAuthorized ? 'inline-block' : 'none';
+    },
+
     loadClasses: function() {
+        Emploi.loaders.updateAddButtonVisibility();
         Emploi.utils.showSpinner();
         fetch(API_EMPLOI.getClasses, { credentials: 'include' })
             .then(function(res) { return res.json(); })
@@ -41,8 +53,9 @@ Emploi.loaders = {
                 select.innerHTML = '<option value="">-- Sélectionner un professeur --</option>';
                 data.data.forEach(function(p) {
                     var opt = document.createElement('option');
-                    opt.value = p.ID;
-                    opt.textContent = p.NOM;
+                    var profName = p.NOM || p.ID;
+                    opt.value = profName;
+                    opt.textContent = profName;
                     select.appendChild(opt);
                 });
                 return data.data;

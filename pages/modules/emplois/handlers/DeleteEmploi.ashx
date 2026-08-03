@@ -14,8 +14,8 @@ public class DeleteEmploi : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Seuls les rôles 0, 1 et 4 peuvent supprimer un créneau
+        if (!AuthHelper.RequireApiAuth(ctx, 0) || !AuthHelper.CanManageEmploi(ctx))
         {
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;

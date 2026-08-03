@@ -451,9 +451,42 @@
 /* Conteneur principal avec défilement horizontal */
 .table-responsive {
     width: 100%;
+    max-width: 100%;
     overflow-x: auto;
+    overflow-y: hidden;
     -webkit-overflow-scrolling: touch;
     margin-bottom: 20px;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.table-responsive table {
+    width: max-content;
+    min-width: 100%;
+    border-collapse: collapse;
+    table-layout: auto;
+}
+
+.table-responsive th,
+.table-responsive td {
+    white-space: nowrap;
+}
+
+.table-responsive .text-right {
+    text-align: right;
+}
+
+.table-responsive .text-center {
+    text-align: center;
+}
+
+.frais-table-paiements {
+    min-width: 1000px;
+}
+
+.frais-table-tarifs {
+    min-width: 700px;
 }
 
 /* Ajustement pour les petits écrans (max 768px) */

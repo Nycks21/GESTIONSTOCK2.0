@@ -133,7 +133,7 @@
                                 Associez chaque champ de la base de données à la colonne Excel correspondante.
                                 Les champs marqués <span style="color:#dc3545;">*</span> sont obligatoires.
                             </p>
-                            <div style="overflow-x:auto;">
+                            <div class="imp-scroll-table">
                                 <table class="imp-mapping-table">
                                     <thead>
                                         <tr>

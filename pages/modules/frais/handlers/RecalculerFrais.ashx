@@ -9,42 +9,6 @@ public class RecalculerFrais : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
@@ -59,9 +23,10 @@ public class RecalculerFrais : IHttpHandler, IRequiresSessionState
             }
 
             string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
             {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+                connStr = connSetting.ConnectionString;
             }
             
             if (string.IsNullOrEmpty(connStr))
@@ -111,7 +76,7 @@ public class RecalculerFrais : IHttpHandler, IRequiresSessionState
                     return;
                 }
 
-                // 3. Ajouter les nouveaux élèves (ceux qui ne sont pas encore dans FRAIS)
+                // 3. Ajouter les nouveaux élèves
                 string insertSql = @"
                     INSERT INTO FRAIS (ID, ANNEE_ID, MATRICULE, NOM, CLASSE, TOTAL, PAYE, TARIF_ID, CREATED_AT, UPDATED_AT)
                     SELECT
@@ -138,7 +103,7 @@ public class RecalculerFrais : IHttpHandler, IRequiresSessionState
                     nouveauxEleves = cmd.ExecuteNonQuery();
                 }
 
-                // 4. Mettre à jour les classes dans FRAIS (synchronisation)
+                // 4. Mettre à jour les classes dans FRAIS
                 string updateClasseSql = @"
                     UPDATE f
                     SET f.CLASSE = e.CLASSE,
@@ -156,7 +121,7 @@ public class RecalculerFrais : IHttpHandler, IRequiresSessionState
                     classesMisesAJour = cmd.ExecuteNonQuery();
                 }
 
-                // 5. Recalculer les montants pour tous les élèves
+                // 5. Recalculer les montants
                 string recalculSql = @"
                     UPDATE f
                     SET f.TOTAL = t.MONTANT,

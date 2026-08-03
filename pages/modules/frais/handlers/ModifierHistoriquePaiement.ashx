@@ -1,6 +1,6 @@
 <%@ WebHandler Language="C#" Class="ModifierHistoriquePaiement" %>
 using System;
-using System.Collections.Generic;  // ← AJOUTER CETTE LIGNE
+using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
 using System.IO;
@@ -12,47 +12,18 @@ public class ModifierHistoriquePaiement : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
         try
         {
+            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+            {
+                ctx.Response.StatusCode = 401;
+                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+                return;
+            }
+
             // Lire le corps de la requête
             string body = new StreamReader(ctx.Request.InputStream).ReadToEnd();
             
@@ -97,7 +68,12 @@ public class ModifierHistoriquePaiement : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = "";
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
+            {
+                connStr = connSetting.ConnectionString;
+            }
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -154,12 +130,24 @@ public class ModifierHistoriquePaiement : IHttpHandler, IRequiresSessionState
                         using (var cmd = new SqlCommand(updateHistorySql, conn, transaction))
                         {
                             cmd.Parameters.AddWithValue("@montant", montant);
-                            cmd.Parameters.AddWithValue("@mois", string.IsNullOrEmpty(mois) ? (object)DBNull.Value : mois);
-                            cmd.Parameters.AddWithValue("@annee", string.IsNullOrEmpty(annee) ? (object)DBNull.Value : annee);
+                            if (string.IsNullOrEmpty(mois))
+                                cmd.Parameters.AddWithValue("@mois", DBNull.Value);
+                            else
+                                cmd.Parameters.AddWithValue("@mois", mois);
+                            if (string.IsNullOrEmpty(annee))
+                                cmd.Parameters.AddWithValue("@annee", DBNull.Value);
+                            else
+                                cmd.Parameters.AddWithValue("@annee", annee);
                             cmd.Parameters.AddWithValue("@datePaie", datePaie);
                             cmd.Parameters.AddWithValue("@mode", modePaie);
-                            cmd.Parameters.AddWithValue("@ref", string.IsNullOrEmpty(reference) ? (object)DBNull.Value : reference);
-                            cmd.Parameters.AddWithValue("@comm", string.IsNullOrEmpty(commentaire) ? (object)DBNull.Value : commentaire);
+                            if (string.IsNullOrEmpty(reference))
+                                cmd.Parameters.AddWithValue("@ref", DBNull.Value);
+                            else
+                                cmd.Parameters.AddWithValue("@ref", reference);
+                            if (string.IsNullOrEmpty(commentaire))
+                                cmd.Parameters.AddWithValue("@comm", DBNull.Value);
+                            else
+                                cmd.Parameters.AddWithValue("@comm", commentaire);
                             cmd.Parameters.AddWithValue("@id", id);
                             cmd.ExecuteNonQuery();
                         }
@@ -179,7 +167,7 @@ public class ModifierHistoriquePaiement : IHttpHandler, IRequiresSessionState
                         transaction.Commit();
                         ctx.Response.Write("{\"success\":true,\"message\":\"Paiement modifié avec succès\"}");
                     }
-                    catch (Exception ex)
+                    catch
                     {
                         transaction.Rollback();
                         throw;
@@ -194,5 +182,8 @@ public class ModifierHistoriquePaiement : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

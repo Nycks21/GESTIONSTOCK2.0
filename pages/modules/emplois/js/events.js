@@ -3,6 +3,11 @@ var Emploi = Emploi || {};
 Emploi.events = {
     // --- OUVERTURE DU MODAL ---
     openEdit: function(event, td) {
+        if (!window.canManageEmploi()) {
+            Emploi.utils.showToast('Vous n’avez pas les droits pour modifier l’emploi du temps.', 'warning');
+            return;
+        }
+
         var classeId = document.getElementById('editClasse').value || Emploi.state.currentClasse;
         var elClasse = document.getElementById('editClasse');
         var elJour = document.getElementById('editJour');

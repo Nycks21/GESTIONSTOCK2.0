@@ -5,11 +5,17 @@
     var btnRefresh = document.getElementById('btnRefresh');
     var btnPrint = document.getElementById('btnPrint');
 
+    window.canManageEmploi = function() {
+        var role = document.getElementById('hfUserRole');
+        var roleValue = role ? parseInt(role.value, 10) : -1;
+        return roleValue === 0 || roleValue === 1 || roleValue === 4;
+    };
+
     // Fonction pour mettre à jour l'état des boutons (exposée globalement)
     window.updateButtons = function() {
         var filter = document.getElementById('classeFilter');
         var hasClass = filter && filter.value && filter.value !== '';
-        if (btnAdd) btnAdd.disabled = !hasClass;
+        if (btnAdd) btnAdd.disabled = !hasClass || !window.canManageEmploi();
         if (btnRefresh) btnRefresh.disabled = !hasClass;
         if (btnPrint) btnPrint.disabled = !hasClass;
     };
@@ -84,6 +90,10 @@
     // Bouton Paramétrer
     if (btnAdd) {
         btnAdd.addEventListener('click', function() {
+            if (!window.canManageEmploi()) {
+                Emploi.utils.showToast('Vous n’avez pas les droits pour modifier l’emploi du temps.', 'warning');
+                return;
+            }
             Emploi.events.openEdit(null, null);
         });
     }

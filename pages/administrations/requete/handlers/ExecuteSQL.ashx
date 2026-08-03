@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="ExecuteSQL" %>
+<%@ WebHandler Language="C#" Class="ExecuteSQL" %>
 
 using System;
 using System.Web;
@@ -53,7 +53,7 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
     if (method == "POST" || method == "PUT" || method == "DELETE")
     {
         string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
+        string sessionToken = context.Session["CSRF_TOKEN"] != null ? context.Session["CSRF_TOKEN"].ToString() : null;
         if (string.IsNullOrEmpty(token) || token != sessionToken)
         {
             context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");

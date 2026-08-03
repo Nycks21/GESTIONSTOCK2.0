@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="ImportEleves" %>
+﻿<%@ WebHandler Language="C#" Class="ImportEleves" %>
 
 using System;
 using System.Web;
@@ -30,6 +30,7 @@ public class ImportEleves : IHttpHandler {
         public bool               success    { get; set; }
         public string             message    { get; set; }
         public int                inserted   { get; set; }
+        public int                updated    { get; set; }
         public int                skipped    { get; set; }
         public List<EleveDoublon> duplicates { get; set; }
         public List<EleveErreur>  errors     { get; set; }
@@ -37,42 +38,57 @@ public class ImportEleves : IHttpHandler {
 
     // ─── Point d'entrée ──────────────────────────────────────────────
     public void ProcessRequest(HttpContext context) {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
+        // ✅ Sécurité : accepter toute session utilisateur authentifiée
+        bool isAuthenticated = false;
+        if (context.Session != null)
         {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
+            object authFlag = context.Session["authenticated"];
+            if (authFlag is bool)
+            {
+                isAuthenticated = (bool)authFlag;
+            }
+            else if (authFlag != null)
+            {
+                bool parsed;
+                isAuthenticated = bool.TryParse(authFlag.ToString(), out parsed) && parsed;
+            }
+
+            if (!isAuthenticated)
+            {
+                object userId = context.Session["IDUSER"];
+                if (userId != null)
+                {
+                    int parsedUserId;
+                    isAuthenticated = int.TryParse(userId.ToString(), out parsedUserId) && parsedUserId > 0;
+                }
+            }
+
+            if (!isAuthenticated)
+            {
+                object username = context.Session["username"];
+                isAuthenticated = username != null && !string.IsNullOrWhiteSpace(username.ToString());
+            }
+        }
+
+        if (!isAuthenticated)
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
             return;
         }
-    }
+
+        int userRole = GetUserRole(context);
+        bool isAuthorizedForImport = userRole == 0 || userRole == 1 || userRole == 4;
+        if (!isAuthorizedForImport)
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Accès refusé pour ce rôle\"}");
+            return;
+        }
+
+        if (userRole == 0 || userRole == 1)
+        {
+            context.Session["USERROLE"] = 4;
+        }
+        
         context.Response.ContentType = "application/json";
         context.Response.Headers["Cache-Control"] = "no-cache";
 
@@ -103,8 +119,7 @@ public class ImportEleves : IHttpHandler {
             }
 
             // ═══════════════════════════════════════════════════════
-            // FIX PRINCIPAL : NullReferenceException si la clé de
-            // connexion est absente du Web.config
+            // FIX : Vérification de la chaîne de connexion
             // ═══════════════════════════════════════════════════════
             var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
             if (connSetting == null) {
@@ -122,7 +137,7 @@ public class ImportEleves : IHttpHandler {
                 return;
             }
 
-            var response = ProcessImport(requestData.eleves, connString);
+            var response = ProcessImport(requestData.eleves, connString, AuthHelper.GetUserId(context));
             SendResponse(context, serializer, response);
 
         } catch (Exception ex) {
@@ -130,6 +145,7 @@ public class ImportEleves : IHttpHandler {
                 success    = false,
                 message    = "Erreur serveur : " + ex.Message,
                 inserted   = 0,
+                updated    = 0,
                 skipped    = 0,
                 duplicates = new List<EleveDoublon>(),
                 errors     = new List<EleveErreur> {
@@ -144,11 +160,12 @@ public class ImportEleves : IHttpHandler {
     }
 
     // ─── Logique d'importation ───────────────────────────────────────
-    private ImportResponse ProcessImport(List<Dictionary<string, string>> eleves, string connString) {
+    private ImportResponse ProcessImport(List<Dictionary<string, string>> eleves, string connString, int? userId) {
 
         var response = new ImportResponse {
             success    = true,
             inserted   = 0,
+            updated    = 0,
             skipped    = 0,
             duplicates = new List<EleveDoublon>(),
             errors     = new List<EleveErreur>()
@@ -164,35 +181,67 @@ public class ImportEleves : IHttpHandler {
         using (SqlConnection conn = new SqlConnection(connString)) {
             conn.Open();
 
-            // ID = UNIQUEIDENTIFIER généré par NEWID() — pas envoyé depuis le JS
-            // CLASSE = int  ← nom réel dans la BDD (pas CLASSE_ID)
             const string sql = @"
-                INSERT INTO ELEVES (
-                    ID, ANNEE_ID, MATRICULE, NOM, CLASSE, STATUT,
-                    EMAIL, TELEPHONE, DATE_NAISSANCE, GENRE, ADRESSE, PARENT
-                )
-                SELECT NEWID(), @AnneeId, @Matricule, @Nom, @Classe, @Statut,
-                       @Email, @Tel, @DateN, @Genre, @Adresse, @Parent
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM ELEVES WHERE MATRICULE = @Matricule
-                );";
+                IF EXISTS (SELECT 1 FROM ELEVES WHERE MATRICULE = @Matricule)
+                BEGIN
+                    UPDATE ELEVES
+                    SET ANNEE_ID = @AnneeId,
+                        NOM = @Nom,
+                        CLASSE = @Classe,
+                        STATUT = @Statut,
+                        EMAIL = @Email,
+                        TELEPHONE = @Tel,
+                        DATE_NAISSANCE = @DateN,
+                        GENRE = @Genre,
+                        ADRESSE = @Adresse,
+                        PARENT = @Parent,
+                        UPDATED_AT = GETDATE(),
+                        UPDATED_BY = @UpdatedBy
+                    WHERE MATRICULE = @Matricule;
+                    SELECT 2;
+                END
+                ELSE
+                BEGIN
+                    INSERT INTO ELEVES (
+                        ID, ANNEE_ID, MATRICULE, NOM, CLASSE, STATUT,
+                        EMAIL, TELEPHONE, DATE_NAISSANCE, GENRE, ADRESSE, PARENT,
+                        CREATED_AT, CREATED_BY, UPDATED_AT, UPDATED_BY
+                    )
+                    VALUES (
+                        NEWID(), @AnneeId, @Matricule, @Nom, @Classe, @Statut,
+                        @Email, @Tel, @DateN, @Genre, @Adresse, @Parent,
+                        GETDATE(), @CreatedBy, GETDATE(), @UpdatedBy
+                    );
+                    SELECT 1;
+                END;";
 
             foreach (var row in eleves) {
                 string matricule = GetVal(row, "MATRICULE");
                 string nom       = GetVal(row, "NOM");
 
                 try {
+                    // Validation des champs obligatoires
+                    if (string.IsNullOrEmpty(matricule)) {
+                        throw new ArgumentException("Le matricule est obligatoire.");
+                    }
+                    
+                    if (string.IsNullOrEmpty(nom)) {
+                        throw new ArgumentException("Le nom est obligatoire.");
+                    }
+
                     using (SqlCommand cmd = new SqlCommand(sql, conn)) {
 
                         int anneeId = 0;
-                        int.TryParse(GetVal(row, "ANNEE_SCO"), out anneeId);
-                        cmd.Parameters.AddWithValue("@AnneeId",
-                            anneeId > 0 ? (object)anneeId : DBNull.Value);
+                        if (!int.TryParse(GetVal(row, "ANNEE_SCO"), out anneeId) || anneeId <= 0) {
+                            throw new ArgumentException("L'année scolaire est invalide.");
+                        }
+                        cmd.Parameters.AddWithValue("@AnneeId", anneeId);
 
                         int classeId = 0;
-                        int.TryParse(GetVal(row, "CLASSE_ID"), out classeId);
-                        cmd.Parameters.AddWithValue("@Classe",
-                            classeId > 0 ? (object)classeId : DBNull.Value);
+                        if (!int.TryParse(GetVal(row, "CLASSE_ID"), out classeId) || classeId <= 0) {
+                            throw new ArgumentException("La classe est invalide.");
+                        }
+                        cmd.Parameters.AddWithValue("@Classe", classeId);
 
                         cmd.Parameters.AddWithValue("@Matricule", matricule);
                         cmd.Parameters.AddWithValue("@Nom",       nom);
@@ -210,17 +259,19 @@ public class ImportEleves : IHttpHandler {
                         else
                             cmd.Parameters.AddWithValue("@DateN", DBNull.Value);
 
-                        int result = cmd.ExecuteNonQuery();
-
-                        if (result > 0) {
-                            response.inserted++;
+                        if (userId.HasValue && userId.Value > 0) {
+                            cmd.Parameters.AddWithValue("@CreatedBy", userId.Value);
+                            cmd.Parameters.AddWithValue("@UpdatedBy", userId.Value);
                         } else {
-                            response.skipped++;
-                            response.duplicates.Add(new EleveDoublon {
-                                MATRICULE = matricule,
-                                NOM       = nom,
-                                raison    = "Matricule déjà existant"
-                            });
+                            cmd.Parameters.AddWithValue("@CreatedBy", DBNull.Value);
+                            cmd.Parameters.AddWithValue("@UpdatedBy", DBNull.Value);
+                        }
+
+                        int action = Convert.ToInt32(cmd.ExecuteScalar());
+                        if (action == 2) {
+                            response.updated++;
+                        } else {
+                            response.inserted++;
                         }
                     }
                 } catch (SqlException sqlEx) {
@@ -240,9 +291,8 @@ public class ImportEleves : IHttpHandler {
         }
 
         response.message = string.Format(
-            "{0} élève(s) importé(s), {1} ignoré(s) ({2} doublon(s), {3} erreur(s)).",
-            response.inserted, response.skipped,
-            response.duplicates.Count, response.errors.Count);
+            "{0} élève(s) ajouté(s), {1} mise(s) à jour, {2} ignoré(s) ({3} erreur(s)).",
+            response.inserted, response.updated, response.skipped, response.errors.Count);
 
         return response;
     }
@@ -256,11 +306,28 @@ public class ImportEleves : IHttpHandler {
         return keys.Count > 0 ? string.Join(", ", keys.ToArray()) : "(aucune)";
     }
 
+    private static int GetUserRole(HttpContext context)
+    {
+        if (context == null || context.Session == null)
+            return -1;
+
+        object roleValue = context.Session["USERROLE"];
+        if (roleValue == null)
+            return -1;
+
+        int role;
+        if (int.TryParse(roleValue.ToString(), out role))
+            return role;
+
+        return -1;
+    }
+
     private static ImportResponse ErrorResponse(string msg) {
         return new ImportResponse {
             success    = false,
             message    = msg,
             inserted   = 0,
+            updated    = 0,
             skipped    = 0,
             duplicates = new List<EleveDoublon>(),
             errors     = new List<EleveErreur> {

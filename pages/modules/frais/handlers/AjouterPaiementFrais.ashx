@@ -12,42 +12,6 @@ public class AjouterPaiementFrais : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
@@ -99,7 +63,7 @@ public class AjouterPaiementFrais : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            // ✅ Correction : pas d'opérateur ?.
+            // Correction : pas d'opérateur ?.
             string connStr = "";
             var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
             if (connSetting != null)
@@ -175,14 +139,20 @@ public class AjouterPaiementFrais : IHttpHandler, IRequiresSessionState
                 {
                     cmd.Parameters.AddWithValue("@nouveauPaye", nouveauPaye);
                     cmd.Parameters.AddWithValue("@modePaiement", modePaiement);
-                    cmd.Parameters.AddWithValue("@reference", string.IsNullOrEmpty(reference) ? (object)DBNull.Value : reference);
-                    cmd.Parameters.AddWithValue("@commentaire", string.IsNullOrEmpty(commentaire) ? (object)DBNull.Value : commentaire);
+                    if (string.IsNullOrEmpty(reference))
+                        cmd.Parameters.AddWithValue("@reference", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@reference", reference);
+                    if (string.IsNullOrEmpty(commentaire))
+                        cmd.Parameters.AddWithValue("@commentaire", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@commentaire", commentaire);
                     cmd.Parameters.AddWithValue("@datePaiement", datePaiement);
                     cmd.Parameters.AddWithValue("@fraisId", fraisId);
                     cmd.ExecuteNonQuery();
                 }
 
-                // 3. Insérer dans l'historique AVEC MOIS et ANNEE
+                // 3. Insérer dans l'historique
                 string insertSql = @"
                     INSERT INTO HISTORIQUE_PAIEMENTS 
                     (ID, FRAIS_ID, MATRICULE, NOM, CLASSE, ANNEE_ID, 
@@ -205,16 +175,26 @@ public class AjouterPaiementFrais : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@montant", montant);
                     cmd.Parameters.AddWithValue("@datePaiement", datePaiement);
                     cmd.Parameters.AddWithValue("@modePaiement", modePaiement);
-                    cmd.Parameters.AddWithValue("@reference", string.IsNullOrEmpty(reference) ? (object)DBNull.Value : reference);
-                    cmd.Parameters.AddWithValue("@commentaire", string.IsNullOrEmpty(commentaire) ? (object)DBNull.Value : commentaire);
+                    if (string.IsNullOrEmpty(reference))
+                        cmd.Parameters.AddWithValue("@reference", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@reference", reference);
+                    if (string.IsNullOrEmpty(commentaire))
+                        cmd.Parameters.AddWithValue("@commentaire", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@commentaire", commentaire);
                     cmd.Parameters.AddWithValue("@username", username);
                     cmd.Parameters.AddWithValue("@ancienTotal", ancienTotal);
                     cmd.Parameters.AddWithValue("@ancienPaye", ancienPaye);
                     cmd.Parameters.AddWithValue("@nouveauPaye", nouveauPaye);
-                    
-                    // ✅ MOIS et ANNEE sont conservés
-                    cmd.Parameters.AddWithValue("@moisPaiement", string.IsNullOrEmpty(moisPaiement) ? (object)DBNull.Value : moisPaiement);
-                    cmd.Parameters.AddWithValue("@annee", string.IsNullOrEmpty(annee) ? (object)DBNull.Value : annee);
+                    if (string.IsNullOrEmpty(moisPaiement))
+                        cmd.Parameters.AddWithValue("@moisPaiement", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@moisPaiement", moisPaiement);
+                    if (string.IsNullOrEmpty(annee))
+                        cmd.Parameters.AddWithValue("@annee", DBNull.Value);
+                    else
+                        cmd.Parameters.AddWithValue("@annee", annee);
                     
                     cmd.ExecuteNonQuery();
                 }
@@ -259,5 +239,8 @@ public class AjouterPaiementFrais : IHttpHandler, IRequiresSessionState
         return DateTime.Now;
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

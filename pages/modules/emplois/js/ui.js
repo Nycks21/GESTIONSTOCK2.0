@@ -104,7 +104,7 @@ Emploi.ui = {
                         + (cell.salle ? '<span class="salle" style="display:block;font-size:0.8em;">' + Emploi.utils.escapeHtml(cell.salle) + '</span>' : '')
                         + '</div>';
 
-                    tr += '<td data-day="' + d + '" data-time="' + hours[i].value + '" rowspan="' + info.rowspan + '" class="rowspan-cell" style="height:calc(' + info.rowspan + ' * 50px);" onclick="Emploi.events.openEdit(event, this)">'
+                    tr += '<td data-day="' + d + '" data-time="' + hours[i].value + '" rowspan="' + info.rowspan + '" class="rowspan-cell" style="height:' + (info.rowspan * 50) + 'px;" onclick="Emploi.events.openEdit(event, this)">'
                         + content
                         + '</td>';
                 } else if (!info.cell && !info.skip) {

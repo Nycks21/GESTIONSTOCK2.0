@@ -11,45 +11,16 @@ public class GetHistoriquePaiements : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
+
+        if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        {
+            ctx.Response.StatusCode = 401;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            return;
+        }
 
         string matricule = ctx.Request.QueryString["matricule"];
         if (string.IsNullOrEmpty(matricule))
@@ -59,7 +30,12 @@ public class GetHistoriquePaiements : IHttpHandler, IRequiresSessionState
         }
 
         var list = new List<object>();
-        string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+        string connStr = "";
+        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        if (connSetting != null)
+        {
+            connStr = connSetting.ConnectionString;
+        }
 
         try
         {
@@ -98,38 +74,45 @@ public class GetHistoriquePaiements : IHttpHandler, IRequiresSessionState
                     {
                         while (rdr.Read())
                         {
-                            list.Add(new {
-                                ID = rdr["ID"].ToString(),
-                                MATRICULE = rdr["MATRICULE"].ToString(),
-                                NOM = rdr["NOM"].ToString(),
-                                CLASSE_NOM = rdr["CLASSE_NOM"].ToString(),
-                                MONTANT = Convert.ToDecimal(rdr["MONTANT"]),
-                                DATE_PAIEMENT = Convert.ToDateTime(rdr["DATE_PAIEMENT"]).ToString("yyyy-MM-dd HH:mm:ss"),
-                                MODE_PAIEMENT = rdr["MODE_PAIEMENT"].ToString(),
-                                REFERENCE = rdr["REFERENCE"].ToString(),
-                                COMMENTAIRE = rdr["COMMENTAIRE"].ToString(),
-                                USERNAME = rdr["USERNAME"].ToString(),
-                                ANCIEN_PAYE = Convert.ToDecimal(rdr["ANCIEN_PAYE"]),
-                                NOUVEAU_PAYE = Convert.ToDecimal(rdr["NOUVEAU_PAYE"]),
-                                ANCIEN_RESTE = Convert.ToDecimal(rdr["ANCIEN_RESTE"]),
-                                NOUVEAU_RESTE = Convert.ToDecimal(rdr["NOUVEAU_RESTE"]),
-                                MOIS = rdr["MOIS"].ToString(),
-                                ANNEE = rdr["ANNEE"].ToString(),
-                                CREATED_AT = Convert.ToDateTime(rdr["CREATED_AT"]).ToString("yyyy-MM-dd HH:mm:ss")
-                            });
+                            var item = new Dictionary<string, object>();
+                            item["ID"] = rdr["ID"].ToString();
+                            item["MATRICULE"] = rdr["MATRICULE"].ToString();
+                            item["NOM"] = rdr["NOM"].ToString();
+                            item["CLASSE_NOM"] = rdr["CLASSE_NOM"].ToString();
+                            item["MONTANT"] = Convert.ToDecimal(rdr["MONTANT"]);
+                            item["DATE_PAIEMENT"] = Convert.ToDateTime(rdr["DATE_PAIEMENT"]).ToString("yyyy-MM-dd HH:mm:ss");
+                            item["MODE_PAIEMENT"] = rdr["MODE_PAIEMENT"].ToString();
+                            item["REFERENCE"] = rdr["REFERENCE"].ToString();
+                            item["COMMENTAIRE"] = rdr["COMMENTAIRE"].ToString();
+                            item["USERNAME"] = rdr["USERNAME"].ToString();
+                            item["ANCIEN_PAYE"] = Convert.ToDecimal(rdr["ANCIEN_PAYE"]);
+                            item["NOUVEAU_PAYE"] = Convert.ToDecimal(rdr["NOUVEAU_PAYE"]);
+                            item["ANCIEN_RESTE"] = Convert.ToDecimal(rdr["ANCIEN_RESTE"]);
+                            item["NOUVEAU_RESTE"] = Convert.ToDecimal(rdr["NOUVEAU_RESTE"]);
+                            item["MOIS"] = rdr["MOIS"].ToString();
+                            item["ANNEE"] = rdr["ANNEE"].ToString();
+                            item["CREATED_AT"] = Convert.ToDateTime(rdr["CREATED_AT"]).ToString("yyyy-MM-dd HH:mm:ss");
+                            list.Add(item);
                         }
                     }
                 }
             }
             
+            var result = new Dictionary<string, object>();
+            result["success"] = true;
+            result["data"] = list;
+            
             var serializer = new JavaScriptSerializer();
-            ctx.Response.Write(serializer.Serialize(new { success = true, data = list }));
+            ctx.Response.Write(serializer.Serialize(result));
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ctx.Response.Write("{\"success\":true,\"data\":[]}");
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

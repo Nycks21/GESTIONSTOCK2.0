@@ -97,8 +97,8 @@
                                 </div>
                                 <div id="frais-filter-container"></div>
                                 <!-- Tableau responsive -->
-                                <div style="overflow-x: auto; width: 100%; border: 1px solid #dee2e6; border-radius: 8px;">
-                                    <table class="dash-table" style="min-width: 1000px; width: 100%; border-collapse: collapse;">
+                                <div class="table-responsive">
+                                    <table class="dash-table frais-table-paiements" style="border-collapse: collapse;">
                                         <thead>
                                             <tr style="background-color: #f8f9fa;">
                                                 <th style="cursor: pointer;text-align: left;width: 80px;" onclick="sortBy('MATRICULE')">Matricule <i class="fas fa-sort"></i></th>
@@ -142,8 +142,8 @@
                                 </div>
 
                                 <!-- Tableau des tarifs -->
-                                <div style="overflow-x: auto; width: 100%; border: 1px solid #dee2e6; border-radius: 8px;">
-                                    <table class="dash-table" style="min-width: 600px; width: 100%; border-collapse: collapse;">
+                                <div class="table-responsive">
+                                    <table class="dash-table frais-table-tarifs" style="border-collapse: collapse;">
                                         <thead>
                                             <tr style="background-color: #f8f9fa; text-align: center;">
                                                 <th>Année scolaire</th>

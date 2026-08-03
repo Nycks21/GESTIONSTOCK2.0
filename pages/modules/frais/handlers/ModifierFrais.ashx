@@ -12,46 +12,10 @@ public class ModifierFrais : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
         {
             ctx.Response.StatusCode = 401;
             ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
@@ -82,13 +46,17 @@ public class ModifierFrais : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = "";
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
+            {
+                connStr = connSetting.ConnectionString;
+            }
 
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
 
-                // Recalculer RESTE, PROGRESSION et STATUT selon le nouveau TOTAL
                 string sql = @"
                     UPDATE FRAIS
                     SET TOTAL       = @total,
@@ -105,7 +73,7 @@ public class ModifierFrais : IHttpHandler, IRequiresSessionState
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@total", total);
-                    cmd.Parameters.AddWithValue("@id",    id);
+                    cmd.Parameters.AddWithValue("@id", id);
                     int affected = cmd.ExecuteNonQuery();
 
                     if (affected == 0)
@@ -121,9 +89,12 @@ public class ModifierFrais : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message }));
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "'") + "\"}");
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

@@ -6,7 +6,7 @@
 var API_FRAIS = {
     getFrais: 'handlers/GetFrais.ashx',
     getEleves: 'handlers/GetEleve.ashx',
-    getClasses: '../../parametres/classes/handlers/GetClasse.ashx',
+    getClasses: 'handlers/GetClasses.ashx',
     getAnnees: 'handlers/GetAnnees.ashx',
     ajouterPaiement: 'handlers/AjouterPaiementFrais.ashx',
     getHistorique: 'handlers/GetHistoriquePaiements.ashx',

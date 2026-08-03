@@ -1,4 +1,3 @@
-﻿// handlers/GetEleve.ashx
 <%@ WebHandler Language="C#" Class="GetEleve" %>
 using System;
 using System.Collections.Generic;
@@ -12,42 +11,6 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
         
@@ -61,9 +24,10 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
             }
 
             string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
             {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+                connStr = connSetting.ConnectionString;
             }
             
             if (string.IsNullOrEmpty(connStr))
@@ -98,16 +62,27 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
                 {
                     while (reader.Read())
                     {
-                        eleves.Add(new
-                        {
-                            MATRICULE = reader["MATRICULE"].ToString(),
-                            NOM = reader["NOM"].ToString(),
-                            CLASSE = reader["CLASSE"] != DBNull.Value ? Convert.ToInt32(reader["CLASSE"]) : 0,
-                            CLASSE_NOM = reader["CLASSE_NOM"] != DBNull.Value ? reader["CLASSE_NOM"].ToString() : "",
-                            STATUT = reader["STATUT"].ToString(),
-                            EMAIL = reader["EMAIL"] != DBNull.Value ? reader["EMAIL"].ToString() : "",
-                            TELEPHONE = reader["TELEPHONE"] != DBNull.Value ? reader["TELEPHONE"].ToString() : ""
-                        });
+                        var item = new Dictionary<string, object>();
+                        item["MATRICULE"] = reader["MATRICULE"].ToString();
+                        item["NOM"] = reader["NOM"].ToString();
+                        if (reader["CLASSE"] != DBNull.Value)
+                            item["CLASSE"] = Convert.ToInt32(reader["CLASSE"]);
+                        else
+                            item["CLASSE"] = 0;
+                        if (reader["CLASSE_NOM"] != DBNull.Value)
+                            item["CLASSE_NOM"] = reader["CLASSE_NOM"].ToString();
+                        else
+                            item["CLASSE_NOM"] = "";
+                        item["STATUT"] = reader["STATUT"].ToString();
+                        if (reader["EMAIL"] != DBNull.Value)
+                            item["EMAIL"] = reader["EMAIL"].ToString();
+                        else
+                            item["EMAIL"] = "";
+                        if (reader["TELEPHONE"] != DBNull.Value)
+                            item["TELEPHONE"] = reader["TELEPHONE"].ToString();
+                        else
+                            item["TELEPHONE"] = "";
+                        eleves.Add(item);
                     }
                 }
             }
@@ -127,5 +102,8 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
         }
     }
     
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

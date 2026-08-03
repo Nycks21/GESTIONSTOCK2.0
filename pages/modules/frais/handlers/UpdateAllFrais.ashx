@@ -9,42 +9,6 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
@@ -59,9 +23,10 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
             }
 
             string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
             {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+                connStr = connSetting.ConnectionString;
             }
             
             if (string.IsNullOrEmpty(connStr))
@@ -79,7 +44,7 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                // 1. Récupérer l'année active (non clôturée)
+                // 1. Récupérer l'année active
                 string getAnneeSql = "SELECT TOP 1 ID FROM RANNEE WHERE CLOTURE = 0 ORDER BY DATE_DEBUT DESC";
                 using (SqlCommand cmd = new SqlCommand(getAnneeSql, conn))
                 {
@@ -96,14 +61,14 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
                     return;
                 }
 
-                // 2. Compter le nombre total d'élèves actifs
+                // 2. Compter les élèves actifs
                 string countSql = "SELECT COUNT(*) FROM ELEVES WHERE STATUT = 'actif'";
                 using (SqlCommand cmd = new SqlCommand(countSql, conn))
                 {
                     elevesTraites = (int)cmd.ExecuteScalar();
                 }
 
-                // 3. Vérifier qu'il existe des tarifs pour cette année
+                // 3. Vérifier les tarifs
                 int tarifCount = 0;
                 string checkTarifSql = "SELECT COUNT(*) FROM TARIFS_ECOLAGE WHERE ANNEE_ID = @anneeId AND STATUT = 1";
                 using (SqlCommand cmd = new SqlCommand(checkTarifSql, conn))
@@ -118,7 +83,7 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
                     return;
                 }
 
-                // 4. Ajouter TOUS les élèves actifs qui n'existent pas encore dans FRAIS
+                // 4. Ajouter les nouveaux élèves
                 string insertSql = @"
                     INSERT INTO FRAIS (ID, ANNEE_ID, MATRICULE, NOM, CLASSE, TOTAL, PAYE, TARIF_ID, CREATED_AT, UPDATED_AT)
                     SELECT
@@ -145,7 +110,7 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
                     nouveauxEleves = cmd.ExecuteNonQuery();
                 }
 
-                // 5. Mettre à jour les noms et classes des élèves existants
+                // 5. Mettre à jour les noms et classes
                 string updateNomSql = @"
                     UPDATE f
                     SET f.NOM = e.NOM,
@@ -164,7 +129,7 @@ public class UpdateAllFrais : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            // Construction du résultat pour .NET 4.0
+            // Construction du résultat
             string jsonResult = "{";
             jsonResult += "\"success\":true,";
             jsonResult += "\"message\":\"Mise à jour des frais terminée avec succès\",";

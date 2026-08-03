@@ -90,7 +90,8 @@
 
 .emploi-table .cell-content .prof {
     font-size: 11px;
-    color: #6c757d;
+    font-weight: 600;
+    color: #0b0c0c;
 }
 
 .emploi-table .cell-content .salle {

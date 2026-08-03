@@ -90,6 +90,15 @@ public static class AuthHelper
         return true;
     }
 
+    public static bool CanManageEmploi(HttpContext context)
+    {
+        if (context == null || context.Session == null)
+            return false;
+
+        int userRole = GetUserRole(context);
+        return userRole == 0 || userRole == 1 || userRole == 4;
+    }
+
     // ============================================================
     // VÉRIFICATION DU TOKEN DE SESSION EN BASE
     // ============================================================

@@ -12,42 +12,6 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
@@ -63,9 +27,10 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
             }
 
             string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
             {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+                connStr = connSetting.ConnectionString;
             }
             
             if (string.IsNullOrEmpty(connStr))
@@ -78,7 +43,7 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
                 
-                // Récupérer l'année non clôturée (CLOTURE = 0)
+                // Récupérer l'année non clôturée
                 int anneeActiveId = 0;
                 string getAnneeSql = "SELECT TOP 1 ID FROM RANNEE WHERE CLOTURE = 0 ORDER BY ANNEE DESC";
                 using (SqlCommand cmd = new SqlCommand(getAnneeSql, conn))
@@ -138,7 +103,7 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
                     elevesAjoutes = cmd.ExecuteNonQuery();
                 }
                 
-                // 3. Recalculer les montants pour tous les élèves
+                // 3. Recalculer les montants
                 string recalculSql = @"
                     UPDATE f
                     SET f.TOTAL = ISNULL(t.MONTANT, 0),
@@ -157,7 +122,7 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
                     montantsRecalculés = cmd.ExecuteNonQuery();
                 }
                 
-                // 4. Mettre à jour les noms des élèves dans FRAIS
+                // 4. Mettre à jour les noms
                 string updateNomSql = @"
                     UPDATE f
                     SET f.NOM = e.NOM,
@@ -176,7 +141,7 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
                 }
                 
                 // Construction du résultat
-                Dictionary<string, object> dataResult = new Dictionary<string, object>();
+                var dataResult = new Dictionary<string, object>();
                 dataResult["success"] = true;
                 dataResult["message"] = "Mise à jour des classes et des frais terminée";
                 dataResult["anneeActiveId"] = anneeActiveId;
@@ -192,7 +157,7 @@ public class UpdateAllClasses : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            Dictionary<string, object> errorResult = new Dictionary<string, object>();
+            var errorResult = new Dictionary<string, object>();
             errorResult["success"] = false;
             errorResult["message"] = ex.Message;
             

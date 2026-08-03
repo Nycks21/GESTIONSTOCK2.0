@@ -12,42 +12,6 @@ public class SupprimerHistoriquePaiement : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         try
         {
             ctx.Response.ContentType = "application/json";
@@ -118,9 +82,10 @@ public class SupprimerHistoriquePaiement : IHttpHandler, IRequiresSessionState
 
             // Récupérer la chaîne de connexion
             string connStr = "";
-            if (ConfigurationManager.ConnectionStrings["MaConnexion"] != null)
+            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (connSetting != null)
             {
-                connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+                connStr = connSetting.ConnectionString;
             }
 
             if (string.IsNullOrEmpty(connStr))
@@ -175,8 +140,7 @@ public class SupprimerHistoriquePaiement : IHttpHandler, IRequiresSessionState
                             }
                         }
 
-                        // ✅ 3. Recalculer FRAIS - UNIQUEMENT METTRE À JOUR PAYE
-                        // Les colonnes RESTE, PROGRESSION et STATUT sont calculées automatiquement
+                        // 3. Recalculer FRAIS
                         string updateSql = @"
                             UPDATE FRAIS
                             SET PAYE = CASE 
@@ -226,5 +190,8 @@ public class SupprimerHistoriquePaiement : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

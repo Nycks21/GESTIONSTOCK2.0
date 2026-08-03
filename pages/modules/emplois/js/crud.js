@@ -2,6 +2,11 @@
 var Emploi = Emploi || {};
 Emploi.crud = {
     saveCell: function() {
+        if (!window.canManageEmploi()) {
+            Emploi.utils.showToast('Vous n’avez pas les droits pour modifier l’emploi du temps.', 'warning');
+            return;
+        }
+
         var classe = document.getElementById('editClasse').value;
         var jour = document.getElementById('editJour').value;
         var heureDebutRaw = document.getElementById('editHeureDebut').value;
@@ -68,6 +73,11 @@ Emploi.crud = {
     },
 
     deleteCell: function() {
+        if (!window.canManageEmploi()) {
+            Emploi.utils.showToast('Vous n’avez pas les droits pour supprimer un créneau.', 'warning');
+            return;
+        }
+
         if (!Emploi.state.editKey) {
             Emploi.utils.showToast('Aucune cellule sélectionnée.', 'info');
             return;
@@ -84,8 +94,11 @@ Emploi.crud = {
             if (!result.isConfirmed) return;
 
             var parts = Emploi.state.editKey.split('_');
+            var classeForDelete = document.getElementById('editClasse').value
+                || Emploi.state.currentClasse
+                || document.getElementById('classeFilter').value;
             var payload = {
-                classe: Emploi.state.currentClasse,
+                classe: classeForDelete,
                 jour: parts[0],
                 heureDebut: parts[1]
             };
@@ -118,6 +131,11 @@ Emploi.crud = {
     },
 
     moveCourse: function(classe, sourceDay, sourceHour, targetDay, targetHour, swap) {
+        if (!window.canManageEmploi()) {
+            Emploi.utils.showToast('Vous n’avez pas les droits pour déplacer un créneau.', 'warning');
+            return;
+        }
+
         Emploi.utils.showSpinner();
         var url = API_EMPLOI.moveEmploi
             + '?classe=' + encodeURIComponent(classe)

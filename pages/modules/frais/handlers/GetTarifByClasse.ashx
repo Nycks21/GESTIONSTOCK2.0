@@ -11,47 +11,18 @@ public class GetTarifByClasse : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"]?.ToString();
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
         try
         {
+            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+            {
+                ctx.Response.StatusCode = 401;
+                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+                return;
+            }
+
             string classeNom = ctx.Request.QueryString["classeNom"];
             string anneeIdStr = ctx.Request.QueryString["anneeId"];
             
@@ -92,8 +63,12 @@ public class GetTarifByClasse : IHttpHandler, IRequiresSessionState
                 }
             }
             
+            var resultDict = new Dictionary<string, object>();
+            resultDict["success"] = true;
+            resultDict["montant"] = montant;
+            
             var serializer = new JavaScriptSerializer();
-            ctx.Response.Write(serializer.Serialize(new { success = true, montant = montant }));
+            ctx.Response.Write(serializer.Serialize(resultDict));
         }
         catch (Exception ex)
         {
@@ -102,5 +77,8 @@ public class GetTarifByClasse : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }
