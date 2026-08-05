@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="AjouterRetard" %>
+﻿<%@ WebHandler Language="C#" Class="AjouterRetard" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -93,24 +93,40 @@ public class AjouterRetard : IHttpHandler, IRequiresSessionState
             int classeId = GetClasseIdByName(connStr, classeNom);
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand(@"
-                INSERT INTO RETARDS (ID, ANNEE_ID, MATRICULE, NOM, CLASSE, DATE_RETARD, HEURE_PREVUE, HEURE_ARRIVEE, DUREE, MOTIF, JUSTIFIE, JUSTIFICATION, CREATED_AT)
-                VALUES (NEWID(), @anneeId, @matricule, @nom, @classeId, @date, @heurePrevue, @heureArrivee, @duree, @motif, @justifie, @justification, GETDATE())", conn))
             {
-                cmd.Parameters.AddWithValue("@anneeId", anneeId);
-                cmd.Parameters.AddWithValue("@matricule", matricule);
-                cmd.Parameters.AddWithValue("@nom", nom);
-                cmd.Parameters.AddWithValue("@classeId", classeId);
-                cmd.Parameters.AddWithValue("@date", date);
-                cmd.Parameters.AddWithValue("@heurePrevue", heurePrevue);
-                cmd.Parameters.AddWithValue("@heureArrivee", heureArrivee);
-                cmd.Parameters.AddWithValue("@duree", duree);
-                cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
-                cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
-                cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
-
                 conn.Open();
-                cmd.ExecuteNonQuery();
+
+                // Vérifier que l'élève existe et n'est pas supprimé
+                string checkEleveSql = "SELECT COUNT(*) FROM ELEVES WHERE MATRICULE = @matricule AND DELETION_AT IS NULL";
+                using (var checkCmd = new SqlCommand(checkEleveSql, conn))
+                {
+                    checkCmd.Parameters.AddWithValue("@matricule", matricule);
+                    int count = (int)checkCmd.ExecuteScalar();
+                    if (count == 0)
+                    {
+                        ctx.Response.Write("{\"success\":false,\"message\":\"Élève non trouvé ou déjà supprimé (matricule: " + matricule + ")\"}");
+                        return;
+                    }
+                }
+
+                using (var cmd = new SqlCommand(@"
+                    INSERT INTO RETARDS (ID, ANNEE_ID, MATRICULE, NOM, CLASSE, DATE_RETARD, HEURE_PREVUE, HEURE_ARRIVEE, DUREE, MOTIF, JUSTIFIE, JUSTIFICATION, CREATED_AT)
+                    VALUES (NEWID(), @anneeId, @matricule, @nom, @classeId, @date, @heurePrevue, @heureArrivee, @duree, @motif, @justifie, @justification, GETDATE())", conn))
+                {
+                    cmd.Parameters.AddWithValue("@anneeId", anneeId);
+                    cmd.Parameters.AddWithValue("@matricule", matricule);
+                    cmd.Parameters.AddWithValue("@nom", nom);
+                    cmd.Parameters.AddWithValue("@classeId", classeId);
+                    cmd.Parameters.AddWithValue("@date", date);
+                    cmd.Parameters.AddWithValue("@heurePrevue", heurePrevue);
+                    cmd.Parameters.AddWithValue("@heureArrivee", heureArrivee);
+                    cmd.Parameters.AddWithValue("@duree", duree);
+                    cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
+                    cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
+
+                    cmd.ExecuteNonQuery();
+                }
             }
 
             ctx.Response.Write("{\"success\":true,\"message\":\"Retard enregistré avec succès\"}");

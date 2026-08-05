@@ -47,7 +47,8 @@ public class GetEleve : IHttpHandler, IRequiresSessionState
                                FROM [dbo].[ELEVES] e
                                LEFT JOIN [dbo].[CLASSES] c ON e.CLASSE = c.ID
                                LEFT JOIN [dbo].[RANNEE] a ON e.ANNEE_ID = a.ID
-                               ORDER BY e.NOM ASC";
+                               WHERE e.DELETION_AT IS NULL
+                               ORDER BY e.MATRICULE ASC";
 
                 using (var cmd = new SqlCommand(sql, conn))
                 {

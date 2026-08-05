@@ -2,6 +2,7 @@
 
 using System;
 using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -10,138 +11,94 @@ using System.Web.SessionState;
 
 public class AjouterNiveau : IHttpHandler, IRequiresSessionState
 {
-    public void ProcessRequest(HttpContext ctx)
+    public void ProcessRequest(HttpContext context)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
-        ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset = "utf-8";
-        ctx.Response.Cache.SetNoStore();
-
-        JavaScriptSerializer ser = new JavaScriptSerializer();
-
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-        {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-            return;
-        }
-
-        if (ctx.Request.HttpMethod != "POST")
-        {
-            ctx.Response.StatusCode = 405;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Méthode non autorisée\"}");
-            return;
-        }
+        context.Response.ContentType = "application/json";
+        context.Response.Charset = "utf-8";
 
         try
         {
-            string body;
-            using (var reader = new StreamReader(ctx.Request.InputStream))
-                body = reader.ReadToEnd();
-
-            var payload = ser.Deserialize<NiveauPayload>(body);
-
-            if (payload == null)
-                throw new ArgumentException("Données invalides.");
-
-            if (string.IsNullOrWhiteSpace(payload.NOM))
-                throw new ArgumentException("Le nom est obligatoire.");
-
-            // --- Logique du GUID ---
-            Guid? idSaisi = null;
-            if (!string.IsNullOrWhiteSpace(payload.ID))
+            // 1. Vérification session
+            if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
             {
-                Guid tempGuid;
-                if (Guid.TryParse(payload.ID, out tempGuid))
-                    idSaisi = tempGuid;
-                else
-                    throw new ArgumentException("Le format de l'ID est invalide (doit être un GUID).");
+                SendError(context, "Non authentifié");
+                return;
             }
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
-            using (var conn = new SqlConnection(connStr))
-            // On utilise ISNULL(@id, NEWID()) pour gérer l'auto-génération si @id est NULL
-            using (var cmd = new SqlCommand(
-                @"INSERT INTO [dbo].[NIVEAUX] (ID, NOM, ORDRE, STATUT, CREATED_AT) 
-                  VALUES (ISNULL(@id, NEWID()), @nom, @ordre, @statut, GETDATE())", conn))
+            // 2. Vérification AuthHelper
+            if (!AuthHelper.RequireApiAuth(context))
             {
-                // Gestion du paramètre @id (Envoi de DBNull si pas de saisie)
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = 
-                    (object)idSaisi ?? DBNull.Value;
-                
-                cmd.Parameters.AddWithValue("@nom",    payload.NOM.Trim());
-                cmd.Parameters.AddWithValue("@ordre",  payload.ORDRE);
-                cmd.Parameters.AddWithValue("@statut", payload.STATUT);
+                SendError(context, "Session invalide");
+                return;
+            }
 
+            // 3. Rôle (Admin ou SuperAdmin)
+            int role = AuthHelper.GetUserRole(context);
+            if (role < 0 || role > 1)
+            {
+                SendError(context, "Permissions insuffisantes");
+                return;
+            }
+
+            // 4. CSRF : vérifier l'en-tête X-CSRF-Token
+            string tokenHeader = context.Request.Headers["X-CSRF-Token"];
+            string sessionToken = context.Session["CSRF_TOKEN"] as string;
+            if (string.IsNullOrEmpty(tokenHeader) || tokenHeader != sessionToken)
+            {
+                SendError(context, "Token CSRF invalide");
+                return;
+            }
+
+            // 5. Lire le corps de la requête
+            string body = new StreamReader(context.Request.InputStream).ReadToEnd();
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            NiveauPayload payload = serializer.Deserialize<NiveauPayload>(body);
+
+            // 6. Chaîne de connexion
+            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                SendError(context, "Chaîne de connexion non définie");
+                return;
+            }
+
+            // 7. Insertion en base
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "INSERT INTO [dbo].[NIVEAUX] (ID, NOM, ORDRE, STATUT, CREATED_AT) " +
+                    "VALUES (NEWID(), @nom, @ordre, @statut, GETDATE())", conn);
+                cmd.Parameters.AddWithValue("@nom", payload.nom ?? "");
+                cmd.Parameters.AddWithValue("@ordre", payload.ordre);
+                cmd.Parameters.AddWithValue("@statut", payload.statut);
                 conn.Open();
                 cmd.ExecuteNonQuery();
             }
 
-            ctx.Response.Write("{\"success\":true}");
-        }
-        catch (ArgumentException ex)
-        {
-            ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            // 8. Réponse succès
+            context.Response.Write("{\"success\":true}");
         }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 500;
-            
-            // Gestion des erreurs d'unicité (Nom ou ID déjà présent)
-            string msg = ex.Message;
-            if (ex.Message.Contains("PRIMARY KEY"))
-                msg = "Cet identifiant (ID) est déjà utilisé.";
-            else if (ex.Message.Contains("UNIQUE"))
-                msg = "Ce nom de niveau existe déjà.";
-
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(msg) + "}");
+            SendError(context, "Erreur : " + ex.Message);
         }
     }
 
-    public bool IsReusable { get { return false; } }
-
-    private class NiveauPayload
+    private void SendError(HttpContext context, string message)
     {
-        public string ID { get; set; } // Reçu en string depuis le JS
-        public string NOM { get; set; }
-        public int ORDRE { get; set; }
-        public bool STATUT { get; set; }
+        context.Response.StatusCode = 500;
+        context.Response.Write("{\"success\":false,\"message\":\"" + message.Replace("\"", "\\\"") + "\"}");
+    }
+
+    public bool IsReusable
+    {
+        get { return false; }
+    }
+
+    public class NiveauPayload
+    {
+        public string nom { get; set; }
+        public int ordre { get; set; }
+        public bool statut { get; set; }
     }
 }

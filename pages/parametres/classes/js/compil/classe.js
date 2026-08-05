@@ -291,80 +291,89 @@ function renderClassesTable() {
     }
 
     pageClasses.forEach(classe => {
-    const row = tbody.insertRow();
+        const row = tbody.insertRow();
 
-    // 1. Nom de la classe (Badge transparent, Centré)
-    const cellNom = row.insertCell(0);
-    cellNom.style.textAlign = 'center';
-    cellNom.style.verticalAlign = 'middle';
-    cellNom.innerHTML = `
-        <span style="display: inline-block; min-width: 100px; padding: 3px 12px; border: 1px solid #e1f5fe; border-radius: 15px;">
-            <strong>${escHtml(classe.NOM) || '-'}</strong>
-        </span>`;
-    cellNom.style.color = '#333333';
+        // 0. ID (Badge gris, Centré)
+        const cellId = row.insertCell(0);
+        cellId.style.textAlign = 'center';
+        cellId.style.verticalAlign = 'middle';
+        cellId.innerHTML = `
+            <span style="display: inline-block; background-color: #f0f0f0; color: #333; padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; border: 1px solid #ddd;">
+                ${classe.ID || '-'}
+            </span>`;
 
-    // 2. Niveau (Badge bleu, Centré)
-    const cellNiveau = row.insertCell(1); // Changement de nom de variable ici pour éviter l'erreur
-    cellNiveau.style.textAlign = 'center';
-    cellNiveau.style.verticalAlign = 'middle';
-    cellNiveau.innerHTML = `
-        <span style="background-color: #e1f5fe; color: #01579b; padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; display: inline-block; border: 1px solid #b3e5fc;">
-            <i class="fas fa-layer-group mr-1"></i> ${escHtml(classe.NIVEAU) || '-'}
-        </span>`;
+        // 1. Nom de la classe (Badge transparent, Centré)
+        const cellNom = row.insertCell(1);
+        cellNom.style.textAlign = 'center';
+        cellNom.style.verticalAlign = 'middle';
+        cellNom.innerHTML = `
+            <span style="display: inline-block; min-width: 100px; padding: 3px 12px; border: 1px solid #e1f5fe; border-radius: 15px;">
+                <strong>${escHtml(classe.NOM) || '-'}</strong>
+            </span>`;
+        cellNom.style.color = '#333333';
 
-    // 3. Effectif (Centré)
-    const cellEffectif = row.insertCell(2);
-    cellEffectif.style.textAlign = 'center';
-    cellEffectif.style.verticalAlign = 'middle';
-    cellEffectif.innerHTML = `<strong>${classe.EFFECTIF || '0'}</strong>`;
+        // 2. Niveau (Badge bleu, Centré)
+        const cellNiveau = row.insertCell(2);
+        cellNiveau.style.textAlign = 'center';
+        cellNiveau.style.verticalAlign = 'middle';
+        cellNiveau.innerHTML = `
+            <span style="background-color: #e1f5fe; color: #01579b; padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; display: inline-block; border: 1px solid #b3e5fc;">
+                <i class="fas fa-layer-group mr-1"></i> ${escHtml(classe.NIVEAU) || '-'}
+            </span>`;
 
-    // 4. Titulaire (Badge rouge, Centré)
-    const cellTitulaire = row.insertCell(3);
-    cellTitulaire.style.textAlign = 'center';
-    cellTitulaire.style.verticalAlign = 'middle';
-    cellTitulaire.innerHTML = `
-        <span style="background-color: #fff1f2; color: rgb(243, 10, 10); padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; display: inline-block; border: 1px solid #eea3ad;">
-            <i class="fas fa-user-tie mr-1"></i> ${escHtml(classe.TITULAIRE) || '-'}
-        </span>`;
+        // 3. Effectif (Centré)
+        const cellEffectif = row.insertCell(3);
+        cellEffectif.style.textAlign = 'center';
+        cellEffectif.style.verticalAlign = 'middle';
+        cellEffectif.innerHTML = `<strong>${classe.EFFECTIF || '0'}</strong>`;
 
-    // 5. Salle (Badge Vert, Centré)
-    const cellSalle = row.insertCell(4);
-    cellSalle.style.textAlign = 'center';
-    cellSalle.style.verticalAlign = 'middle';
-    cellSalle.innerHTML = ` 
-        <span style="background-color: #e8f5e9; color: rgb(1, 155, 52); padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; display: inline-block; border: 1px solid rgb(179, 252, 207);">
-            <i class="fas fa-door-open mr-1"></i> ${escHtml(classe.SALLE) || '-'}
-        </span>`;
+        // 4. Titulaire (Badge rouge, Centré)
+        const cellTitulaire = row.insertCell(4);
+        cellTitulaire.style.textAlign = 'center';
+        cellTitulaire.style.verticalAlign = 'middle';
+        cellTitulaire.innerHTML = `
+            <span style="background-color: #fff1f2; color: rgb(243, 10, 10); padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; display: inline-block; border: 1px solid #eea3ad;">
+                <i class="fas fa-user-tie mr-1"></i> ${escHtml(classe.TITULAIRE) || '-'}
+            </span>`;
 
-    // 6. Statut (Badge, Centré)
-    const cellStatut = row.insertCell(5);
-    cellStatut.style.textAlign = 'center';
-    cellStatut.style.verticalAlign = 'middle';
-    const isActif = (
-        classe.STATUT === true ||
-        classe.STATUT === 1 ||
-        classe.STATUT === '1' ||
-        classe.STATUT === 'True' ||
-        classe.STATUT === 'Actif'
-    );
-    cellStatut.innerHTML = isActif
-        ? '<span style="background: #28a745; padding: 4px 10px; border-radius: 20px; color: white; font-size: 11px; font-weight: 600; display: inline-block; min-width: 80px;">✓ Actif</span>'
-        : '<span style="background: #dc3545; padding: 4px 10px; border-radius: 20px; color: white; font-size: 11px; font-weight: 600; display: inline-block; min-width: 80px;">✗ Inactif</span>';
+        // 5. Salle (Badge Vert, Centré)
+        const cellSalle = row.insertCell(5);
+        cellSalle.style.textAlign = 'center';
+        cellSalle.style.verticalAlign = 'middle';
+        cellSalle.innerHTML = ` 
+            <span style="background-color: #e8f5e9; color: rgb(1, 155, 52); padding: 3px 12px; border-radius: 15px; font-size: 11px; font-weight: 600; display: inline-block; border: 1px solid rgb(179, 252, 207);">
+                <i class="fas fa-door-open mr-1"></i> ${escHtml(classe.SALLE) || '-'}
+            </span>`;
 
-    // 7. Actions (Centré)
-    const cellActions = row.insertCell(6);
-    cellActions.style.textAlign = 'center';
-    cellActions.style.verticalAlign = 'middle';
-    cellActions.style.whiteSpace = 'nowrap';
-    cellActions.innerHTML = `
-        <button type="button" class="btn btn-sm btn-primary" style="margin: 0 2px;" onclick="editClasse('${classe.ID}')" title="Modifier">
-            <i class="fas fa-edit"></i>
-        </button>
-        <button type="button" class="btn btn-sm btn-danger" style="margin: 0 2px;" onclick="deleteClasse('${classe.ID}', '${escHtml(classe.NOM).replace(/'/g, "\\'")}')" title="Supprimer">
-            <i class="fas fa-trash"></i>
-        </button>
-    `;
-});
+        // 6. Statut (Badge, Centré)
+        const cellStatut = row.insertCell(6);
+        cellStatut.style.textAlign = 'center';
+        cellStatut.style.verticalAlign = 'middle';
+        const isActif = (
+            classe.STATUT === true ||
+            classe.STATUT === 1 ||
+            classe.STATUT === '1' ||
+            classe.STATUT === 'True' ||
+            classe.STATUT === 'Actif'
+        );
+        cellStatut.innerHTML = isActif
+            ? '<span style="background: #28a745; padding: 4px 10px; border-radius: 20px; color: white; font-size: 11px; font-weight: 600; display: inline-block; min-width: 80px;">✓ Actif</span>'
+            : '<span style="background: #dc3545; padding: 4px 10px; border-radius: 20px; color: white; font-size: 11px; font-weight: 600; display: inline-block; min-width: 80px;">✗ Inactif</span>';
+
+        // 7. Actions (Centré)
+        const cellActions = row.insertCell(7);
+        cellActions.style.textAlign = 'center';
+        cellActions.style.verticalAlign = 'middle';
+        cellActions.style.whiteSpace = 'nowrap';
+        cellActions.innerHTML = `
+            <button type="button" class="btn btn-sm btn-primary" style="margin: 0 2px;" onclick="editClasse('${classe.ID}')" title="Modifier">
+                <i class="fas fa-edit"></i>
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" style="margin: 0 2px;" onclick="deleteClasse('${classe.ID}', '${escHtml(classe.NOM).replace(/'/g, "\\'")}')" title="Supprimer">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+    });
 
     if (typeof createPaginationControls === "function") createPaginationControls(totalPages);
 }

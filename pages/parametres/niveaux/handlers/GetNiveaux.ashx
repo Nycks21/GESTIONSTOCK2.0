@@ -10,104 +10,74 @@ using System.Web.SessionState;
 
 public class GetNiveaux : IHttpHandler, IRequiresSessionState
 {
-    public void ProcessRequest(HttpContext ctx)
+    public void ProcessRequest(HttpContext context)
     {
-        ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset = "utf-8";
-        ctx.Response.Cache.SetNoStore();
+        context.Response.ContentType = "application/json";
+        context.Response.Charset = "utf-8";
+        context.Response.Cache.SetNoStore();
 
         try
         {
-            // 1. Authentification
-            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+            if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
             {
-                ctx.Response.StatusCode = 401;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+                SendError(context, "Non authentifié");
                 return;
             }
-
-            // 2. Token de session valide
-            if (!AuthHelper.RequireApiAuth(ctx))
+            if (!AuthHelper.RequireApiAuth(context))
             {
-                ctx.Response.StatusCode = 403;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
+                SendError(context, "Session invalide");
                 return;
             }
-
-            // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-            int role = AuthHelper.GetUserRole(ctx);
+            int role = AuthHelper.GetUserRole(context);
             if (role < 0 || role > 1)
             {
-                ctx.Response.StatusCode = 403;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+                SendError(context, "Permissions insuffisantes");
                 return;
             }
 
-            // 4. CSRF pour les méthodes POST/PUT/DELETE
-            string method = ctx.Request.HttpMethod.ToUpper();
-            if (method == "POST" || method == "PUT" || method == "DELETE")
-            {
-                string token = ctx.Request.Headers["X-CSRF-Token"];
-                string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-                if (string.IsNullOrEmpty(token) || token != sessionToken)
-                {
-                    ctx.Response.StatusCode = 403;
-                    ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-                    return;
-                }
-            }
-
-            // Récupération de la chaîne de connexion
-            string connStr = "";
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-            }
-
+            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
             if (string.IsNullOrEmpty(connStr))
             {
-                ctx.Response.StatusCode = 500;
-                ctx.Response.Write("{\"success\":false,\"message\":\"Chaîne de connexion non trouvée\"}");
+                SendError(context, "Chaîne de connexion non définie");
                 return;
             }
 
-            var niveaux = new List<object>();
+            List<object> niveaux = new List<object>();
 
-            using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand(
-                @"SELECT ID, NOM, ORDRE, STATUT, CREATED_AT 
-                  FROM [dbo].[NIVEAUX] 
-                  ORDER BY ORDRE, NOM", conn))
+            using (SqlConnection conn = new SqlConnection(connStr))
             {
+                SqlCommand cmd = new SqlCommand(
+                    "SELECT ID, NOM, ORDRE, STATUT, CREATED_AT FROM [dbo].[NIVEAUX] ORDER BY ORDRE, NOM", conn);
                 conn.Open();
-                using (var reader = cmd.ExecuteReader())
+                SqlDataReader reader = cmd.ExecuteReader();
+                while (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        var item = new Dictionary<string, object>();
-                        item["ID"] = reader.IsDBNull(0) ? "" : reader.GetGuid(0).ToString();
-                        item["NOM"] = reader.IsDBNull(1) ? "" : reader.GetString(1);
-                        item["ORDRE"] = reader.IsDBNull(2) ? 0 : reader.GetInt32(2);
-                        item["STATUT"] = !reader.IsDBNull(3) && reader.GetBoolean(3);
-                        item["CREATED_AT"] = reader.IsDBNull(4) ? "" : reader.GetDateTime(4).ToString("yyyy-MM-dd HH:mm:ss");
-                        niveaux.Add(item);
-                    }
+                    Dictionary<string, object> item = new Dictionary<string, object>();
+                    item["ID"] = reader.GetGuid(0).ToString();
+                    item["NOM"] = reader.GetString(1);
+                    item["ORDRE"] = reader.GetInt32(2);
+                    item["STATUT"] = reader.GetBoolean(3);
+                    item["CREATED_AT"] = reader.IsDBNull(4) ? "" : reader.GetDateTime(4).ToString("yyyy-MM-dd HH:mm:ss");
+                    niveaux.Add(item);
                 }
+                reader.Close();
             }
 
-            var result = new Dictionary<string, object>();
+            Dictionary<string, object> result = new Dictionary<string, object>();
             result["success"] = true;
             result["niveaux"] = niveaux;
-
-            var json = new JavaScriptSerializer().Serialize(result);
-            ctx.Response.Write(json);
+            context.Response.Write(new JavaScriptSerializer().Serialize(result));
         }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "'") + "\"}");
+            SendError(context, "Erreur : " + ex.Message);
         }
+    }
+
+    private void SendError(HttpContext context, string message)
+    {
+        context.Response.StatusCode = 500;
+        context.Response.Write("{\"success\":false,\"message\":\"" + message.Replace("\"", "\\\"") + "\"}");
     }
 
     public bool IsReusable

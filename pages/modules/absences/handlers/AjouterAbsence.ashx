@@ -14,7 +14,6 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
 
-        // ✅ Sécurité centralisée (Admin ou SuperAdmin)
         if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -36,7 +35,6 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            // Extraction sécurisée (sans ?.)
             string matricule = GetString(data, "matricule");
             string nom = GetString(data, "nom");
             string classeNom = GetString(data, "classe");
@@ -46,42 +44,17 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
             bool justifie = GetBool(data, "justifie");
             string justification = GetString(data, "justification");
 
-            if (string.IsNullOrEmpty(matricule))
+            if (string.IsNullOrEmpty(matricule) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(classeNom) ||
+                string.IsNullOrEmpty(dateDebutStr) || string.IsNullOrEmpty(dateFinStr))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Matricule manquant\"}");
-                return;
-            }
-            if (string.IsNullOrEmpty(nom))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Nom manquant\"}");
-                return;
-            }
-            if (string.IsNullOrEmpty(classeNom))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Classe manquante\"}");
-                return;
-            }
-            if (string.IsNullOrEmpty(dateDebutStr))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Date de début manquante\"}");
-                return;
-            }
-            if (string.IsNullOrEmpty(dateFinStr))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Date de fin manquante\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Tous les champs sont obligatoires\"}");
                 return;
             }
 
-            DateTime dateDebut;
-            DateTime dateFin;
-            if (!DateTime.TryParse(dateDebutStr, out dateDebut))
+            DateTime dateDebut, dateFin;
+            if (!DateTime.TryParse(dateDebutStr, out dateDebut) || !DateTime.TryParse(dateFinStr, out dateFin))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date de début invalide\"}");
-                return;
-            }
-            if (!DateTime.TryParse(dateFinStr, out dateFin))
-            {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date de fin invalide\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Format de date invalide\"}");
                 return;
             }
 
@@ -99,15 +72,15 @@ public class AjouterAbsence : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                // Vérifier que l'élève existe
-                string checkEleveSql = "SELECT COUNT(*) FROM ELEVES WHERE MATRICULE = @matricule";
+                // Vérifier que l'élève existe ET n'est pas supprimé logiquement
+                string checkEleveSql = "SELECT COUNT(*) FROM ELEVES WHERE MATRICULE = @matricule AND DELETION_AT IS NULL";
                 using (var checkCmd = new SqlCommand(checkEleveSql, conn))
                 {
                     checkCmd.Parameters.AddWithValue("@matricule", matricule);
                     int count = (int)checkCmd.ExecuteScalar();
                     if (count == 0)
                     {
-                        ctx.Response.Write("{\"success\":false,\"message\":\"Élève non trouvé avec le matricule: " + matricule + "\"}");
+                        ctx.Response.Write("{\"success\":false,\"message\":\"Élève non trouvé ou déjà supprimé (matricule: " + matricule + ")\"}");
                         return;
                     }
                 }

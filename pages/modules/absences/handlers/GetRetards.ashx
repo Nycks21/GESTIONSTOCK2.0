@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="GetRetards" %>
+﻿<%@ WebHandler Language="C#" Class="GetRetards" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -38,6 +38,7 @@ public class GetRetards : IHttpHandler, IRequiresSessionState
                        ISNULL(r.MOTIF, '') AS MOTIF_AFFICHAGE
                 FROM RETARDS r
                 LEFT JOIN CLASSES c ON r.CLASSE = c.ID
+                WHERE r.DELETION_AT IS NULL
                 ORDER BY r.DATE_RETARD DESC", conn))
             {
                 conn.Open();

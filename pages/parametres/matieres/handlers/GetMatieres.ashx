@@ -2,7 +2,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -12,108 +11,75 @@ public class GetMatieres : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
         try
         {
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
+
             var list = new List<object>();
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand(
-                @"SELECT m.ID,
-                         m.NOM,
-                         m.ENSEIGNANT         AS ENSEIGNANT_ID,
-                         u.NOM                AS ENSEIGNANT_NOM,
-                         m.COEFFICIENT,
-                         m.HEURES_SEMAINE,
-                         m.CLASSE_ID,
-                         c.NOM                AS CLASSE_NOM,
-                         m.CREATED_AT
-                  FROM   [dbo].[MATIERES] m
-                  LEFT JOIN [dbo].[USERS]   u ON u.IDUSER = m.ENSEIGNANT
-                  LEFT JOIN [dbo].[CLASSES] c ON c.ID     = m.CLASSE_ID
-                  ORDER  BY c.NOM ASC, m.NOM ASC", conn))
             {
-                conn.Open();
-                using (var reader = cmd.ExecuteReader())
+                // ✅ CORRECTION : WHERE après les JOIN
+                string sql = @"
+                    SELECT 
+                        m.ID,
+                        m.NOM,
+                        m.ENSEIGNANT AS ENSEIGNANT_ID,
+                        u.NOM AS ENSEIGNANT,
+                        m.COEFFICIENT,
+                        m.HEURES_SEMAINE,
+                        m.CLASSE_ID,
+                        c.NOM AS CLASSE_NOM,
+                        m.CREATED_AT,
+                        m.DELETION_AT
+                    FROM [dbo].[MATIERES] m
+                    LEFT JOIN [dbo].[USERS] u ON m.ENSEIGNANT = u.IDUSER
+                    LEFT JOIN [dbo].[CLASSES] c ON m.CLASSE_ID = c.ID
+                    WHERE m.DELETION_AT IS NULL
+                    ORDER BY m.NOM ASC";
+
+                using (var cmd = new SqlCommand(sql, conn))
                 {
-                    while (reader.Read())
+                    conn.Open();
+                    using (var reader = cmd.ExecuteReader())
                     {
-                        list.Add(new
+                        while (reader.Read())
                         {
-                            ID             = reader.IsDBNull(0) ? "" : reader.GetGuid(0).ToString(),
-                            NOM            = reader.IsDBNull(1) ? "" : reader.GetString(1),
-
-                            ENSEIGNANT_ID  = reader.IsDBNull(2) ? 0  : reader.GetInt32(2),
-                            ENSEIGNANT     = reader.IsDBNull(3) ? "" : reader.GetString(3),
-
-                            COEFFICIENT    = reader.IsDBNull(4) ? 0m : reader.GetDecimal(4),
-                            HEURES_SEMAINE = reader.IsDBNull(5) ? 0  : reader.GetInt32(5),
-
-                            CLASSE_ID      = reader.IsDBNull(6) ? 0  : reader.GetInt32(6),
-                            CLASSE_NOM     = reader.IsDBNull(7) ? "" : reader.GetString(7),
-
-                            CREATED_AT     = reader.IsDBNull(8) ? null
-                                           : reader.GetDateTime(8).ToString("yyyy-MM-dd HH:mm:ss")
-                        });
+                            list.Add(new
+                            {
+                                ID = reader.IsDBNull(0) ? "" : reader.GetGuid(0).ToString(),
+                                NOM = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                                ENSEIGNANT_ID = reader.IsDBNull(2) ? 0 : reader.GetInt32(2),
+                                ENSEIGNANT = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                                COEFFICIENT = reader.IsDBNull(4) ? 1.0m : reader.GetDecimal(4),
+                                HEURES_SEMAINE = reader.IsDBNull(5) ? 0 : reader.GetInt32(5),
+                                CLASSE_ID = reader.IsDBNull(6) ? 0 : reader.GetInt32(6),
+                                CLASSE_NOM = reader.IsDBNull(7) ? "" : reader.GetString(7),
+                                CREATED_AT = reader.IsDBNull(8) ? "" : reader.GetDateTime(8).ToString("yyyy-MM-dd HH:mm:ss")
+                            });
+                        }
                     }
                 }
             }
 
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(
-                new { success = true, matieres = list }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, matieres = list }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":"
-                + new JavaScriptSerializer().Serialize(ex.Message) + "}");
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
     }
 

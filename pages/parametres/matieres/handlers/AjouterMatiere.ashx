@@ -1,104 +1,102 @@
-<%@ WebHandler Language="C#" Class="AjouterMatiere" %>
+﻿<%@ WebHandler Language="C#" Class="AjouterMatiere" %>
 
 using System;
-using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
+using System.IO;
 using System.Web;
 using System.Web.Script.Serialization;
 using System.Web.SessionState;
 
 public class AjouterMatiere : IHttpHandler, IRequiresSessionState
 {
-    private static readonly string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
+        ctx.Response.Cache.SetNoStore();
+
+        var ser = new JavaScriptSerializer();
+
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        {
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        int userId = AuthHelper.GetUserId(ctx);
 
         try
         {
-            string jsonBody = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
-            var serializer = new JavaScriptSerializer();
-            var data = serializer.Deserialize<dynamic>(jsonBody);
+            string body;
+            using (var reader = new StreamReader(ctx.Request.InputStream))
+                body = reader.ReadToEnd();
 
-            string nom = Convert.ToString(data["NOM"]);
-            int enseignantId = Convert.ToInt32(data["ENSEIGNANT_ID"]);
-            decimal coefficient = Convert.ToDecimal(data["COEFFICIENT"]);
-            int heuresSemaine = Convert.ToInt32(data["HEURES_SEMAINE"]);
-            int classeId = Convert.ToInt32(data["CLASSE_ID"]);
+            var payload = ser.Deserialize<MatierePayload>(body);
+            if (payload == null)
+                throw new ArgumentException("Données invalides.");
 
-            using (SqlConnection conn = new SqlConnection(connStr))
+            // Validations
+            if (string.IsNullOrWhiteSpace(payload.NOM))
+                throw new ArgumentException("Le nom est obligatoire.");
+            if (payload.ENSEIGNANT_ID <= 0)
+                throw new ArgumentException("L'enseignant est obligatoire.");
+            if (payload.COEFFICIENT <= 0)
+                throw new ArgumentException("Le coefficient doit être supérieur à 0.");
+            if (payload.HEURES_SEMAINE <= 0)
+                throw new ArgumentException("Les heures par semaine doivent être supérieures à 0.");
+            if (payload.CLASSE_ID <= 0)
+                throw new ArgumentException("La classe est obligatoire.");
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
+
+            using (var conn = new SqlConnection(connStr))
+            using (var cmd = new SqlCommand(
+                @"INSERT INTO [dbo].[MATIERES] 
+                  (NOM, ENSEIGNANT, COEFFICIENT, HEURES_SEMAINE, CLASSE_ID, CREATED_AT, CREATED_BY, UPDATED_AT, UPDATED_BY, DELETION_AT, DELETION_BY) 
+                  VALUES (@nom, @enseignant, @coeff, @heures, @classe, GETDATE(), @createdBy, GETDATE(), @updatedBy, NULL, NULL)", conn))
             {
+                cmd.Parameters.Add("@nom", SqlDbType.NVarChar).Value = payload.NOM.Trim();
+                cmd.Parameters.Add("@enseignant", SqlDbType.Int).Value = payload.ENSEIGNANT_ID;
+                cmd.Parameters.Add("@coeff", SqlDbType.Decimal).Value = payload.COEFFICIENT;
+                cmd.Parameters.Add("@heures", SqlDbType.Int).Value = payload.HEURES_SEMAINE;
+                cmd.Parameters.Add("@classe", SqlDbType.Int).Value = payload.CLASSE_ID;
+                cmd.Parameters.Add("@createdBy", SqlDbType.Int).Value = userId;
+                cmd.Parameters.Add("@updatedBy", SqlDbType.Int).Value = userId;
+
                 conn.Open();
-
-                string sql = @"INSERT INTO MATIERES (ID, NOM, ENSEIGNANT, COEFFICIENT, HEURES_SEMAINE, CLASSE_ID, CREATED_AT) 
-                               VALUES (NEWID(), @nom, @enseignantId, @coefficient, @heuresSemaine, @classeId, GETDATE())";
-
-                using (SqlCommand cmd = new SqlCommand(sql, conn))
-                {
-                    cmd.Parameters.AddWithValue("@nom", nom);
-                    cmd.Parameters.AddWithValue("@enseignantId", enseignantId);
-                    cmd.Parameters.AddWithValue("@coefficient", coefficient);
-                    cmd.Parameters.AddWithValue("@heuresSemaine", heuresSemaine);
-                    cmd.Parameters.AddWithValue("@classeId", classeId);
-
-                    int rowsAffected = cmd.ExecuteNonQuery();
-                    
-                    context.Response.Write(new JavaScriptSerializer().Serialize(new
-                    {
-                        success = rowsAffected > 0,
-                        message = rowsAffected > 0 ? "Matière ajoutée avec succès" : "Erreur lors de l'insertion"
-                    }));
-                }
+                cmd.ExecuteNonQuery();
             }
+
+            ctx.Response.Write("{\"success\":true,\"message\":\"Matière ajoutée avec succès.\"}");
+        }
+        catch (ArgumentException argEx)
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + argEx.Message.Replace("\"", "\\\"") + "\"}");
+        }
+        catch (SqlException sqlEx)
+        {
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur lors de l'insertion en base de données.\"}");
         }
         catch (Exception ex)
         {
-            context.Response.StatusCode = 500;
-            context.Response.Write(new JavaScriptSerializer().Serialize(new
-            {
-                success = false,
-                message = "Erreur: " + ex.Message
-            }));
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 
     public bool IsReusable { get { return false; } }
+
+    private class MatierePayload
+    {
+        public string NOM { get; set; }
+        public int ENSEIGNANT_ID { get; set; }
+        public decimal COEFFICIENT { get; set; }
+        public int HEURES_SEMAINE { get; set; }
+        public int CLASSE_ID { get; set; }
+    }
 }

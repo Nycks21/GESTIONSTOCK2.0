@@ -2,6 +2,7 @@
 
 using System;
 using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -12,132 +13,84 @@ public class AjouterSalle : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
-        // Configuration de la réponse
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
-        ctx.Response.Cache.SetNoStore();
-
-        JavaScriptSerializer ser = new JavaScriptSerializer();
-
-        // Vérification de la session
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-        {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-            return;
-        }
-
-        // Vérification de la méthode POST
-        if (ctx.Request.HttpMethod != "POST")
-        {
-            ctx.Response.StatusCode = 405;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Méthode non autorisée\"}");
-            return;
-        }
 
         try
         {
-            // Lecture du corps de la requête
-            string body;
-            using (var reader = new StreamReader(ctx.Request.InputStream))
-                body = reader.ReadToEnd();
-
-            // Désérialisation via une classe Payload typée
-            var payload = ser.Deserialize<SallePayload>(body);
-
-            // Validation des données
-            if (payload == null)
-                throw new ArgumentException("Données invalides.");
-
-            if (string.IsNullOrWhiteSpace(payload.NUMERO))
-                throw new ArgumentException("Le numéro de salle est obligatoire.");
-
-            if (payload.CAPACITE < 0)
-                throw new ArgumentException("La capacité doit être un nombre positif.");
-
-            // --- Logique du GUID ---
-            Guid? idSaisi = null;
-            if (!string.IsNullOrWhiteSpace(payload.ID))
+            // 1. Authentification
+            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
             {
-                Guid tempGuid;
-                if (Guid.TryParse(payload.ID, out tempGuid))
-                    idSaisi = tempGuid;
-                else
-                    throw new ArgumentException("Le format de l'ID est invalide (doit être un GUID).");
+                SendError(ctx, 401, "Non authentifié");
+                return;
+            }
+            if (!AuthHelper.RequireApiAuth(ctx))
+            {
+                SendError(ctx, 403, "Session invalide");
+                return;
+            }
+            int role = AuthHelper.GetUserRole(ctx);
+            if (role < 0 || role > 1)
+            {
+                SendError(ctx, 403, "Permissions insuffisantes");
+                return;
             }
 
-            // Chaîne de connexion standardisée
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            // 2. Lecture du payload
+            string body = new StreamReader(ctx.Request.InputStream).ReadToEnd();
+            var serializer = new JavaScriptSerializer();
+            var payload = serializer.Deserialize<SallePayload>(body);
 
+            // 3. Validation
+            if (payload == null)
+                throw new ArgumentException("Données invalides.");
+            if (string.IsNullOrWhiteSpace(payload.NUMERO))
+                throw new ArgumentException("Le numéro de salle est obligatoire.");
+            if (payload.CAPACITE < 0)
+                throw new ArgumentException("La capacité doit être positive.");
+
+            // 4. Connexion
+            string connStr = GetConnectionString();
+            if (string.IsNullOrEmpty(connStr))
+            {
+                SendError(ctx, 500, "Chaîne de connexion non trouvée");
+                return;
+            }
+
+            // 5. Insertion
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand(
-                @"INSERT INTO [dbo].[SALLES] (ID, NUMERO, CAPACITE, STATUT, CREATED_AT) 
-                  VALUES (ISNULL(@id, NEWID()), @numero, @capacite, @statut, GETDATE())", conn))
+                "INSERT INTO [dbo].[SALLES] (ID, NUMERO, CAPACITE, STATUT, CREATED_AT) " +
+                "VALUES (NEWID(), @numero, @capacite, @statut, GETDATE())", conn))
             {
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = 
-                    (object)idSaisi ?? DBNull.Value;
-                cmd.Parameters.AddWithValue("@numero",   payload.NUMERO.Trim());
-                cmd.Parameters.AddWithValue("@capacite", payload.CAPACITE);
-                cmd.Parameters.AddWithValue("@statut",   payload.STATUT);
-
+                cmd.Parameters.Add("@numero", SqlDbType.NVarChar).Value = payload.NUMERO.Trim();
+                cmd.Parameters.Add("@capacite", SqlDbType.Int).Value = payload.CAPACITE;
+                cmd.Parameters.Add("@statut", SqlDbType.Bit).Value = payload.STATUT;
                 conn.Open();
                 cmd.ExecuteNonQuery();
             }
 
             ctx.Response.Write("{\"success\":true}");
         }
-        catch (ArgumentException ex)
-        {
-            ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
-        }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 500;
-            
-            // Gestion spécifique pour les doublons de numéros de salle
-            string msg = (ex.Message.Contains("UNIQUE") || ex.Message.Contains("UQ_"))
-                ? "Ce numéro de salle existe déjà."
+            string msg = (ex.Message.Contains("UNIQUE") || ex.Message.Contains("UQ_")) 
+                ? "Ce numéro de salle existe déjà." 
                 : ex.Message;
-
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(msg) + "}");
+            SendError(ctx, 400, msg);
         }
+    }
+
+    private void SendError(HttpContext ctx, int status, string message)
+    {
+        ctx.Response.StatusCode = status;
+        ctx.Response.Write("{\"success\":false,\"message\":\"" + message.Replace("\"", "'") + "\"}");
+    }
+
+    private string GetConnectionString()
+    {
+        var setting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        return setting != null ? setting.ConnectionString : null;
     }
 
     public bool IsReusable
@@ -145,10 +98,8 @@ public class AjouterSalle : IHttpHandler, IRequiresSessionState
         get { return false; }
     }
 
-    // Classe de transport pour structurer les données JSON reçues
-    private class SallePayload
+    public class SallePayload
     {
-        public string ID { get; set; }
         public string NUMERO { get; set; }
         public int CAPACITE { get; set; }
         public bool STATUT { get; set; }

@@ -2,6 +2,7 @@
 
 using System;
 using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -12,105 +13,75 @@ public class SupprimerSalle : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
-        // Configuration de la réponse
         ctx.Response.ContentType = "application/json";
         ctx.Response.Charset = "utf-8";
-        ctx.Response.Cache.SetNoStore();
-
-        JavaScriptSerializer ser = new JavaScriptSerializer();
-
-        // Vérification de la session
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-        {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-            return;
-        }
-
-        // Vérification de la méthode POST
-        if (ctx.Request.HttpMethod != "POST")
-        {
-            ctx.Response.StatusCode = 405;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Méthode non autorisée\"}");
-            return;
-        }
 
         try
         {
-            string body;
-            using (var reader = new StreamReader(ctx.Request.InputStream))
-                body = reader.ReadToEnd();
+            // Authentification
+            if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+            {
+                SendError(ctx, 401, "Non authentifié");
+                return;
+            }
+            if (!AuthHelper.RequireApiAuth(ctx))
+            {
+                SendError(ctx, 403, "Session invalide");
+                return;
+            }
+            int role = AuthHelper.GetUserRole(ctx);
+            if (role < 0 || role > 1)
+            {
+                SendError(ctx, 403, "Permissions insuffisantes");
+                return;
+            }
 
-            // Utilisation du Payload typé pour récupérer l'ID en string (GUID)
-            var payload = ser.Deserialize<IdPayload>(body);
+            string body = new StreamReader(ctx.Request.InputStream).ReadToEnd();
+            var serializer = new JavaScriptSerializer();
+            var payload = serializer.Deserialize<IdPayload>(body);
 
-            // Validation du GUID
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ID))
+                throw new ArgumentException("Identifiant manquant.");
+
             Guid idGuid;
-            if (payload == null || string.IsNullOrWhiteSpace(payload.ID) || !Guid.TryParse(payload.ID, out idGuid))
+            if (!Guid.TryParse(payload.ID, out idGuid))
                 throw new ArgumentException("Identifiant (GUID) invalide.");
 
-            // Utilisation de la chaîne de connexion standardisée
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = GetConnectionString();
+            if (string.IsNullOrEmpty(connStr))
+            {
+                SendError(ctx, 500, "Chaîne de connexion non trouvée");
+                return;
+            }
 
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand("DELETE FROM [dbo].[SALLES] WHERE ID = @id", conn))
             {
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = idGuid;
+                cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = idGuid;
                 conn.Open();
                 int rows = cmd.ExecuteNonQuery();
-
                 if (rows == 0)
-                    throw new Exception("Niveau introuvable ou déjà supprimé.");
+                    throw new Exception("Salle introuvable.");
             }
 
             ctx.Response.Write("{\"success\":true}");
         }
-        catch (ArgumentException ex)
-        {
-            ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
-        }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            SendError(ctx, 400, ex.Message);
         }
+    }
+
+    private void SendError(HttpContext ctx, int status, string message)
+    {
+        ctx.Response.StatusCode = status;
+        ctx.Response.Write("{\"success\":false,\"message\":\"" + message.Replace("\"", "'") + "\"}");
+    }
+
+    private string GetConnectionString()
+    {
+        var setting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+        return setting != null ? setting.ConnectionString : null;
     }
 
     public bool IsReusable
@@ -118,9 +89,8 @@ public class SupprimerSalle : IHttpHandler, IRequiresSessionState
         get { return false; }
     }
 
-    // Classe interne pour la désérialisation sécurisée de l'ID
-    private class IdPayload 
-    { 
-        public string ID { get; set; } 
+    public class IdPayload
+    {
+        public string ID { get; set; }
     }
 }

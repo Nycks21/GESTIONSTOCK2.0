@@ -476,3 +476,13 @@ function dateDuJour() {
         String(d.getMonth() + 1).padStart(2, '0') + '-' +
         String(d.getDate()).padStart(2, '0');
 }
+
+// ============================================================
+// ✅ ✅ ✅ EXPOSITION GLOBALE (OBLIGATOIRE)
+// ============================================================
+window.openAddSalleModal = openAddSalleModal;
+window.closeAddSalleModal = closeAddSalleModal;
+window.saveSalle = saveSalle;
+window.editSalle = editSalle;
+window.deleteSalle = deleteSalle;
+window.exportSalles = exportSalles;

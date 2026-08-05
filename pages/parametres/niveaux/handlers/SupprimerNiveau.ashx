@@ -2,6 +2,7 @@
 
 using System;
 using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -10,115 +11,75 @@ using System.Web.SessionState;
 
 public class SupprimerNiveau : IHttpHandler, IRequiresSessionState
 {
-    public void ProcessRequest(HttpContext ctx)
+    public void ProcessRequest(HttpContext context)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
-        // Configuration de la réponse
-        ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset = "utf-8";
-        ctx.Response.Cache.SetNoStore();
-
-        JavaScriptSerializer ser = new JavaScriptSerializer();
-
-        // Vérification de la session
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-        {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-            return;
-        }
-
-        // Vérification de la méthode POST
-        if (ctx.Request.HttpMethod != "POST")
-        {
-            ctx.Response.StatusCode = 405;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Méthode non autorisée\"}");
-            return;
-        }
+        context.Response.ContentType = "application/json";
+        context.Response.Charset = "utf-8";
 
         try
         {
-            string body;
-            using (var reader = new StreamReader(ctx.Request.InputStream))
-                body = reader.ReadToEnd();
-
-            // Utilisation du Payload typé pour récupérer l'ID en string (GUID)
-            var payload = ser.Deserialize<IdPayload>(body);
-
-            // Validation du GUID
-            Guid idGuid;
-            if (payload == null || string.IsNullOrWhiteSpace(payload.ID) || !Guid.TryParse(payload.ID, out idGuid))
-                throw new ArgumentException("Identifiant (GUID) invalide.");
-
-            // Utilisation de la chaîne de connexion standardisée
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-
-            using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand("DELETE FROM [dbo].[NIVEAUX] WHERE ID = @id", conn))
+            if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
             {
-                // Utilisation explicite du type UniqueIdentifier
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = idGuid;
-                
-                conn.Open();
-                int rows = cmd.ExecuteNonQuery();
-
-                if (rows == 0)
-                    throw new Exception("Niveau introuvable ou déjà supprimé.");
+                SendError(context, "Non authentifié");
+                return;
+            }
+            if (!AuthHelper.RequireApiAuth(context))
+            {
+                SendError(context, "Session invalide");
+                return;
+            }
+            int role = AuthHelper.GetUserRole(context);
+            if (role < 0 || role > 1)
+            {
+                SendError(context, "Permissions insuffisantes");
+                return;
             }
 
-            ctx.Response.Write("{\"success\":true}");
-        }
-        catch (ArgumentException ex)
-        {
-            ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            string tokenHeader = context.Request.Headers["X-CSRF-Token"];
+            string sessionToken = context.Session["CSRF_TOKEN"] as string;
+            if (string.IsNullOrEmpty(tokenHeader) || tokenHeader != sessionToken)
+            {
+                SendError(context, "Token CSRF invalide");
+                return;
+            }
+
+            string body = new StreamReader(context.Request.InputStream).ReadToEnd();
+            JavaScriptSerializer serializer = new JavaScriptSerializer();
+            IdPayload payload = serializer.Deserialize<IdPayload>(body);
+
+            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+            {
+                SendError(context, "Chaîne de connexion non définie");
+                return;
+            }
+
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                SqlCommand cmd = new SqlCommand(
+                    "DELETE FROM [dbo].[NIVEAUX] WHERE ID = @id", conn);
+                cmd.Parameters.AddWithValue("@id", new Guid(payload.id));
+                conn.Open();
+                int rows = cmd.ExecuteNonQuery();
+                if (rows == 0)
+                {
+                    SendError(context, "Aucun niveau trouvé avec cet ID");
+                    return;
+                }
+            }
+
+            context.Response.Write("{\"success\":true}");
         }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 500;
-            
-            // Gestion spécifique pour les erreurs de clés étrangères (ex: si des classes sont liées au niveau)
-            string msg = ex.Message.Contains("REFERENCE constraint") 
-                ? "Impossible de supprimer ce niveau car il est utilisé par une ou plusieurs classes." 
-                : ex.Message;
-
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(msg) + "}");
+            SendError(context, "Erreur : " + ex.Message);
         }
+    }
+
+    private void SendError(HttpContext context, string message)
+    {
+        context.Response.StatusCode = 500;
+        context.Response.Write("{\"success\":false,\"message\":\"" + message.Replace("\"", "\\\"") + "\"}");
     }
 
     public bool IsReusable
@@ -126,9 +87,8 @@ public class SupprimerNiveau : IHttpHandler, IRequiresSessionState
         get { return false; }
     }
 
-    // Classe interne mise à jour : ID est maintenant une string pour recevoir le GUID
-    private class IdPayload 
-    { 
-        public string ID { get; set; } 
+    public class IdPayload
+    {
+        public string id { get; set; }
     }
 }

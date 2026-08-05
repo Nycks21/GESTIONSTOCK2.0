@@ -43,7 +43,7 @@ var CHAMPS = [
     { key: 'MATRICULE', label: 'Matricule', required: true, type: 'text', hint: 'Ex: 2024001' },
     { key: 'ANNEE_SCO', label: 'Année Scolaire', required: true, type: 'text', hint: 'Ex: 1' },
     { key: 'NOM', label: 'Nom complet', required: true, type: 'text', hint: 'Ex: RAKOTO Jean' },
-    { key: 'CLASSE', label: 'Classe (nom)', required: true, type: 'int', hint: 'Ex: 6ème A' },
+    { key: 'CLASSE', label: 'Classe', required: true, type: 'int', hint: 'Ex: 1' },
     { key: 'EMAIL', label: 'Email', required: false, type: 'email', hint: 'Ex: nom@mail.com' },
     { key: 'TELEPHONE', label: 'Téléphone', required: false, type: 'text', hint: 'Ex: 034 12 345 67' },
     { key: 'DATE_NAISS', label: 'Date de naissance', required: false, type: 'date', hint: 'Ex: 2010-05-15' },
@@ -539,9 +539,9 @@ function renderPreviewTable() {
             var val = row[c.key] || '';
 
             // Pour CLASSE, on affiche le nom saisi + l'ID résolu si disponible
-            if (c.key === 'CLASSE' && row.CLASSE_ID !== undefined) {
+            if (c.key === 'CLASSE' && row.CLASSE_NOM !== undefined) {
                 td.innerHTML = escHtml(val) +
-                    ' <small style="color:#6c757d;">(ID=' + row.CLASSE_ID + ')</small>';
+                    ' <small style="color:#6c757d;">(NOM=' + row.CLASSE_NOM + ')</small>';
             } else {
                 td.textContent = val || '—';
             }
@@ -666,10 +666,10 @@ function launchImport() {
         return;
     }
 
-    // 2. On grise le bouton et on change l'apparence
+    // 2. On grise le bouton et on change l'apparence (état "en cours", pas de verdict prématuré)
     if (btnLaunch) {
         btnLaunch.disabled = true;
-        btnLaunch.innerHTML = '<i class="fas fa-exclamation-triangle fa-beat"></i> Importation échoué';
+        btnLaunch.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Importation en cours...';
         btnLaunch.style.opacity = '0.7';
         btnLaunch.style.cursor = 'not-allowed';
     }
@@ -686,7 +686,7 @@ function doIntegration() {
             MATRICULE: r.MATRICULE || '',
             ANNEE_SCO: r.ANNEE_SCO || '',
             NOM: r.NOM || '',
-            CLASSE_ID: r.CLASSE_ID || 0,   // INT (résolu à l'étape validation)
+            CLASSE_ID: String(r.CLASSE_ID || 0),   // texte pour matcher Dictionary<string,string> côté serveur
             EMAIL: r.EMAIL || '',
             TELEPHONE: r.TELEPHONE || '',
             DATE_NAISS: r.DATE_NAISS || null,
@@ -724,6 +724,8 @@ function doIntegration() {
         .then(function (data) {
             hideSpinner();
 
+            var btnLaunch = document.getElementById('imp-btn-launch');
+
             if (data.success && (data.inserted > 0 || data.updated > 0)) {
                 var step4 = document.getElementById('imp-step-4');
                 if (step4) {
@@ -731,7 +733,6 @@ function doIntegration() {
                     step4.classList.add('done');
                 }
 
-                var btnLaunch = document.getElementById('imp-btn-launch');
                 if (btnLaunch) {
                     btnLaunch.style.display = 'none';
                 }
@@ -757,6 +758,15 @@ function doIntegration() {
                     icon: 'success',
                     title: summaryText + ' effectués avec succès !'
                 });
+            } else {
+                // Import partiel ou totalement en échec : on remet le bouton dans un état
+                // exploitable au lieu de le laisser bloqué sur le texte "en cours" du clic précédent.
+                if (btnLaunch) {
+                    btnLaunch.disabled = false;
+                    btnLaunch.innerHTML = '<i class="fas fa-rocket"></i> Relancer l\'import';
+                    btnLaunch.style.opacity = '1';
+                    btnLaunch.style.cursor = 'pointer';
+                }
             }
 
             renderResultModal(data);

@@ -1,7 +1,6 @@
-<%@ WebHandler Language="C#" Class="AjouterClasse" %>
+﻿<%@ WebHandler Language="C#" Class="AjouterClasse" %>
 
 using System;
-using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.IO;
@@ -13,44 +12,19 @@ public class AjouterClasse : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
+        ctx.Response.ContentType = "application/json";
+        ctx.Response.Charset = "utf-8";
+        ctx.Response.Cache.SetNoStore();
+
+        var ser = new JavaScriptSerializer();
+
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
-    }
-        ctx.Response.ContentType = "application/json";
-        JavaScriptSerializer ser = new JavaScriptSerializer();
+
+        int userId = AuthHelper.GetUserId(ctx);
 
         try
         {
@@ -59,48 +33,75 @@ public class AjouterClasse : IHttpHandler, IRequiresSessionState
                 body = reader.ReadToEnd();
 
             var payload = ser.Deserialize<ClassePayload>(body);
+            if (payload == null)
+                throw new ArgumentException("Données invalides.");
 
-            // Validation des GUIDs pour Niveau et Salle
+            // Validations
+            if (string.IsNullOrWhiteSpace(payload.NOM))
+                throw new ArgumentException("Le nom de la classe est obligatoire.");
+            if (payload.TITULAIRE_ID <= 0)
+                throw new ArgumentException("Le titulaire est obligatoire.");
+            if (string.IsNullOrEmpty(payload.NIVEAU_ID))
+                throw new ArgumentException("Le niveau est obligatoire.");
+            if (string.IsNullOrEmpty(payload.SALLE_ID))
+                throw new ArgumentException("La salle est obligatoire.");
+
             Guid niveauGuid, salleGuid;
             if (!Guid.TryParse(payload.NIVEAU_ID, out niveauGuid))
-                throw new ArgumentException("Le niveau sélectionné n'est pas un identifiant valide.");
+                throw new ArgumentException("Le niveau sélectionné n'est pas valide.");
             if (!Guid.TryParse(payload.SALLE_ID, out salleGuid))
-                throw new ArgumentException("La salle sélectionnée n'est pas un identifiant valide.");
+                throw new ArgumentException("La salle sélectionnée n'est pas valide.");
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
             using (var cmd = new SqlCommand(
-                @"INSERT INTO [dbo].[Classes] (NOM, NIVEAU_ID, TITULAIRE_ID, SALLE_ID, EFFECTIF, STATUT)
-                  VALUES (@nom, @niv, @tit, @sal, @eff, @stat)", conn))
+                @"INSERT INTO [dbo].[CLASSES] 
+                  (NOM, NIVEAU_ID, TITULAIRE_ID, SALLE_ID, EFFECTIF, STATUT, CREATED_AT, CREATED_BY, UPDATED_AT, UPDATED_BY) 
+                  VALUES (@nom, @niv, @tit, @sal, @eff, @stat, GETDATE(), @createdBy, NULL, NULL)", conn))
             {
-                cmd.Parameters.Add("@nom", SqlDbType.NVarChar).Value = payload.NOM ?? "";
+                cmd.Parameters.Add("@nom", SqlDbType.NVarChar).Value = payload.NOM.Trim();
                 cmd.Parameters.Add("@niv", SqlDbType.UniqueIdentifier).Value = niveauGuid;
                 cmd.Parameters.Add("@tit", SqlDbType.Int).Value = payload.TITULAIRE_ID;
                 cmd.Parameters.Add("@sal", SqlDbType.UniqueIdentifier).Value = salleGuid;
                 cmd.Parameters.Add("@eff", SqlDbType.Int).Value = payload.EFFECTIF;
-                cmd.Parameters.Add("@stat", SqlDbType.Bit).Value = (payload.STATUT == "1" || payload.STATUT.ToLower() == "true");
+                cmd.Parameters.Add("@stat", SqlDbType.Bit).Value = (payload.STATUT == "actif" || payload.STATUT == "true" || payload.STATUT == "1");
+                cmd.Parameters.Add("@createdBy", SqlDbType.Int).Value = userId;
 
                 conn.Open();
                 cmd.ExecuteNonQuery();
             }
-            ctx.Response.Write("{\"success\":true}");
+
+            ctx.Response.Write("{\"success\":true,\"message\":\"Classe ajoutée avec succès.\"}");
+        }
+        catch (ArgumentException argEx)
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + argEx.Message.Replace("\"", "\\\"") + "\"}");
+        }
+        catch (SqlException sqlEx)
+        {
+            ctx.Response.StatusCode = 500;
+            string errorMsg = sqlEx.Message.Replace("\"", "\\\"");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + errorMsg + "\"}");
         }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 
     public bool IsReusable { get { return false; } }
 
-    public class ClassePayload
+    private class ClassePayload
     {
         public string NOM { get; set; }
-        public string NIVEAU_ID { get; set; } // Reçu en string (GUID)
+        public string NIVEAU_ID { get; set; }
         public int TITULAIRE_ID { get; set; }
-        public string SALLE_ID { get; set; }  // Reçu en string (GUID)
+        public string SALLE_ID { get; set; }
         public int EFFECTIF { get; set; }
         public string STATUT { get; set; }
     }

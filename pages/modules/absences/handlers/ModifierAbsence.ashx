@@ -1,6 +1,7 @@
 ﻿<%@ WebHandler Language="C#" Class="ModifierAbsence" %>
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -76,37 +77,52 @@ public class ModifierAbsence : IHttpHandler, IRequiresSessionState
             int classeId = GetClasseIdByName(connStr, classeNom);
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand(@"
-                UPDATE ABSENCES 
-                SET ANNEE_ID = @anneeId,
-                    MATRICULE = @matricule,
-                    NOM = @nom,
-                    CLASSE = @classeId,
-                    DATE_DEBUT = @dateDebut,
-                    DATE_FIN = @dateFin,
-                    MOTIF = @motif,
-                    JUSTIFIE = @justifie,
-                    JUSTIFICATION = @justification,
-                    UPDATED_AT = GETDATE()
-                WHERE ID = @id", conn))
             {
-                cmd.Parameters.AddWithValue("@id", absenceId);
-                cmd.Parameters.AddWithValue("@anneeId", anneeId);
-                cmd.Parameters.AddWithValue("@matricule", matricule);
-                cmd.Parameters.AddWithValue("@nom", nom);
-                cmd.Parameters.AddWithValue("@classeId", classeId);
-                cmd.Parameters.AddWithValue("@dateDebut", dateDebut);
-                cmd.Parameters.AddWithValue("@dateFin", dateFin);
-                cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
-                cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
-                cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
-
                 conn.Open();
-                int rows = cmd.ExecuteNonQuery();
-                if (rows == 0)
+
+                // Vérifier que l'absence existe et n'est pas déjà supprimée
+                using (var checkCmd = new SqlCommand("SELECT COUNT(*) FROM [dbo].[ABSENCES] WHERE ID = @id AND DELETION_AT IS NULL", conn))
                 {
-                    ctx.Response.Write("{\"success\":false,\"message\":\"Aucune modification effectuée\"}");
-                    return;
+                    checkCmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = absenceId;
+                    int exists = (int)checkCmd.ExecuteScalar();
+                    if (exists == 0)
+                    {
+                        ctx.Response.Write("{\"success\":false,\"message\":\"Absence introuvable ou déjà supprimée.\"}");
+                        return;
+                    }
+                }
+
+                using (var cmd = new SqlCommand(@"
+                    UPDATE ABSENCES 
+                    SET ANNEE_ID = @anneeId,
+                        MATRICULE = @matricule,
+                        NOM = @nom,
+                        CLASSE = @classeId,
+                        DATE_DEBUT = @dateDebut,
+                        DATE_FIN = @dateFin,
+                        MOTIF = @motif,
+                        JUSTIFIE = @justifie,
+                        JUSTIFICATION = @justification,
+                        UPDATED_AT = GETDATE()
+                    WHERE ID = @id", conn))
+                {
+                    cmd.Parameters.AddWithValue("@id", absenceId);
+                    cmd.Parameters.AddWithValue("@anneeId", anneeId);
+                    cmd.Parameters.AddWithValue("@matricule", matricule);
+                    cmd.Parameters.AddWithValue("@nom", nom);
+                    cmd.Parameters.AddWithValue("@classeId", classeId);
+                    cmd.Parameters.AddWithValue("@dateDebut", dateDebut);
+                    cmd.Parameters.AddWithValue("@dateFin", dateFin);
+                    cmd.Parameters.AddWithValue("@motif", string.IsNullOrEmpty(motif) ? (object)DBNull.Value : motif);
+                    cmd.Parameters.AddWithValue("@justifie", justifie ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@justification", string.IsNullOrEmpty(justification) ? (object)DBNull.Value : justification);
+
+                    int rows = cmd.ExecuteNonQuery();
+                    if (rows == 0)
+                    {
+                        ctx.Response.Write("{\"success\":false,\"message\":\"Aucune modification effectuée\"}");
+                        return;
+                    }
                 }
             }
 

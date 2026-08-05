@@ -1,7 +1,7 @@
 ﻿<%@ WebHandler Language="C#" Class="ModifierEleve" %>
 
 using System;
-using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -56,45 +56,56 @@ public class ModifierEleve : IHttpHandler, IRequiresSessionState
                 throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand(
-                @"UPDATE [dbo].[ELEVES] SET 
-                    NOM=@nom, 
-                    CLASSE=@classe, 
-                    EMAIL=@email, 
-                    TELEPHONE=@tel, 
-                    STATUT=@statut, 
-                    GENRE=@genre, 
-                    DATE_NAISSANCE=@dateNaiss, 
-                    ADRESSE=@adresse, 
-                    PARENT=@parent, 
-                    UPDATED_AT=GETDATE(),
-                    UPDATED_BY=@updatedBy
-                  WHERE ID=@id", conn))
             {
-                cmd.Parameters.AddWithValue("@id", eleveGuid);
-                cmd.Parameters.AddWithValue("@nom", payload.NOM.Trim());
-                cmd.Parameters.AddWithValue("@classe", classeId);
+                // Vérifier si l'élève existe et n'est pas supprimé
+                using (var checkCmd = new SqlCommand("SELECT COUNT(*) FROM [dbo].[ELEVES] WHERE ID = @id AND DELETION_AT IS NULL", conn))
+                {
+                    checkCmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = eleveGuid;
+                    conn.Open();
+                    int exists = (int)checkCmd.ExecuteScalar();
+                    if (exists == 0)
+                        throw new Exception("Élève introuvable ou déjà supprimé.");
+                }
 
-                object emailParam = (string.IsNullOrEmpty(payload.EMAIL)) ? (object)DBNull.Value : payload.EMAIL.Trim();
-                cmd.Parameters.AddWithValue("@email", emailParam);
+                using (var cmd = new SqlCommand(
+                    @"UPDATE [dbo].[ELEVES] SET 
+                        NOM=@nom, 
+                        CLASSE=@classe, 
+                        EMAIL=@email, 
+                        TELEPHONE=@tel, 
+                        STATUT=@statut, 
+                        GENRE=@genre, 
+                        DATE_NAISSANCE=@dateNaiss, 
+                        ADRESSE=@adresse, 
+                        PARENT=@parent, 
+                        UPDATED_AT=GETDATE(),
+                        UPDATED_BY=@updatedBy
+                      WHERE ID=@id", conn))
+                {
+                    cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = eleveGuid;
+                    cmd.Parameters.Add("@nom", SqlDbType.NVarChar).Value = payload.NOM.Trim();
+                    cmd.Parameters.Add("@classe", SqlDbType.Int).Value = classeId;
 
-                object telParam = (string.IsNullOrEmpty(payload.TELEPHONE)) ? (object)DBNull.Value : payload.TELEPHONE.Trim();
-                cmd.Parameters.AddWithValue("@tel", telParam);
+                    object emailParam = (string.IsNullOrEmpty(payload.EMAIL)) ? (object)DBNull.Value : payload.EMAIL.Trim();
+                    cmd.Parameters.Add("@email", SqlDbType.NVarChar).Value = emailParam;
 
-                string statut = string.IsNullOrEmpty(payload.STATUT) ? "actif" : payload.STATUT.Trim().ToLower();
-                cmd.Parameters.AddWithValue("@statut", statut);
+                    object telParam = (string.IsNullOrEmpty(payload.TELEPHONE)) ? (object)DBNull.Value : payload.TELEPHONE.Trim();
+                    cmd.Parameters.Add("@tel", SqlDbType.NVarChar).Value = telParam;
 
-                string genre = string.IsNullOrEmpty(payload.GENRE) ? "M" : payload.GENRE.Trim().ToUpper().Substring(0, 1);
-                cmd.Parameters.AddWithValue("@genre", genre);
+                    string statut = string.IsNullOrEmpty(payload.STATUT) ? "actif" : payload.STATUT.Trim().ToLower();
+                    cmd.Parameters.Add("@statut", SqlDbType.NVarChar).Value = statut;
 
-                cmd.Parameters.AddWithValue("@dateNaiss", dateNaiss.HasValue ? (object)dateNaiss.Value : DBNull.Value);
-                cmd.Parameters.AddWithValue("@adresse", payload.ADRESSE.Trim());
-                cmd.Parameters.AddWithValue("@parent", payload.PARENT.Trim());
-                cmd.Parameters.AddWithValue("@updatedBy", userId);
+                    string genre = string.IsNullOrEmpty(payload.GENRE) ? "M" : payload.GENRE.Trim().ToUpper().Substring(0, 1);
+                    cmd.Parameters.Add("@genre", SqlDbType.NChar).Value = genre;
 
-                conn.Open();
-                if (cmd.ExecuteNonQuery() == 0)
-                    throw new Exception("Élève introuvable ou aucune modification effectuée.");
+                    cmd.Parameters.Add("@dateNaiss", SqlDbType.Date).Value = dateNaiss.HasValue ? (object)dateNaiss.Value : DBNull.Value;
+                    cmd.Parameters.Add("@adresse", SqlDbType.NVarChar).Value = payload.ADRESSE.Trim();
+                    cmd.Parameters.Add("@parent", SqlDbType.NVarChar).Value = payload.PARENT.Trim();
+                    cmd.Parameters.Add("@updatedBy", SqlDbType.Int).Value = userId;
+
+                    if (cmd.ExecuteNonQuery() == 0)
+                        throw new Exception("Élève introuvable ou aucune modification effectuée.");
+                }
             }
 
             ctx.Response.Write("{\"success\":true,\"message\":\"Profil élève mis à jour avec succès.\"}");

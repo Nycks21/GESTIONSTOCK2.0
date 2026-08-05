@@ -38,6 +38,7 @@ public class GetAbsences : IHttpHandler, IRequiresSessionState
                        ISNULL(a.MOTIF, '') AS MOTIF_AFFICHAGE
                 FROM ABSENCES a
                 LEFT JOIN CLASSES c ON a.CLASSE = c.ID
+                WHERE a.DELETION_AT IS NULL
                 ORDER BY a.DATE_DEBUT DESC", conn))
             {
                 conn.Open();

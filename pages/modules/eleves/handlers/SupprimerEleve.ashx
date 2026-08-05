@@ -1,7 +1,7 @@
 ﻿<%@ WebHandler Language="C#" Class="SupprimerEleve" %>
 
 using System;
-using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -31,6 +31,8 @@ public class SupprimerEleve : IHttpHandler, IRequiresSessionState
             return;
         }
 
+        int userId = AuthHelper.GetUserId(ctx);
+
         try
         {
             string body;
@@ -51,13 +53,30 @@ public class SupprimerEleve : IHttpHandler, IRequiresSessionState
                 throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand("DELETE FROM [dbo].[ELEVES] WHERE ID = @id", conn))
+            using (var cmd = new SqlCommand(
+                @"UPDATE [dbo].[ELEVES] 
+                  SET DELETION_AT = GETDATE(), 
+                      DELETION_BY = @deletedBy 
+                  WHERE ID = @id AND DELETION_AT IS NULL", conn))
             {
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = eleveGuid;
+                cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = eleveGuid;
+                cmd.Parameters.Add("@deletedBy", SqlDbType.Int).Value = userId;
+
                 conn.Open();
                 int rows = cmd.ExecuteNonQuery();
                 if (rows == 0)
-                    throw new Exception("Élève introuvable (ID=" + payload.ID + ").");
+                {
+                    // Vérifier si l'élève existe déjà supprimé ou n'existe pas
+                    using (var checkCmd = new SqlCommand("SELECT COUNT(*) FROM [dbo].[ELEVES] WHERE ID = @id", conn))
+                    {
+                        checkCmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = eleveGuid;
+                        int exists = (int)checkCmd.ExecuteScalar();
+                        if (exists == 0)
+                            throw new Exception("Élève introuvable (ID=" + payload.ID + ").");
+                        else
+                            throw new Exception("L'élève a déjà été supprimé.");
+                    }
+                }
             }
 
             ctx.Response.Write("{\"success\":true,\"message\":\"Élève supprimé avec succès.\"}");

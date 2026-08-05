@@ -1,7 +1,6 @@
 <%@ WebHandler Language="C#" Class="SupprimerClasse" %>
 
 using System;
-using System.Configuration;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -12,44 +11,24 @@ public class SupprimerClasse : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
+        ctx.Response.ContentType = "application/json";
+        ctx.Response.Charset = "utf-8";
+        ctx.Response.Cache.SetNoStore();
+
+        var ser = new JavaScriptSerializer();
+
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
-    }
-        ctx.Response.ContentType = "application/json";
-        JavaScriptSerializer ser = new JavaScriptSerializer();
+
+        if (ctx.Request.HttpMethod != "POST")
+        {
+            ctx.Response.StatusCode = 405;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Méthode non autorisée\"}");
+            return;
+        }
 
         try
         {
@@ -58,26 +37,45 @@ public class SupprimerClasse : IHttpHandler, IRequiresSessionState
                 body = reader.ReadToEnd();
 
             var payload = ser.Deserialize<IdPayload>(body);
-            int idInt;
-            if (!int.TryParse(payload.ID, out idInt)) throw new ArgumentException("ID invalide.");
+            if (payload == null || string.IsNullOrWhiteSpace(payload.ID))
+                throw new ArgumentException("ID de classe invalide.");
 
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            int classeId;
+            if (!int.TryParse(payload.ID, out classeId) || classeId <= 0)
+                throw new ArgumentException("ID de classe invalide.");
+
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand("DELETE FROM [dbo].[Classes] WHERE ID = @id", conn))
+            using (var cmd = new SqlCommand("DELETE FROM [dbo].[CLASSES] WHERE ID = @id", conn))
             {
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.Int).Value = idInt;
+                cmd.Parameters.AddWithValue("@id", classeId);
                 conn.Open();
-                cmd.ExecuteNonQuery();
+                int rows = cmd.ExecuteNonQuery();
+                if (rows == 0)
+                    throw new Exception("Classe introuvable (ID=" + payload.ID + ").");
             }
-            ctx.Response.Write("{\"success\":true}");
+
+            ctx.Response.Write("{\"success\":true,\"message\":\"Classe supprimée avec succès.\"}");
+        }
+        catch (ArgumentException argEx)
+        {
+            ctx.Response.StatusCode = 400;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + argEx.Message.Replace("\"", "\\\"") + "\"}");
         }
         catch (Exception ex)
         {
-            ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
+
     public bool IsReusable { get { return false; } }
-    private class IdPayload { public string ID { get; set; } }
+
+    private class IdPayload
+    {
+        public string ID { get; set; }
+    }
 }

@@ -1,7 +1,7 @@
-<%@ WebHandler Language="C#" Class="SupprimerMatiere" %>
+﻿<%@ WebHandler Language="C#" Class="SupprimerMatiere" %>
 
 using System;
-using System.Configuration;
+using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Web;
@@ -12,61 +12,19 @@ public class SupprimerMatiere : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (ctx.Session == null || ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(ctx))
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(ctx);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        ctx.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = ctx.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = ctx.Request.Headers["X-CSRF-Token"];
-        string sessionToken = ctx.Session["CSRF_TOKEN"] != null ? ctx.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
-        {
-            ctx.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
-            return;
-        }
-    }
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset     = "utf-8";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        JavaScriptSerializer ser = new JavaScriptSerializer();
+        var ser = new JavaScriptSerializer();
 
-        if (ctx.Session["authenticated"] == null || !(bool)ctx.Session["authenticated"])
+        if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
-            ctx.Response.StatusCode = 401;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
-        if (ctx.Request.HttpMethod != "POST")
-        {
-            ctx.Response.StatusCode = 405;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Méthode non autorisée\"}");
-            return;
-        }
+        int userId = AuthHelper.GetUserId(ctx);
 
         try
         {
@@ -74,42 +32,56 @@ public class SupprimerMatiere : IHttpHandler, IRequiresSessionState
             using (var reader = new StreamReader(ctx.Request.InputStream))
                 body = reader.ReadToEnd();
 
-            var payload = ser.Deserialize<IdPayload>(body);
+            var payload = ser.Deserialize<MatierePayload>(body);
+            if (payload == null)
+                throw new ArgumentException("Données invalides.");
 
-            if (payload == null || string.IsNullOrWhiteSpace(payload.ID))
+            Guid matiereId;
+            if (string.IsNullOrEmpty(payload.ID) || !Guid.TryParse(payload.ID, out matiereId))
                 throw new ArgumentException("ID de matière invalide.");
 
-            // Validation GUID
-            Guid matiereGuid;
-            if (!Guid.TryParse(payload.ID, out matiereGuid))
-                throw new ArgumentException("ID de matière invalide.");
-
-            string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+            string connStr = AuthHelper.ConnectionString;
+            if (string.IsNullOrEmpty(connStr))
+                throw new Exception("Chaîne de connexion non trouvée.");
 
             using (var conn = new SqlConnection(connStr))
-            using (var cmd  = new SqlCommand("DELETE FROM [dbo].[MATIERES] WHERE ID = @id", conn))
+            using (var cmd = new SqlCommand(
+                @"UPDATE [dbo].[MATIERES] SET
+                    DELETION_BY = @deletionBy,
+                    DELETION_AT = GETDATE()
+                  WHERE ID = @id", conn))
             {
-                cmd.Parameters.Add("@id", System.Data.SqlDbType.UniqueIdentifier).Value = matiereGuid;
+                cmd.Parameters.Add("@id", SqlDbType.UniqueIdentifier).Value = matiereId;
+                cmd.Parameters.Add("@deletionBy", SqlDbType.Int).Value = userId;
+
                 conn.Open();
-                int rows = cmd.ExecuteNonQuery();
-                if (rows == 0) throw new Exception("Matière introuvable (ID=" + payload.ID + ").");
+                if (cmd.ExecuteNonQuery() == 0)
+                    throw new Exception("Matière introuvable.");
             }
 
-            ctx.Response.Write("{\"success\":true}");
+            ctx.Response.Write("{\"success\":true,\"message\":\"Matière supprimée avec succès.\"}");
         }
-        catch (ArgumentException ex)
+        catch (ArgumentException argEx)
         {
             ctx.Response.StatusCode = 400;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + argEx.Message.Replace("\"", "\\\"") + "\"}");
+        }
+        catch (SqlException sqlEx)
+        {
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Erreur lors de la mise à jour.\"}");
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write("{\"success\":false,\"message\":" + ser.Serialize(ex.Message) + "}");
+            ctx.Response.Write("{\"success\":false,\"message\":\"" + ex.Message.Replace("\"", "\\\"") + "\"}");
         }
     }
 
     public bool IsReusable { get { return false; } }
 
-    private class IdPayload { public string ID { get; set; } }
+    private class MatierePayload
+    {
+        public string ID { get; set; }
+    }
 }

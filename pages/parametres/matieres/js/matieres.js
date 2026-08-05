@@ -18,7 +18,7 @@ var API_MATIERES = {
     modifier: '/pages/parametres/matieres/handlers/ModifierMatiere.ashx',
     supprimer: '/pages/parametres/matieres/handlers/SupprimerMatiere.ashx',
     classes: '/pages/parametres/classes/handlers/GetClasse.ashx',
-    users: '/pages/administrations/utilisateur/handlers/GetUsers.ashx'
+    users: 'handlers/GetUsers.ashx'
 };
 
 // ─────────────────────────────────────────────
