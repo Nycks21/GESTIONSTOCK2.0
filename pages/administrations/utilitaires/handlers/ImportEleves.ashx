@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="ImportEleves" %>
+﻿﻿<%@ WebHandler Language="C#" Class="ImportEleves" %>
 
 using System;
 using System.Web;
@@ -7,8 +7,9 @@ using System.Data.SqlClient;
 using System.Web.Script.Serialization;
 using System.IO;
 using System.Configuration;
+using System.Web.SessionState;
 
-public class ImportEleves : IHttpHandler {
+public class ImportEleves : IHttpHandler, IRequiresSessionState {
 
     // ─── Modèles ─────────────────────────────────────────────────────
     public class ImportRequest {
@@ -68,14 +69,23 @@ public class ImportEleves : IHttpHandler {
             if (!string.IsNullOrEmpty(token) && token == "import2024") {
                 isAuthenticated = true;
             }
-        }
-
-        // ⚠️ Mode dégradé pour tests - À désactiver en production
-        if (!isAuthenticated) {
-            isAuthenticated = true;
-        }
+        } // ⬅️ Accolade fermante ajoutée ici
 
         context.Response.ContentType = "application/json";
+
+        if (!AuthHelper.RequireApiAuth(context, 1))
+        {
+            context.Response.StatusCode = 401;
+            context.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        if (!AuthHelper.HasPermission("importation"))
+        {
+            context.Response.StatusCode = 403;
+            context.Response.Write("{\"success\":false,\"message\":\"Permission importation requise\"}");
+            return;
+        }
         context.Response.Headers["Cache-Control"] = "no-cache";
 
         var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
@@ -176,7 +186,7 @@ public class ImportEleves : IHttpHandler {
             // ═══════════════════════════════════════════════════════
             HashSet<Guid> validClassIds = new HashSet<Guid>();
             try {
-                string sqlClasse = "SELECT ID FROM CLASSE WHERE STATUT = 1";
+                string sqlClasse = "SELECT ID FROM CLASSES WHERE STATUT = 1";
                 using (SqlCommand cmdClasse = new SqlCommand(sqlClasse, conn))
                 using (SqlDataReader reader = cmdClasse.ExecuteReader()) {
                     while (reader.Read()) {
@@ -254,12 +264,13 @@ public class ImportEleves : IHttpHandler {
                         throw new ArgumentException("L'ID de la classe est obligatoire.");
                     }
 
+                    // ✅ Correction ligne 267 : interpolation '$' remplacée par concaténation '+'
                     if (!Guid.TryParse(eleve.CLASSE_ID, out classeId)) {
-                        throw new ArgumentException($"L'ID de la classe '{eleve.CLASSE_ID}' n'est pas un GUID valide.");
+                        throw new ArgumentException("L'ID de la classe '" + eleve.CLASSE_ID + "' n'est pas un GUID valide.");
                     }
 
                     if (!validClassIds.Contains(classeId)) {
-                        throw new ArgumentException($"La classe avec l'ID '{eleve.CLASSE_ID}' n'existe pas ou est inactive.");
+                        throw new ArgumentException("La classe avec l'ID '" + eleve.CLASSE_ID + "' n'existe pas ou est inactive.");
                     }
 
                     using (SqlCommand cmd = new SqlCommand(sql, conn)) {

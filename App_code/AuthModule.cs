@@ -27,10 +27,22 @@ public class AuthModule : IHttpModule
                 return;
             }
 
-            // ✅ Exclure les pages d'authentification et les handlers .ashx
-            if (path.EndsWith("login.aspx") || path.EndsWith("logout.aspx") ||
-                path.EndsWith(".ashx"))
+            // Pages d'authentification
+            if (path.EndsWith("login.aspx") || path.EndsWith("logout.aspx"))
             {
+                return;
+            }
+
+            // Handlers API : session + token obligatoires (rôles vérifiés dans chaque handler)
+            if (path.EndsWith(".ashx"))
+            {
+                if (!AuthHelper.RequireApiAuth(ctx, -1))
+                {
+                    ctx.Response.StatusCode = 401;
+                    ctx.Response.ContentType = "application/json; charset=utf-8";
+                    ctx.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+                    ctx.Response.End();
+                }
                 return;
             }
 

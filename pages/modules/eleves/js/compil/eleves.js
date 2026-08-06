@@ -481,7 +481,7 @@ function renderSimpleTable() {
                     : '<button type="button" class="btn btn-sm btn-primary" style="margin:0 2px;" onclick="openEditEleveModal(\'' + eleve.ID + '\')"><i class="fas fa-edit"></i></button>') +
                 (isCloture
                     ? '<button type="button" class="btn btn-sm btn-secondary" style="margin:0 2px;cursor:not-allowed;" disabled><i class="fas fa-trash"></i></button>'
-                    : '<button type="button" class="btn btn-sm btn-danger" style="margin:0 2px;" onclick="supprimerEleve(\'' + eleve.ID + '\', \'' + eleve.NOM + '\')"><i class="fas fa-trash"></i></button>') +
+                    : '<button type="button" class="btn btn-sm btn-danger" style="margin:0 2px;" onclick="supprimerEleve(\'' + eleve.ID + '\', \'' + escapeHtml(eleve.NOM || '').replace(/'/g, "\\'") + '\')"><i class="fas fa-trash"></i></button>') +
                 '</td>';
         });
     }

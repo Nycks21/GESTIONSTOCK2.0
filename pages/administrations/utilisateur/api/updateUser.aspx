@@ -14,6 +14,12 @@ protected void Page_Load(object sender, EventArgs e)
     Response.Clear();
     Response.Cache.SetNoStore();
 
+    if (!AuthHelper.RequireApiAuth(Context, 1))
+    {
+        WriteJson(401, "error", "Accès non autorisé");
+        return;
+    }
+
     if (Request.HttpMethod == "OPTIONS")
     {
         Response.StatusCode = 200;
@@ -118,8 +124,7 @@ protected void Page_Load(object sender, EventArgs e)
 
                 if (!string.IsNullOrEmpty(password) && password.Length >= 8)
                 {
-                    string hashedPassword = HashPassword(password);
-                    cmd.Parameters.Add("@PWD", SqlDbType.NVarChar, 255).Value = hashedPassword;
+                    cmd.Parameters.Add("@PWD", SqlDbType.NVarChar, 512).Value = PasswordHelper.HashPassword(password);
                 }
 
                 cmd.ExecuteNonQuery();
@@ -212,14 +217,5 @@ private string EscapeJson(string text)
                .Replace("\"", "\\\"")
                .Replace("\r", "")
                .Replace("\n", " ");
-}
-
-private string HashPassword(string password)
-{
-    using (SHA256 sha256 = SHA256.Create())
-    {
-        byte[] hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(password));
-        return Convert.ToBase64String(hashedBytes);
-    }
 }
 </script>

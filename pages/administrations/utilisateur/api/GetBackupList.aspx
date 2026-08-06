@@ -10,6 +10,14 @@ protected void Page_Load(object sender, EventArgs e)
     Response.Clear();
     Response.ContentType = "application/json";
     Response.ContentEncoding = new System.Text.UTF8Encoding(false);
+    Response.Cache.SetNoStore();
+
+    if (!AuthHelper.RequireApiAuth(Context, 0))
+    {
+        Response.StatusCode = 401;
+        Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\",\"backups\":[]}");
+        return;
+    }
     
     try
     {

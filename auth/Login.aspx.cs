@@ -382,13 +382,12 @@ public partial class Login : Page
                 }
 
                 string sql = @"
-                    SELECT IDUSER, ROLEID, ACTIVE, NOM";
+                    SELECT IDUSER, ROLEID, ACTIVE, NOM, PWD";
                 if (hasBlockedUntilColumn) sql += ", BLOCKED_UNTIL";
-                sql += " FROM USERS WHERE USERNAME = @u AND PWD = @p";
+                sql += " FROM USERS WHERE USERNAME = @u";
 
                 SqlCommand cmd = new SqlCommand(sql, conn);
                 cmd.Parameters.AddWithValue("@u", username);
-                cmd.Parameters.AddWithValue("@p", password);
 
                 conn.Open();
                 using (SqlDataReader rd = cmd.ExecuteReader())
@@ -402,9 +401,22 @@ public partial class Login : Page
                             return false;
                         }
 
+                        string storedPwd = rd["PWD"] != DBNull.Value ? rd["PWD"].ToString() : "";
+                        bool needsRehash;
+                        if (!PasswordHelper.VerifyPassword(storedPwd, password, out needsRehash))
+                        {
+                            errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
+                            return false;
+                        }
+
                         idUser = Convert.ToInt32(rd["IDUSER"]);
                         roleId = Convert.ToInt32(rd["ROLEID"]);
                         nomComplet = rd["NOM"].ToString();
+
+                        if (needsRehash)
+                        {
+                            UpgradePasswordHash(idUser, password);
+                        }
 
                         if (roleId != 0 && hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
                         {
@@ -434,6 +446,25 @@ public partial class Login : Page
 
         errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
         return false;
+    }
+
+    private void UpgradePasswordHash(int userId, string plainPassword)
+    {
+        try
+        {
+            string hashed = PasswordHelper.HashPassword(plainPassword);
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                using (SqlCommand cmd = new SqlCommand("UPDATE USERS SET PWD = @p WHERE IDUSER = @id", conn))
+                {
+                    cmd.Parameters.AddWithValue("@p", hashed);
+                    cmd.Parameters.AddWithValue("@id", userId);
+                    conn.Open();
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+        catch { }
     }
 
     // ============================================================

@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
+using System.Web;
 
 public static class AuthHelper
 {
@@ -409,7 +410,7 @@ public static class AuthHelper
             html.Append(roleName);
             html.Append(@"</span>
                     <span id=""navbarUsername"" class=""user-name"">");
-            html.Append(userName);
+            html.Append(HttpUtility.HtmlEncode(userName));
             html.Append(@"</span>
                 </div>
             </div>");
@@ -418,7 +419,7 @@ public static class AuthHelper
         }
         catch (Exception ex)
         {
-            return "<div style='color:red;padding:10px;'>Erreur profil: " + ex.Message + "</div>";
+            return "<div style='color:red;padding:10px;'>Erreur profil: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
         }
     }
 
@@ -504,7 +505,7 @@ public static class AuthHelper
         }
         catch (Exception ex)
         {
-            return "<div style='color:red;padding:10px;'>Erreur: " + ex.Message + "</div>";
+            return "<div style='color:red;padding:10px;'>Erreur: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
         }
     }
 
@@ -858,15 +859,17 @@ public static class AuthHelper
     {
         var session = HttpContext.Current.Session;
         if (session == null || session[SK_USERNAME] == null) return;
-        string username = session[SK_USERNAME].ToString().Replace("'", "\\'");
-        string script = "var el=document.getElementById('navbarUsername'); if(el){el.innerText='" + username + "';}";
+        string username = session[SK_USERNAME].ToString();
+        string script = "var el=document.getElementById('navbarUsername'); if(el){el.textContent="
+            + HttpUtility.JavaScriptStringEncode(username, true) + ";}";
         page.ClientScript.RegisterStartupScript(page.GetType(), "username", script, true);
     }
 
     private static void SetRolename(Page page)
     {
         string roleName = GetRoleName();
-        string script = "var el=document.getElementById('profilUsername'); if(el){el.innerText='" + roleName + "';}";
+        string script = "var el=document.getElementById('profilUsername'); if(el){el.textContent="
+            + HttpUtility.JavaScriptStringEncode(roleName, true) + ";}";
         page.ClientScript.RegisterStartupScript(page.GetType(), "rolename", script, true);
     }
 

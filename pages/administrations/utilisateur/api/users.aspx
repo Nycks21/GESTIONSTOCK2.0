@@ -1,4 +1,4 @@
-﻿﻿<%@ Page Language="C#" ResponseEncoding="utf-8" EnableSessionState="True" %>
+﻿<%@ Page Language="C#" ResponseEncoding="utf-8" EnableSessionState="True" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.Web.Script.Serialization" %>
 <%@ Import Namespace="System.Configuration" %>
@@ -121,7 +121,7 @@ protected void Page_Load(object sender, EventArgs e)
             {
                 cmd.Parameters.AddWithValue("@USERNAME", username);
                 cmd.Parameters.AddWithValue("@NOM", nom);
-                cmd.Parameters.AddWithValue("@PWD", password); // Mot de passe en clair (comme demandé)
+                cmd.Parameters.AddWithValue("@PWD", PasswordHelper.HashPassword(password));
                 cmd.Parameters.AddWithValue("@EMAIL", email);
                 cmd.Parameters.AddWithValue("@ROLEID", roleId);
                 cmd.Parameters.AddWithValue("@TELEPHONE", string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone);

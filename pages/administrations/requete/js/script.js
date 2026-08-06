@@ -46,9 +46,16 @@ function executeCustomSQL() {
             var formData = new URLSearchParams();
             formData.append('query', queryText);
 
+            var sqlHeaders = { 'Content-Type': 'application/x-www-form-urlencoded' };
+            var csrf = typeof getCsrfToken === 'function' ? getCsrfToken()
+                : (document.querySelector('meta[name="csrf-token"]') || {}).content;
+            if (csrf) {
+                sqlHeaders['X-CSRF-Token'] = csrf;
+            }
+
             fetch('handlers/ExecuteSQL.ashx', { 
                 method: 'POST', 
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, 
+                headers: sqlHeaders, 
                 body: formData 
             })
             .then(function (r) { return r.json(); })
@@ -61,11 +68,11 @@ function executeCustomSQL() {
                         sqlCurrentPage = 1;
                         renderSqlTablePaged(resultDiv);
                     } else {
-                        resultDiv.innerHTML = '<div class="alert alert-success m-2">' + res.message + '</div>';
+                        resultDiv.innerHTML = '<div class="alert alert-success m-2">' + escSql(res.message) + '</div>';
                     }
                 } else {
                     // Si le serveur renvoie une erreur (ex: pas autorisé), on l'affiche ici
-                    resultDiv.innerHTML = '<div class="alert alert-danger m-2">' + res.message + '</div>';
+                    resultDiv.innerHTML = '<div class="alert alert-danger m-2">' + escSql(res.message) + '</div>';
                     if(res.message.includes("Autorisation")) {
                         Swal.fire('Accès refusé', 'Vous n\'avez pas les droits pour cette action.', 'error');
                     }

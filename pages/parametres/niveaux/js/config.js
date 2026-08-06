@@ -58,13 +58,11 @@ function getCsrfToken() {
         }
     }
 
-    // Dernier recours
     var session = sessionStorage.getItem('CSRF_TOKEN');
     if (session) return session;
 
-    var newToken = 'Token_' + Date.now() + '_' + Math.random().toString(36).substring(2, 15);
-    sessionStorage.setItem('CSRF_TOKEN', newToken);
-    return newToken;
+    console.warn('Token CSRF introuvable — rechargez la page ou reconnectez-vous.');
+    return '';
 }
 
 function getCsrfHeaders() {

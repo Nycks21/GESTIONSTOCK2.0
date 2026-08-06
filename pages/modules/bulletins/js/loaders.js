@@ -165,7 +165,7 @@ async function afficherListe() {
         var nomPeriode = periodeSelect && periodeSelect.options[periodeSelect.selectedIndex] ? periodeSelect.options[periodeSelect.selectedIndex].text || '' : '';
 
         var info = document.getElementById('tableInfoLabel');
-        if (info) info.innerHTML = '<i class="fas fa-graduation-cap"></i> ' + nomMatiere + ' — ' + nomPeriode;
+        if (info) info.innerHTML = '<i class="fas fa-graduation-cap"></i> ' + escapeHtml(nomMatiere) + ' — ' + escapeHtml(nomPeriode);
 
         var badge = document.getElementById('countBadge');
         if (badge) badge.textContent = currentEleves.length + ' élève(s)';

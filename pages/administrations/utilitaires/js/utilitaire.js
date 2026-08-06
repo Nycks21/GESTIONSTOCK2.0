@@ -891,7 +891,7 @@ function resetImport() {
 // ─────────────────────────────────────────────
 function downloadTemplate() {
     var headers = CHAMPS.map(function (c) { return c.label + (c.required ? ' *' : ''); });
-    var example = ['2024001', '1', 'RAKOTO Jean', '6ème A', 'rakoto@mail.com',
+    var example = ['2024001', '1', 'RAKOTO Jean', '1', 'rakoto@mail.com',
         '0341234567', '2010-05-01', 'M', 'Lot II A Antananarivo', 'RAKOTO Pierre', 'actif'];
 
     var ws = XLSX.utils.aoa_to_sheet([headers, example]);

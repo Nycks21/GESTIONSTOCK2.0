@@ -114,8 +114,8 @@ function initCalendar() {
             tooltip.className = 'event-tooltip';
             var labels = window.typeLabels || {};
             var label = labels[type] || type || 'Événement';
-            var loc = info.event.extendedProps.location ? '<br>📍 ' + info.event.extendedProps.location : '';
-            tooltip.innerHTML = '<strong>' + info.event.title + '</strong><br><span class="tooltip-type">' + label + '</span>' + loc;
+            var loc = info.event.extendedProps.location ? '<br>📍 ' + escapeHtml(info.event.extendedProps.location) : '';
+            tooltip.innerHTML = '<strong>' + escapeHtml(info.event.title) + '</strong><br><span class="tooltip-type">' + escapeHtml(label) + '</span>' + loc;
             info.el.style.position = 'relative';
             info.el.appendChild(tooltip);
             info.el.addEventListener('mouseenter', function() {
