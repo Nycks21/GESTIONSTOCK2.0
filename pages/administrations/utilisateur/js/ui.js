@@ -105,11 +105,6 @@ function createFilterControls() {
             <select id="role-filter" style="width:100%; padding:10px 12px; border:1px solid #ced4da; border-radius:6px;">
                 <option value="">Tous les rôles</option>
                 <option value="Administrateur">Administrateur</option>
-                <option value="Professeur">Professeur</option>
-                <option value="Secrétaire">Secrétaire</option>
-                <option value="Comptable">Comptable</option>
-                <option value="CPE">CPE</option>
-                <option value="Parent">Parent</option>
             </select>
         </div>
         <div style="min-width: 140px;">

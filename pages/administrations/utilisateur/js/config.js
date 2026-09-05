@@ -21,37 +21,26 @@ var API_USERS = {
 };
 
 var PERMISSIONS_LIST = [
-    'dashboard', 'eleves', 'absences', 'bulletins', 'agenda', 'emplois', 'frais',
-    'niveaux', 'salles', 'classes', 'matieres', 'importation',
-    'annees', 'utilisateurs', 'requetes'
+    'accueil', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'inventaire', 'mouvements', 'rapports-stock', 'parametres-stock', 'parametres-users', 'requetes'
 ];
 
 var CHECKBOX_ID_MAP = {
-    'dashboard': 'permDashboard',
-    'eleves': 'permEleves',
-    'absences': 'permAbsences',
-    'bulletins': 'permBulletins',
-    'agenda': 'permAgenda',
-    'emplois': 'permEmplois',
-    'frais': 'permFrais',
-    'niveaux': 'permNiveaux',
-    'salles': 'permSalles',
-    'classes': 'permClasses',
-    'matieres': 'permMatieres',
-    'importation': 'permImportation',
-    'annees': 'permAnnees',
-    'utilisateurs': 'permUtilisateurs',
-    'requetes': 'permRequetes'
+    'accueil': 'permDashboard',
+    'articles': 'permArticles',
+    'categories': 'permCategories',
+    'fournisseurs': 'permFournisseurs',
+    'entrees': 'permEntrees',
+    'sorties': 'permSorties',
+    'inventaire': 'permInventaire',
+    'mouvements': 'permMouvements',
+    'parametres-stock': 'permRapports-stock',
+    'parametres-users': 'permParametres-users',
+    'requetes': 'requetes'
 };
 
 var DEFAULT_ROLE_PERMISSIONS = {
-    'Administrateur': ['dashboard', 'eleves', 'absences', 'bulletins', 'agenda', 'emplois', 'frais', 'niveaux', 'salles', 'classes', 'matieres', 'importation', 'annees', 'utilisateurs'],
-    'SuperAdmin': ['dashboard', 'eleves', 'absences', 'bulletins', 'agenda', 'emplois', 'frais', 'niveaux', 'salles', 'classes', 'matieres', 'importation', 'annees', 'utilisateurs', 'requetes'],
-    'Professeur': ['dashboard', 'eleves', 'bulletins', 'emplois'],
-    'Secrétaire': ['dashboard', 'eleves', 'absences', 'agenda', 'emplois'],
-    'Comptable': ['dashboard', 'frais'],
-    'CPE': ['dashboard', 'eleves', 'absences'],
-    'Parent': ['dashboard', 'bulletins']
+    'Administrateur': ['accueil', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'inventaire', 'mouvements', 'parametres-stock', 'parametres-users'],
+    'SuperAdmin': ['accueil', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'inventaire', 'mouvements', 'parametres-stock', 'parametres-users', 'requetes'],
 };
 
 var CURRENT_VERSION = document.querySelector('[data-version]')?.getAttribute('data-version') || '2.1.17';

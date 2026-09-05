@@ -1,221 +1,269 @@
-<%@ Page Language="C#" AutoEventWireup="true" %>
-<%@ Import Namespace="System.Data" %>
+﻿<%@ Page Language="C#" ResponseEncoding="utf-8" EnableSessionState="True" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
-<%@ Import Namespace="System.Configuration" %>
-<%@ Import Namespace="System.Security.Cryptography" %>
-<%@ Import Namespace="System.Text" %>
 <%@ Import Namespace="System.Web.Script.Serialization" %>
+<%@ Import Namespace="System.Configuration" %>
+<%@ Import Namespace="System.Collections.Generic" %>
 
 <script runat="server">
+private string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
+
 protected void Page_Load(object sender, EventArgs e)
 {
-    Response.ContentType = "application/json; charset=utf-8";
-    Response.ContentEncoding = System.Text.Encoding.UTF8;
+    Response.ContentType = "application/json";
+    Response.ContentEncoding = new System.Text.UTF8Encoding(false);
     Response.Clear();
     Response.Cache.SetNoStore();
 
-    if (!AuthHelper.RequireApiAuth(Context, 1))
-    {
-        WriteJson(401, "error", "Accès non autorisé");
-        return;
-    }
-
-    if (Request.HttpMethod == "OPTIONS")
-    {
-        Response.StatusCode = 200;
-        Response.End();
-        return;
-    }
-
-    if (Request.HttpMethod != "POST")
-    {
-        WriteJson(405, "error", "Méthode non autorisée");
-        return;
-    }
-
-    string idStr = Request.QueryString["id"];
-    string nom = Request.QueryString["nom"];
-    string email = Request.QueryString["email"];
-    string roleStr = Request.QueryString["roleId"];
-    string telephone = Request.QueryString["telephone"];
-    string activeStr = Request.QueryString["active"];
-    string password = Request.QueryString["password"];
-    string permissionsJson = Request.QueryString["permissions"];
-
-    if (nom != null) nom = nom.Trim();
-    if (email != null) email = email.Trim();
-    if (telephone != null) telephone = telephone.Trim();
-    if (password != null) password = password.Trim();
-
-    int id;
-    if (string.IsNullOrEmpty(idStr) || !int.TryParse(idStr, out id))
-    {
-        WriteJson(400, "error", "ID utilisateur invalide");
-        return;
-    }
-
-    if (string.IsNullOrEmpty(nom))
-    {
-        WriteJson(400, "error", "Le nom est requis");
-        return;
-    }
-    if (string.IsNullOrEmpty(email))
-    {
-        WriteJson(400, "error", "L'email est requis");
-        return;
-    }
-
-    int roleId = 1;
-    if (!string.IsNullOrEmpty(roleStr))
-        int.TryParse(roleStr, out roleId);
-
-    int active = 0;
-    if (!string.IsNullOrEmpty(activeStr))
-        active = (activeStr == "1" || activeStr.Equals("true", StringComparison.OrdinalIgnoreCase)) ? 1 : 0;
-
     try
     {
-        var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-        if (connSetting == null)
+        // ✅ Vérification d'authentification - Admin ou SuperAdmin
+        if (!AuthHelper.RequireApiAuth(Context, 1)) // 1 = Admin
         {
-            WriteJson(500, "error", "Chaîne de connexion introuvable");
+            WriteResponse(false, "Accès non autorisé");
             return;
         }
 
-        using (SqlConnection conn = new SqlConnection(connSetting.ConnectionString))
+        if (Request.HttpMethod == "OPTIONS")
+        {
+            Response.StatusCode = 200;
+            Response.End();
+            return;
+        }
+
+        if (Request.HttpMethod != "POST")
+        {
+            Response.StatusCode = 405;
+            WriteResponse(false, "Méthode non autorisée");
+            return;
+        }
+
+        // 🔹 Récupération des paramètres depuis la QueryString
+        int userId = GetQueryInt("id", 0);
+        string nom = GetQueryString("nom");
+        string email = GetQueryString("email");
+        string telephone = GetQueryString("telephone");
+        int roleId = GetQueryInt("roleId", 1);
+        int active = GetQueryInt("active", 1);
+        string password = GetQueryString("password");
+        string permissionsJson = GetQueryString("permissions");
+
+        // Validation de l'ID
+        if (userId <= 0)
+        {
+            WriteResponse(false, "ID utilisateur invalide");
+            return;
+        }
+
+        // Validation des champs obligatoires
+        if (string.IsNullOrEmpty(nom))
+        {
+            WriteResponse(false, "Le nom complet est requis");
+            return;
+        }
+        if (nom.Length > 100)
+        {
+            WriteResponse(false, "Le nom complet est trop long");
+            return;
+        }
+
+        if (string.IsNullOrEmpty(email))
+        {
+            WriteResponse(false, "L'email est requis");
+            return;
+        }
+        if (!IsValidEmail(email))
+        {
+            WriteResponse(false, "Format d'email invalide");
+            return;
+        }
+
+        // Validation du rôle (0-4)
+        int[] allowedRoles = { 0, 1, 2, 3, 4 };
+        if (!Array.Exists(allowedRoles, r => r == roleId))
+        {
+            WriteResponse(false, "Rôle invalide");
+            return;
+        }
+
+        // Validation du mot de passe (si fourni)
+        if (!string.IsNullOrEmpty(password) && password.Length < 8)
+        {
+            WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
+            return;
+        }
+
+        // ID de l'utilisateur qui effectue la mise à jour
+        int currentUserId = AuthHelper.GetUserId(Context);
+
+        using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
 
+            // Vérifier que l'utilisateur existe
             using (SqlCommand checkCmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE IDUSER = @ID", conn))
             {
-                checkCmd.Parameters.AddWithValue("@ID", id);
+                checkCmd.Parameters.AddWithValue("@ID", userId);
                 int exists = (int)checkCmd.ExecuteScalar();
                 if (exists == 0)
                 {
-                    WriteJson(404, "error", "Utilisateur non trouvé");
+                    WriteResponse(false, "Utilisateur non trouvé");
                     return;
                 }
             }
 
-            // Mise à jour des informations de base
+            // Construction de la requête de mise à jour
             string query = @"
-                UPDATE USERS SET 
+                UPDATE USERS SET
                     NOM = @NOM,
                     EMAIL = @EMAIL,
                     ROLEID = @ROLEID,
                     TELEPHONE = @TELEPHONE,
-                    ACTIVE = @ACTIVE";
+                    ACTIVE = @ACTIVE,
+                    UPDATED_AT = GETDATE(),
+                    UPDATED_BY = @UPDATED_BY";
 
-            if (!string.IsNullOrEmpty(password) && password.Length >= 8)
+            // Si un mot de passe est fourni, on l'ajoute
+            if (!string.IsNullOrEmpty(password))
             {
                 query += ", PWD = @PWD";
+            }
+
+            // Mise à jour des permissions si fournies
+            if (!string.IsNullOrEmpty(permissionsJson))
+            {
+                query += ", MENU_PERMISSIONS = @PERMISSIONS";
             }
 
             query += " WHERE IDUSER = @ID";
 
             using (SqlCommand cmd = new SqlCommand(query, conn))
             {
-                cmd.Parameters.Add("@NOM", SqlDbType.NVarChar, 200).Value = nom;
-                cmd.Parameters.Add("@EMAIL", SqlDbType.NVarChar, 200).Value = email;
-                cmd.Parameters.Add("@ROLEID", SqlDbType.Int).Value = roleId;
-                cmd.Parameters.Add("@TELEPHONE", SqlDbType.NVarChar, 50).Value = string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone;
-                cmd.Parameters.Add("@ACTIVE", SqlDbType.Bit).Value = active;
-                cmd.Parameters.Add("@ID", SqlDbType.Int).Value = id;
+                cmd.Parameters.AddWithValue("@NOM", nom);
+                cmd.Parameters.AddWithValue("@EMAIL", email);
+                cmd.Parameters.AddWithValue("@ROLEID", roleId);
+                cmd.Parameters.AddWithValue("@TELEPHONE", string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone);
+                cmd.Parameters.AddWithValue("@ACTIVE", active);
+                cmd.Parameters.AddWithValue("@UPDATED_BY", currentUserId);
+                cmd.Parameters.AddWithValue("@ID", userId);
 
-                if (!string.IsNullOrEmpty(password) && password.Length >= 8)
+                if (!string.IsNullOrEmpty(password))
                 {
-                    cmd.Parameters.Add("@PWD", SqlDbType.NVarChar, 512).Value = PasswordHelper.HashPassword(password);
+                    cmd.Parameters.AddWithValue("@PWD", PasswordHelper.HashPassword(password));
                 }
 
-                cmd.ExecuteNonQuery();
+                if (!string.IsNullOrEmpty(permissionsJson))
+                {
+                    cmd.Parameters.AddWithValue("@PERMISSIONS", permissionsJson);
+                }
+
+                int rowsAffected = cmd.ExecuteNonQuery();
+                if (rowsAffected == 0)
+                {
+                    WriteResponse(false, "Aucune modification effectuée");
+                    return;
+                }
             }
 
-            // Sauvegarde des permissions
-            if (!string.IsNullOrEmpty(permissionsJson))
-            {
-                SavePermissions(id, permissionsJson, conn);
-            }
+            // Journalisation
+            LogSecurityAction(conn, currentUserId, "USER_UPDATE", "Mise à jour de l'utilisateur ID " + userId);
 
-            WriteJson(200, "success", "Utilisateur mis à jour avec succès");
+            WriteResponse(true, "Utilisateur mis à jour avec succès", userId);
+        }
+    }
+    catch (SqlException ex)
+    {
+        if (ex.Number == 2627)
+        {
+            WriteResponse(false, "Conflit d'identifiant (peut-être email déjà utilisé)");
+        }
+        else if (ex.Number == 547)
+        {
+            WriteResponse(false, "Violation de contrainte de clé étrangère");
+        }
+        else
+        {
+            LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message);
+            WriteResponse(false, "Erreur de base de données");
         }
     }
     catch (Exception ex)
     {
-        string safeMessage = ex.Message.Replace("\"", "'").Replace("\r", "").Replace("\n", " ");
-        WriteJson(500, "error", "Erreur serveur: " + safeMessage);
+        Response.StatusCode = 500;
+        LogSecurityAction(null, AuthHelper.GetUserId(Context), "SYSTEM_ERROR", ex.Message);
+        WriteResponse(false, "Erreur système");
     }
 }
 
-private void SavePermissions(int userId, string permissionsJson, SqlConnection conn)
+// ------------------- Méthodes utilitaires -------------------
+
+private string GetQueryString(string key)
 {
-    // Vérifier si la colonne MENU_PERMISSIONS existe
-    string checkColumnQuery = @"
-        SELECT COUNT(*) 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
-    
-    SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn);
-    int columnExists = (int)checkCmd.ExecuteScalar();
-    
-    if (columnExists > 0)
+    string val = Request.QueryString[key];
+    return val != null ? val.Trim() : "";
+}
+
+private int GetQueryInt(string key, int defaultValue)
+{
+    string val = Request.QueryString[key];
+    if (string.IsNullOrEmpty(val))
+        return defaultValue;
+    int result;
+    if (int.TryParse(val, out result))
+        return result;
+    return defaultValue;
+}
+
+private bool IsValidEmail(string email)
+{
+    try
     {
-        // Utiliser la colonne JSON
-        string sql = "UPDATE USERS SET MENU_PERMISSIONS = @permissions WHERE IDUSER = @id";
-        SqlCommand cmd = new SqlCommand(sql, conn);
-        cmd.Parameters.AddWithValue("@permissions", permissionsJson);
-        cmd.Parameters.AddWithValue("@id", userId);
-        cmd.ExecuteNonQuery();
+        var addr = new System.Net.Mail.MailAddress(email);
+        return addr.Address == email;
     }
-    else
+    catch
     {
-        // Vérifier si la table USER_PERMISSIONS existe
-        string checkTableQuery = @"
-            SELECT COUNT(*) 
-            FROM INFORMATION_SCHEMA.TABLES 
-            WHERE TABLE_NAME = 'USER_PERMISSIONS'";
-        
-        SqlCommand checkTableCmd = new SqlCommand(checkTableQuery, conn);
-        int tableExists = (int)checkTableCmd.ExecuteScalar();
-        
-        if (tableExists > 0)
+        return false;
+    }
+}
+
+private void WriteResponse(bool success, string message, int userId = 0)
+{
+    var serializer = new JavaScriptSerializer();
+    var response = new Dictionary<string, object>();
+    response["success"] = success;
+    response["message"] = message;
+    if (userId > 0)
+    {
+        response["userId"] = userId;
+    }
+    Response.Write(serializer.Serialize(response));
+}
+
+private void LogSecurityAction(SqlConnection conn, int userId, string action, string details)
+{
+    try
+    {
+        bool closeConn = conn == null;
+        if (closeConn)
         {
-            // Supprimer les anciennes permissions
-            string deleteSql = "DELETE FROM USER_PERMISSIONS WHERE USER_ID = @id";
-            SqlCommand deleteCmd = new SqlCommand(deleteSql, conn);
-            deleteCmd.Parameters.AddWithValue("@id", userId);
-            deleteCmd.ExecuteNonQuery();
-            
-            // Insérer les nouvelles permissions
-            var serializer = new JavaScriptSerializer();
-            List<string> permissions = serializer.Deserialize<List<string>>(permissionsJson);
-            
-            foreach (string perm in permissions)
-            {
-                string insertSql = "INSERT INTO USER_PERMISSIONS (USER_ID, PERMISSION_NAME) VALUES (@id, @perm)";
-                SqlCommand insertCmd = new SqlCommand(insertSql, conn);
-                insertCmd.Parameters.AddWithValue("@id", userId);
-                insertCmd.Parameters.AddWithValue("@perm", perm);
-                insertCmd.ExecuteNonQuery();
-            }
+            conn = new SqlConnection(connStr);
+            conn.Open();
         }
+
+        string sql = @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
+                       VALUES (@UserId, @Action, @Details, @IP, GETDATE())";
+        using (SqlCommand cmd = new SqlCommand(sql, conn))
+        {
+            cmd.Parameters.AddWithValue("@UserId", userId);
+            cmd.Parameters.AddWithValue("@Action", action);
+            cmd.Parameters.AddWithValue("@Details", details);
+            cmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
+            cmd.ExecuteNonQuery();
+        }
+
+        if (closeConn)
+            conn.Close();
     }
-}
-
-private void WriteJson(int statusCode, string status, string message)
-{
-    Response.StatusCode = statusCode;
-    bool success = (status == "success");
-    string json = "{\"status\":\"" + status + "\",\"success\":" + success.ToString().ToLower() + ",\"message\":\"" + EscapeJson(message) + "\"}";
-    Response.Write(json);
-    HttpContext.Current.ApplicationInstance.CompleteRequest();
-}
-
-private string EscapeJson(string text)
-{
-    if (string.IsNullOrEmpty(text)) return "";
-    return text.Replace("\\", "\\\\")
-               .Replace("\"", "\\\"")
-               .Replace("\r", "")
-               .Replace("\n", " ");
+    catch { /* Ne pas échouer si le log échoue */ }
 }
 </script>

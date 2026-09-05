@@ -23,10 +23,10 @@ public partial class Login : Page
     {
         connStr = AuthHelper.ConnectionString; // ✅ Utilisation centralisée
 
-        // ✅ Si déjà authentifié, rediriger vers le dashboard
+        // ✅ Si déjà authentifié, rediriger vers le index
         if (!IsPostBack && AuthHelper.IsAuthenticated(Context))
         {
-            Response.Redirect("~/pages/accueil/dashboards/index.aspx", true);
+            Response.Redirect("~/pages/accueil/index.aspx", true);
             return;
         }
 
@@ -279,10 +279,10 @@ public partial class Login : Page
             sessionStorage.setItem('loginToast', 'success|Authentification réussie - Bienvenue !');
             setTimeout(function() {
                 if (typeof redirectTo === 'function') {
-                    redirectTo('/pages/accueil/dashboards/index.aspx');
+                    redirectTo('/pages/accueil/index.aspx');
                 } else {
                     window.isRedirecting = true;
-                    window.location.href = '/pages/accueil/dashboards/index.aspx';
+                    window.location.href = '/pages/accueil/index.aspx';
                 }
             }, 3000);";
         ScriptManager.RegisterStartupScript(this, GetType(), "redirectAfterLogin", redirectScript, true);
@@ -371,8 +371,8 @@ public partial class Login : Page
             {
                 bool hasBlockedUntilColumn = false;
                 string checkColumnSql = @"
-                    SELECT COUNT(*) 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
                     WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'BLOCKED_UNTIL'";
                 using (SqlCommand checkCmd = new SqlCommand(checkColumnSql, conn))
                 {
@@ -477,7 +477,7 @@ public partial class Login : Page
         {
             using (SqlConnection conn = new SqlConnection(connStr))
             {
-                string sql = @"SELECT DISTINCT c.ID, c.NOM 
+                string sql = @"SELECT DISTINCT c.ID, c.NOM
                             FROM CLASSES c
                             INNER JOIN MATIERES m ON m.CLASSE_ID = c.ID
                             WHERE m.ENSEIGNANT = @professeurId

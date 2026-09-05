@@ -51,7 +51,7 @@ protected void Page_Load(object sender, EventArgs e)
 
         var serializer = new JavaScriptSerializer();
         Dictionary<string, object> data = null;
-        
+
         try
         {
             data = serializer.Deserialize<Dictionary<string, object>>(jsonString);
@@ -75,7 +75,7 @@ protected void Page_Load(object sender, EventArgs e)
         string telephone = GetStringValue(data, "TELEPHONE");
         int roleId = GetIntValue(data, "ROLEID", 1);
         int active = GetIntValue(data, "ACTIVE", 1);
-        
+
         // ✅ Validation des entrées
         if (!ValidateUserData(username, nom, password, email, roleId))
         {
@@ -94,6 +94,9 @@ protected void Page_Load(object sender, EventArgs e)
                 }
             }
         }
+
+        // 🔹 Récupération de l'ID de l'utilisateur connecté (celui qui crée)
+        int currentUserId = AuthHelper.GetUserId(Context);
 
         using (SqlConnection conn = new SqlConnection(connStr))
         {
@@ -114,10 +117,11 @@ protected void Page_Load(object sender, EventArgs e)
             // Sérialiser les permissions en JSON
             string permissionsJson = serializer.Serialize(permissions);
 
+            // 🔹 Requête modifiée : CREATED_BY utilise @CREATED_BY
             using (SqlCommand cmd = new SqlCommand(
-                @"INSERT INTO USERS (USERNAME, NOM, PWD, EMAIL, ROLEID, TELEPHONE, ACTIVE, MENU_PERMISSIONS, CREATED_AT, UPDATED_AT)
+                @"INSERT INTO USERS (USERNAME, NOM, PWD, EMAIL, ROLEID, TELEPHONE, ACTIVE, MENU_PERMISSIONS, CREATED_AT, CREATED_BY)
                   OUTPUT INSERTED.IDUSER
-                  VALUES (@USERNAME, @NOM, @PWD, @EMAIL, @ROLEID, @TELEPHONE, @ACTIVE, @MENU_PERMISSIONS, GETDATE(), GETDATE())", conn))
+                  VALUES (@USERNAME, @NOM, @PWD, @EMAIL, @ROLEID, @TELEPHONE, @ACTIVE, @MENU_PERMISSIONS, GETDATE(), @CREATED_BY)", conn))
             {
                 cmd.Parameters.AddWithValue("@USERNAME", username);
                 cmd.Parameters.AddWithValue("@NOM", nom);
@@ -127,12 +131,14 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.Parameters.AddWithValue("@TELEPHONE", string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone);
                 cmd.Parameters.AddWithValue("@ACTIVE", active);
                 cmd.Parameters.AddWithValue("@MENU_PERMISSIONS", permissionsJson);
+                // 🔹 Ajout du paramètre pour l'ID du créateur
+                cmd.Parameters.AddWithValue("@CREATED_BY", currentUserId);
 
                 int newUserId = (int)cmd.ExecuteScalar();
-                
+
                 // ✅ Journalisation de l'action
-                LogSecurityAction(conn, AuthHelper.GetUserId(Context), "USER_CREATE", "Création de l'utilisateur " + username);
-                
+                LogSecurityAction(conn, currentUserId, "USER_CREATE", "Création de l'utilisateur " + username);
+
                 WriteResponse(true, "Utilisateur ajouté avec succès", newUserId);
             }
         }
@@ -149,7 +155,6 @@ protected void Page_Load(object sender, EventArgs e)
         }
         else
         {
-            // ✅ Log sans exposer les détails
             LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message);
             WriteResponse(false, "Erreur de base de données");
         }
@@ -162,7 +167,7 @@ protected void Page_Load(object sender, EventArgs e)
     }
 }
 
-// ✅ Validation des données
+// ✅ Validation des données (inchangé)
 private bool ValidateUserData(string username, string nom, string password, string email, int roleId)
 {
     if (string.IsNullOrEmpty(username))
@@ -180,7 +185,7 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Le nom d'utilisateur contient des caractères invalides");
         return false;
     }
-    
+
     if (string.IsNullOrEmpty(nom))
     {
         WriteResponse(false, "Le nom complet est requis");
@@ -191,7 +196,7 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Le nom complet est trop long");
         return false;
     }
-    
+
     if (string.IsNullOrEmpty(password))
     {
         WriteResponse(false, "Le mot de passe est requis");
@@ -202,7 +207,7 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
         return false;
     }
-    
+
     if (string.IsNullOrEmpty(email))
     {
         WriteResponse(false, "L'email est requis");
@@ -213,7 +218,7 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Format d'email invalide");
         return false;
     }
-    
+
     // ✅ Rôles autorisés
     int[] allowedRoles = { 0, 1, 2, 3, 4 };
     if (!Array.Exists(allowedRoles, r => r == roleId))
@@ -221,7 +226,7 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Rôle invalide");
         return false;
     }
-    
+
     return true;
 }
 
@@ -274,7 +279,7 @@ private void WriteResponse(bool success, string message, int userId = 0)
     Response.Write(serializer.Serialize(response));
 }
 
-// ✅ Journalisation de sécurité
+// ✅ Journalisation de sécurité (modifiée pour accepter l'ID)
 private void LogSecurityAction(SqlConnection conn, int userId, string action, string details)
 {
     try
@@ -285,7 +290,7 @@ private void LogSecurityAction(SqlConnection conn, int userId, string action, st
             conn = new SqlConnection(connStr);
             conn.Open();
         }
-        
+
         string sql = @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
                        VALUES (@UserId, @Action, @Details, @IP, GETDATE())";
         using (SqlCommand cmd = new SqlCommand(sql, conn))
@@ -296,7 +301,7 @@ private void LogSecurityAction(SqlConnection conn, int userId, string action, st
             cmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
             cmd.ExecuteNonQuery();
         }
-        
+
         if (closeConn)
             conn.Close();
     }

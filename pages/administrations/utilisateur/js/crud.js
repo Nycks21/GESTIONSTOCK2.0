@@ -395,7 +395,7 @@ async function backupDatabase() {
                     </p>
                 </div>
                 <div style="margin-top: 15px; padding: 8px; background: #e8f4fd; border-radius: 5px; text-align: center;">
-                    <i class="fas fa-hourglass-half"></i> 
+                    <i class="fas fa-hourglass-half"></i>
                     <span style="font-size: 13px;">Le bouton de confirmation sera actif dans <strong id="countdownDisplay">5</strong> seconde(s)</span>
                 </div>
             </div>
@@ -478,7 +478,7 @@ async function backupDatabase() {
                 <div style="text-align: center;">
                     <p>La sauvegarde est programmée à <strong>${selectedTime}</strong></p>
                     <p class="swal2-text" style="font-size: 14px; color: #28a745;">
-                        <i class="fas fa-check-circle"></i> 
+                        <i class="fas fa-check-circle"></i>
                         Tous les utilisateurs ont été notifiés et verront un compte à rebours.
                     </p>
                     <div style="margin: 20px 0; background: #f8f9fa; padding: 15px; border-radius: 8px;">
@@ -491,7 +491,7 @@ async function backupDatabase() {
                         </div>
                     </div>
                     <p style="font-size: 12px; color: #6c757d;">
-                        <i class="fas fa-info-circle"></i> 
+                        <i class="fas fa-info-circle"></i>
                         Les utilisateurs seront déconnectés automatiquement à <strong>${selectedTime}</strong>
                     </p>
                 </div>
@@ -709,9 +709,9 @@ function loadBackupList() {
                     var sizeMB = (backup.size / 1024 / 1024).toFixed(2);
 
                     html += `
-                        <div class="backup-item" onclick="selectBackupFile('${escapeHtml(backup.path)}', '${escapeHtml(backup.name)}', ${backup.size}, '${escapeHtml(backup.date)}')" 
+                        <div class="backup-item" onclick="selectBackupFile('${escapeHtml(backup.path)}', '${escapeHtml(backup.name)}', ${backup.size}, '${escapeHtml(backup.date)}')"
                              style="padding: 10px; border-bottom: 1px solid #dee2e6; cursor: pointer; transition: background 0.2s; ${isSelected ? 'background: #e8f4fd;' : ''}"
-                             onmouseover="this.style.background='#f0f7ff'" 
+                             onmouseover="this.style.background='#f0f7ff'"
                              onmouseout="this.style.background='${isSelected ? '#e8f4fd' : ''}'">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
                                 <div>
@@ -869,11 +869,11 @@ async function executeRestore() {
                     <li>Taille: <strong>${(selectedRestoreFile.size / 1024 / 1024).toFixed(2)} Mo</strong></li>
                 </ul>
                 <p style="color: #dc3545; font-weight: bold; padding: 10px; background: #fff3cd; border-radius: 5px;">
-                    <i class="fas fa-exclamation-triangle"></i> 
+                    <i class="fas fa-exclamation-triangle"></i>
                     Tous les utilisateurs seront déconnectés et la base sera remplacée.
                 </p>
                 <p style="font-size: 12px; color: #6c757d;">
-                    <i class="fas fa-info-circle"></i> 
+                    <i class="fas fa-info-circle"></i>
                     Veuillez confirmer en tapant le nom de la base de données ci-dessous.
                 </p>
                 <input type="text" id="restoreConfirmInput" class="swal2-input" placeholder="Tapez MONAPPECOLE2 pour confirmer" style="margin-top: 10px;">
@@ -1018,7 +1018,7 @@ async function executeRestore() {
                         <p>La base de données a été restaurée avec succès.</p>
                         <p><strong>Fichier:</strong> ${selectedRestoreFile.name}</p>
                         <p style="color: #dc3545; font-weight: bold;">
-                            <i class="fas fa-exclamation-triangle"></i> 
+                            <i class="fas fa-exclamation-triangle"></i>
                             Vous allez être déconnecté pour finaliser la restauration.
                         </p>
                         <p style="font-size: 12px; color: #6c757d;">
@@ -1180,14 +1180,14 @@ function showUpdateAvailableModal(data) {
                         <span style="margin-left: 15px;"><i class="fas fa-hdd"></i> Taille : ${updateSize}</span>
                     </p>
                 </div>
-                
+
                 <div style="margin-bottom: 15px;">
                     <p style="font-weight: bold; margin-bottom: 8px;">📝 Journal des modifications :</p>
                     <ul style="padding-left: 20px; margin: 0;">
                         ${changelog.map(function(item) { return '<li style="margin-bottom: 4px;">' + item + '</li>'; }).join('')}
                     </ul>
                 </div>
-                
+
                 <div style="background: #fff3cd; padding: 10px; border-radius: 6px; border-left: 4px solid #ffc107;">
                     <p style="margin: 0; font-size: 13px;">
                         <i class="fas fa-info-circle" style="color: #ffc107;"></i>

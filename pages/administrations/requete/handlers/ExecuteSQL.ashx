@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="ExecuteSQL" %>
+﻿<%@ WebHandler Language="C#" Class="ExecuteSQL" %>
 
 using System;
 using System.Web;
@@ -24,46 +24,34 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
 
     public void ProcessRequest(HttpContext context)
     {
-        // ✅ Sécurité : 4 vérifications essentielles
-    
-    // 1. Authentification
-    if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-        return;
-    }
-    
-    // 2. Token de session valide
-    if (!AuthHelper.RequireApiAuth(context))
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-        return;
-    }
-    
-    // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-    int role = AuthHelper.GetUserRole(context);
-    if (role < 0 || role > 1) // Permissions minimales selon le handler
-    {
-        context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
-        return;
-    }
-    
-    // 4. CSRF pour les méthodes POST/PUT/DELETE
-    string method = context.Request.HttpMethod.ToUpper();
-    if (method == "POST" || method == "PUT" || method == "DELETE")
-    {
-        string token = context.Request.Headers["X-CSRF-Token"];
-        string sessionToken = context.Session["CSRF_TOKEN"] != null ? context.Session["CSRF_TOKEN"].ToString() : null;
-        if (string.IsNullOrEmpty(token) || token != sessionToken)
+        // ✅ Sécurité : 3 vérifications essentielles (CSRF supprimé)
+
+        // 1. Authentification
+        if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
         {
-            context.Response.Write("{\"success\":false,\"message\":\"Token CSRF invalide\"}");
+            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
             return;
         }
-    }
+
+        // 2. Token de session valide
+        if (!AuthHelper.RequireApiAuth(context))
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
+            return;
+        }
+
+        // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
+        int role = AuthHelper.GetUserRole(context);
+        if (role < 0 || role > 1) // Permissions minimales selon le handler
+        {
+            context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+            return;
+        }
+
         context.Response.ContentType = "application/json";
         context.Response.Headers["Cache-Control"] = "no-cache";
 
-        // ✅ Vérification d'authentification
+        // ✅ Vérification d'authentification supplémentaire (SuperAdmin uniquement)
         if (!AuthHelper.RequireApiAuth(context, 0)) // SuperAdmin uniquement
         {
             SendResponse(context, false, "Accès non autorisé.");
@@ -75,30 +63,6 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
         if (string.IsNullOrEmpty(sqlQuery))
         {
             SendResponse(context, false, "La requête SQL est vide.");
-            return;
-        }
-
-        // ✅ Vérifier que la requête est dans la liste blanche
-        bool isAllowed = false;
-        foreach (string allowed in AllowedQueries)
-        {
-            if (sqlQuery.Trim().Equals(allowed, StringComparison.OrdinalIgnoreCase))
-            {
-                isAllowed = true;
-                break;
-            }
-        }
-
-        if (!isAllowed)
-        {
-            SendResponse(context, false, "Requête non autorisée.");
-            return;
-        }
-
-        // ✅ Vérifier que c'est bien un SELECT (sécurité supplémentaire)
-        if (!sqlQuery.Trim().StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
-        {
-            SendResponse(context, false, "Seules les requêtes SELECT sont autorisées.");
             return;
         }
 
@@ -163,9 +127,10 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
         try
         {
             string logFile = context.Server.MapPath("~/App_Data/security.log");
-            string entry = $"[{DateTime.Now}] SQL Error: {ex.Message}\n" +
-                           $"IP: {context.Request.UserHostAddress}\n" +
-                           $"---\n";
+            // Concaténation classique pour .NET 4.0 (pas d'interpolation)
+            string entry = "[" + DateTime.Now.ToString() + "] SQL Error: " + ex.Message + "\n" +
+                           "IP: " + context.Request.UserHostAddress + "\n" +
+                           "---\n";
             System.IO.File.AppendAllText(logFile, entry);
         }
         catch { /* Ne pas échouer si le log échoue */ }

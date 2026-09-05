@@ -299,13 +299,14 @@
     <div class="login-box">
         <div class="card card-outline card-primary">
             <div class="card-header text-center">
-                <img src="../img/logo1.png" alt="Logo" class="img-circle" style="width: 100px; height: 100px; position: relative;" />
+                <img src="../img/logo1.png" alt="Logo" style="width: 130px; height: 100px; position: relative;" />
                 <hr />
-                <a class="h2"><b>Gestion Scolaire</b></a>
+                <h4 style="color: #13245C">Unité de Facilitation de projet</h4>
+                <hr />
+                <a class="h2"><b>Gestion de Stock</b></a>
             </div>
-            <div class="card-body">
-                <p class="login-box-msg">Connexion</p>
-                <form id="form1" runat="server" style="gap:10px;">
+            <div class="card-body" style="background-color: #f6f6f6">
+                <form id="form1" runat="server" style="gap:10px">
                     <asp:HiddenField ID="hfTimerEnabled" runat="server" Value="false" />
                     <asp:Label ID="lblLicenceInfo" runat="server" ForeColor="#856404" CssClass="mb-2 d-block licence-warning"
                         Font-Bold="true" Visible="false"></asp:Label>
@@ -325,7 +326,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="input-group mb-1">
+                    <div class="input-group mb-3">
                         <asp:TextBox ID="txtPassword" CssClass="form-control" runat="server" TextMode="Password"
                             Placeholder="Mot de passe" autocomplete="current-password"></asp:TextBox>
                         <div class="input-group-append">

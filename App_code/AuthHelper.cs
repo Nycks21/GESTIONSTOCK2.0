@@ -9,397 +9,450 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
-using System.Web;
 
 public static class AuthHelper
 {
-    // ============================================================
-    // CONSTANTES ET CHAMPS PRIVÉS
-    // ============================================================
-    private static readonly string connStr;
-    private const string SK_AUTHENTICATED = "authenticated";
-    private const string SK_USERNAME = "username";
-    private const string SK_IDUSER = "IDUSER";
-    private const string SK_USERROLE = "USERROLE";
-    private const string SK_SESSION_TOKEN = "SESSION_TOKEN";
-    private const string SK_USER_PERMISSIONS = "USER_PERMISSIONS";
+  // ============================================================
+  // CONSTANTES ET CHAMPS PRIVÉS
+  // ============================================================
+  private static readonly string connStr;
+  private const string SK_AUTHENTICATED = "authenticated";
+  private const string SK_USERNAME = "username";
+  private const string SK_IDUSER = "IDUSER";
+  private const string SK_USERROLE = "USERROLE";
+  private const string SK_SESSION_TOKEN = "SESSION_TOKEN";
+  private const string SK_USER_PERMISSIONS = "USER_PERMISSIONS";
 
-    // ✅ Constructeur statique (initialisation de la chaîne de connexion)
-    static AuthHelper()
+  // ✅ Constructeur statique (initialisation de la chaîne de connexion)
+  static AuthHelper()
+  {
+    try
     {
-        try
+      var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
+      if (connSetting != null)
+      {
+        connStr = connSetting.ConnectionString;
+        if (connStr == null) connStr = "";
+      }
+      else
+      {
+        connStr = "";
+      }
+    }
+    catch
+    {
+      connStr = "";
+    }
+  }
+
+  // ============================================================
+  // EXPOSITION DE LA CHAÎNE DE CONNEXION
+  // ============================================================
+  public static string ConnectionString
+  {
+    get { return connStr; }
+  }
+
+  // ============================================================
+  // VÉRIFICATION D'AUTHENTIFICATION (pour pages et handlers)
+  // ============================================================
+  public static bool IsAuthenticated(HttpContext context)
+  {
+    if (context == null || context.Session == null)
+      return false;
+
+    return context.Session[SK_AUTHENTICATED] != null &&
+           (bool)context.Session[SK_AUTHENTICATED];
+  }
+
+  // ============================================================
+  // GARDE-FOU UNIFIÉ POUR LES HANDLERS .ASHX
+  // ============================================================
+  public static bool RequireApiAuth(HttpContext context, int minRole = -1)
+  {
+    if (context == null || context.Session == null)
+      return false;
+
+    if (context.Session[SK_AUTHENTICATED] == null || !(bool)context.Session[SK_AUTHENTICATED])
+      return false;
+
+    if (!ValidateSessionToken(context))
+      return false;
+
+    if (minRole >= 0)
+    {
+      int userRole = GetUserRole(context);
+      // SuperAdmin (0) est toujours autorisé
+      if (userRole == 0) return true;
+      if (userRole < minRole) return false;
+    }
+
+    return true;
+  }
+
+  public static bool CanManageEmploi(HttpContext context)
+  {
+    if (context == null || context.Session == null)
+      return false;
+
+    int userRole = GetUserRole(context);
+    // Autoriser SuperAdmin, Admin - à adapter selon besoin
+    return userRole == 0 || userRole == 1;
+  }
+
+  // ============================================================
+  // VÉRIFICATION DU TOKEN DE SESSION EN BASE
+  // ============================================================
+  private static bool ValidateSessionToken(HttpContext context)
+  {
+    try
+    {
+      int userId = GetUserId(context);
+      string sessionToken = context.Session[SK_SESSION_TOKEN] as string;
+
+      if (userId <= 0 || string.IsNullOrEmpty(sessionToken))
+      {
+        LogAuthError("ValidateSessionToken: userId ou token manquant (userId=" + userId + ", token=" + (string.IsNullOrEmpty(sessionToken) ? "vide" : "présent") + ")");
+        return false;
+      }
+
+      if (string.IsNullOrEmpty(connStr))
+      {
+        LogAuthError("ValidateSessionToken: chaîne de connexion vide");
+        return false;
+      }
+
+      using (SqlConnection conn = new SqlConnection(connStr))
+      {
+        conn.Open();
+        string sql = "SELECT COUNT(*) FROM USERS WHERE IDUSER = @userId AND SESSION_TOKEN = @token";
+        using (SqlCommand cmd = new SqlCommand(sql, conn))
         {
-            var connSetting = ConfigurationManager.ConnectionStrings["MaConnexion"];
-            if (connSetting != null)
-            {
-                connStr = connSetting.ConnectionString;
-                if (connStr == null) connStr = "";
-            }
-            else
-            {
-                connStr = "";
-            }
+          cmd.Parameters.AddWithValue("@userId", userId);
+          cmd.Parameters.AddWithValue("@token", sessionToken);
+          int count = (int)cmd.ExecuteScalar();
+          if (count == 0)
+            LogAuthError("ValidateSessionToken: token invalide ou expiré pour userId=" + userId);
+          return count > 0;
         }
-        catch
+      }
+    }
+    catch (Exception ex)
+    {
+      // ✅ Log l'erreur au lieu de l'avaler silencieusement
+      LogAuthError("ValidateSessionToken exception: " + ex.Message);
+      return false;
+    }
+  }
+
+  private static void LogAuthError(string message)
+  {
+    try
+    {
+      string logFile = HttpContext.Current.Server.MapPath("~/App_Data/auth_token.log");
+      System.IO.File.AppendAllText(logFile,
+          string.Format("[{0}] {1}\n", DateTime.Now, message));
+    }
+    catch { }
+  }
+
+  // ============================================================
+  // STRUCTURE D'UN MENU
+  // ============================================================
+  public class MenuItem
+  {
+    public string Code { get; set; }
+    public string Text { get; set; }
+    public string Url { get; set; }
+    public string Icon { get; set; }
+    public string Section { get; set; }
+    public int Order { get; set; }
+    public List<MenuItem> Children { get; set; }
+
+    public MenuItem()
+    {
+      Children = new List<MenuItem>();
+    }
+  }
+
+  // ============================================================
+  // DÉFINITION DES MENUS (tous les menus possibles)
+  // ============================================================
+  public static readonly List<MenuItem> AllMenus = new List<MenuItem>
+    {
+        // Dashboard
+        new MenuItem { Code = "accueil", Text = "Accueil", Url = "/pages/accueil/index.aspx", Icon = "fas fa-chalkboard", Section = "Accueil", Order = 1 },
+        // Stock
+        new MenuItem { Code = "unites", Text = "Unité", Url = "/pages/modules/unites/unites.aspx", Icon = "fas fa-ruler", Section = "Paramètres", Order = 2 },
+        new MenuItem { Code = "categories", Text = "Catégories", Url = "/pages/modules/categories/categories.aspx", Icon = "fas fa-tags", Section = "Paramètres", Order = 3 },
+        new MenuItem { Code = "fournisseurs", Text = "Fournisseurs", Url = "/pages/modules/fournisseurs/fournisseurs.aspx", Icon = "fas fa-truck", Section = "Paramètres", Order = 4 },
+
+        // Mouvements
+        new MenuItem { Code = "articles", Text = "Articles", Url = "/pages/modules/articles/articles.aspx", Icon = "fas fa-boxes", Section = "Mouvements", Order = 5 },
+        new MenuItem { Code = "entrees", Text = "Entrées", Url = "/pages/modules/entrees/entrees.aspx", Icon = "fas fa-arrow-down", Section = "Mouvements", Order = 6 },
+        new MenuItem { Code = "demandes", Text = "Demandes", Url = "/pages/modules/demandes/demandes.aspx", Icon = "fas fa-file-alt", Section = "Mouvements", Order = 6 },
+        new MenuItem { Code = "sorties", Text = "Sorties", Url = "/pages/modules/sorties/sorties.aspx", Icon = "fas fa-arrow-up", Section = "Mouvements", Order = 7 },
+        new MenuItem { Code = "stock", Text = "Stock", Url = "/pages/modules/stock/stock.aspx", Icon = "fas fa-warehouse", Section = "Mouvements", Order = 8 },
+
+
+        // Demandes
+        new MenuItem { Code = "saisie", Text = "Saisies", Url = "/pages/modules/saisie/saisie.aspx", Icon = "fas fa-file-alt", Section = "Demandes", Order = 9 },
+        new MenuItem { Code = "validation", Text = "Validation", Url = "/pages/modules/validation/validation.aspx", Icon = "fas fa-check-circle", Section = "Demandes", Order = 10 },
+        new MenuItem { Code = "generation", Text = "Génération", Url = "/pages/modules/generation/generation.aspx", Icon = "fas fa-cogs", Section = "Demandes", Order = 11 },
+
+
+        // Rapports
+        new MenuItem { Code = "inventaire", Text = "Inventaire", Url = "/pages/modules/inventaire/inventaire.aspx", Icon = "fas fa-clipboard-list", Section = "Rapports", Order = 12 },
+        new MenuItem { Code = "mouvements", Text = "Historique", Url = "/pages/modules/mouvements/mouvements.aspx", Icon = "fas fa-history", Section = "Rapports", Order = 13 },
+        new MenuItem { Code = "rapports-stock", Text = "Exploitations", Url = "/pages/rapports/stock-disponible.aspx", Icon = "fas fa-chart-bar", Section = "Rapports", Order = 14 },
+
+        // Administration
+        new MenuItem { Code = "annee", Text = "Année", Url = "/pages/administrations/annee/annee.aspx", Icon = "fas fa-calendar-alt", Section = "Administration", Order = 15 },
+        new MenuItem { Code = "parametres-users", Text = "Utilisateurs", Url = "/pages/administrations/utilisateur/utilisateur.aspx", Icon = "fas fa-user-cog", Section = "Administration", Order = 15 },
+        new MenuItem { Code = "parametres-requetes", Text = "Requêtes SQL", Url = "/pages/administrations/requete/requetes.aspx", Icon = "fas fa-terminal", Section = "Administration", Order = 16 },
+    };
+
+  // ============================================================
+  // GESTION DES PERMISSIONS
+  // ============================================================
+  public static List<string> GetUserPermissions()
+  {
+    var session = HttpContext.Current.Session;
+
+    if (session != null && session[SK_USER_PERMISSIONS] != null)
+    {
+      return session[SK_USER_PERMISSIONS] as List<string>;
+    }
+
+    if (IsSuperAdmin())
+    {
+      var allPerms = new List<string>();
+      foreach (var menu in AllMenus)
+      {
+        allPerms.Add(menu.Code);
+      }
+      if (session != null) session[SK_USER_PERMISSIONS] = allPerms;
+      return allPerms;
+    }
+
+    if (IsAdmin())
+    {
+      var adminPerms = new List<string>();
+      foreach (var menu in AllMenus)
+      {
+        // Admin n'a pas accès aux requêtes SQL (sensible)
+        if (menu.Code != "parametres-requetes")
         {
-            connStr = "";
+          adminPerms.Add(menu.Code);
         }
+      }
+      if (session != null) session[SK_USER_PERMISSIONS] = adminPerms;
+      return adminPerms;
     }
 
-    // ============================================================
-    // EXPOSITION DE LA CHAÎNE DE CONNEXION
-    // ============================================================
-    public static string ConnectionString
+    int? userId = GetCurrentUserId();
+    if (userId.HasValue && userId.Value > 0)
     {
-        get { return connStr; }
+      var permissions = LoadPermissionsFromDatabase(userId.Value);
+      if (session != null) session[SK_USER_PERMISSIONS] = permissions;
+      return permissions;
     }
 
-    // ============================================================
-    // VÉRIFICATION D'AUTHENTIFICATION (pour pages et handlers)
-    // ============================================================
-    public static bool IsAuthenticated(HttpContext context)
+    return new List<string>();
+  }
+
+  private static List<string> LoadPermissionsFromDatabase(int userId)
+  {
+    var permissions = new List<string>();
+
+    try
     {
-        if (context == null || context.Session == null)
-            return false;
+      if (string.IsNullOrEmpty(connStr)) return permissions;
 
-        return context.Session[SK_AUTHENTICATED] != null &&
-               (bool)context.Session[SK_AUTHENTICATED];
-    }
+      using (SqlConnection conn = new SqlConnection(connStr))
+      {
+        conn.Open();
 
-    // ============================================================
-    // GARDE-FOU UNIFIÉ POUR LES HANDLERS .ASHX
-    // ============================================================
-    public static bool RequireApiAuth(HttpContext context, int minRole = -1)
-    {
-        if (context == null || context.Session == null)
-            return false;
+        string checkColumnQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
 
-        if (context.Session[SK_AUTHENTICATED] == null || !(bool)context.Session[SK_AUTHENTICATED])
-            return false;
-
-        if (!ValidateSessionToken(context))
-            return false;
-
-        if (minRole >= 0)
+        using (SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn))
         {
-            int userRole = GetUserRole(context);
-            // SuperAdmin (0) est toujours autorisé
-            if (userRole == 0) return true;
-            if (userRole < minRole) return false;
+          int columnExists = (int)checkCmd.ExecuteScalar();
+
+          if (columnExists > 0)
+          {
+            string sql = "SELECT MENU_PERMISSIONS FROM USERS WHERE IDUSER = @id";
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            {
+              cmd.Parameters.AddWithValue("@id", userId);
+              object result = cmd.ExecuteScalar();
+
+              if (result != null && result != DBNull.Value && !string.IsNullOrEmpty(result.ToString()))
+              {
+                try
+                {
+                  var serializer = new JavaScriptSerializer();
+                  permissions = serializer.Deserialize<List<string>>(result.ToString());
+                }
+                catch { }
+              }
+            }
+          }
+          else
+          {
+            // Fallback sur USER_PERMISSIONS
+            string sql = "SELECT PERMISSION_NAME FROM USER_PERMISSIONS WHERE USER_ID = @id";
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            {
+              cmd.Parameters.AddWithValue("@id", userId);
+              using (SqlDataReader reader = cmd.ExecuteReader())
+              {
+                while (reader.Read())
+                {
+                  permissions.Add(reader["PERMISSION_NAME"].ToString());
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    catch { }
+
+    return permissions;
+  }
+
+  public static bool HasPermission(string permissionCode)
+  {
+    if (IsSuperAdmin()) return true;
+    if (IsAdmin() && permissionCode != "parametres-requetes") return true;
+
+    var permissions = GetUserPermissions();
+    return permissions.Contains(permissionCode);
+  }
+
+  public static List<MenuItem> GetAuthorizedMenus()
+  {
+    var authorizedMenus = new List<MenuItem>();
+
+    foreach (var menu in AllMenus)
+    {
+      if (HasPermission(menu.Code))
+      {
+        authorizedMenus.Add(menu);
+      }
+    }
+
+    return authorizedMenus.OrderBy(m => m.Order).ToList();
+  }
+
+  public static bool SaveUserPermissions(int userId, List<string> permissions)
+  {
+    try
+    {
+      if (string.IsNullOrEmpty(connStr)) return false;
+
+      using (SqlConnection conn = new SqlConnection(connStr))
+      {
+        conn.Open();
+
+        string checkColumnQuery = @"
+                    SELECT COUNT(*)
+                    FROM INFORMATION_SCHEMA.COLUMNS
+                    WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
+
+        using (SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn))
+        {
+          int columnExists = (int)checkCmd.ExecuteScalar();
+
+          if (columnExists > 0)
+          {
+            var serializer = new JavaScriptSerializer();
+            string permissionsJson = serializer.Serialize(permissions);
+
+            string sql = "UPDATE USERS SET MENU_PERMISSIONS = @permissions WHERE IDUSER = @id";
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            {
+              cmd.Parameters.AddWithValue("@permissions", permissionsJson);
+              cmd.Parameters.AddWithValue("@id", userId);
+              cmd.ExecuteNonQuery();
+            }
+          }
+          else
+          {
+            string deleteSql = "DELETE FROM USER_PERMISSIONS WHERE USER_ID = @id";
+            using (SqlCommand deleteCmd = new SqlCommand(deleteSql, conn))
+            {
+              deleteCmd.Parameters.AddWithValue("@id", userId);
+              deleteCmd.ExecuteNonQuery();
+            }
+
+            foreach (string perm in permissions)
+            {
+              string insertSql = "INSERT INTO USER_PERMISSIONS (USER_ID, PERMISSION_NAME) VALUES (@id, @perm)";
+              using (SqlCommand insertCmd = new SqlCommand(insertSql, conn))
+              {
+                insertCmd.Parameters.AddWithValue("@id", userId);
+                insertCmd.Parameters.AddWithValue("@perm", perm);
+                insertCmd.ExecuteNonQuery();
+              }
+            }
+          }
+        }
+
+        var session = HttpContext.Current.Session;
+        if (session != null && session[SK_IDUSER] != null && Convert.ToInt32(session[SK_IDUSER]) == userId)
+        {
+          session[SK_USER_PERMISSIONS] = permissions;
         }
 
         return true;
+      }
     }
-
-    public static bool CanManageEmploi(HttpContext context)
+    catch
     {
-        if (context == null || context.Session == null)
-            return false;
-
-        int userRole = GetUserRole(context);
-        return userRole == 0 || userRole == 1 || userRole == 4;
+      return false;
     }
+  }
 
-    // ============================================================
-    // VÉRIFICATION DU TOKEN DE SESSION EN BASE
-    // ============================================================
-    private static bool ValidateSessionToken(HttpContext context)
+  // ============================================================
+  // MULTI-LANGAGE (délégation à LocalizationHelper)
+  // ============================================================
+  public static string T(string key)
+  {
+    return LocalizationHelper.GetString(key);
+  }
+
+  public static string T(string key, params object[] args)
+  {
+    return LocalizationHelper.GetString(key, args);
+  }
+
+  public static string RenderLanguageSelector()
+  {
+    return LocalizationHelper.RenderLanguageSelector();
+  }
+
+  // ============================================================
+  // GÉNÉRATION DU PROFIL UTILISATEUR (HTML)
+  // ============================================================
+  public static string RenderUserProfileHTML()
+  {
+    try
     {
-        try
-        {
-            int userId = GetUserId(context);
-            string sessionToken = context.Session[SK_SESSION_TOKEN] as string;
+      string userName = GetUserName();
+      string roleName = GetRoleName();
 
-            if (userId <= 0 || string.IsNullOrEmpty(sessionToken))
-                return false;
+      if (string.IsNullOrEmpty(userName))
+      {
+        userName = T("User");
+      }
 
-            if (string.IsNullOrEmpty(connStr))
-                return false;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                conn.Open();
-                string sql = "SELECT COUNT(*) FROM USERS WHERE IDUSER = @userId AND SESSION_TOKEN = @token";
-                using (SqlCommand cmd = new SqlCommand(sql, conn))
-                {
-                    cmd.Parameters.AddWithValue("@userId", userId);
-                    cmd.Parameters.AddWithValue("@token", sessionToken);
-                    int count = (int)cmd.ExecuteScalar();
-                    return count > 0;
-                }
-            }
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ============================================================
-    // STRUCTURE D'UN MENU
-    // ============================================================
-    public class MenuItem
-    {
-        public string Code { get; set; }
-        public string Text { get; set; }
-        public string Url { get; set; }
-        public string Icon { get; set; }
-        public string Section { get; set; }
-        public int Order { get; set; }
-        public List<MenuItem> Children { get; set; }
-
-        public MenuItem()
-        {
-            Children = new List<MenuItem>();
-        }
-    }
-
-    // ============================================================
-    // DÉFINITION DES MENUS (tous les menus possibles)
-    // ============================================================
-    public static readonly List<MenuItem> AllMenus = new List<MenuItem>
-    {
-        new MenuItem { Code = "dashboard", Text = "Dashboard", Url = "../../accueil/dashboards/index.aspx", Icon = "fas fa-chalkboard", Section = "Accueil", Order = 1 },
-        new MenuItem { Code = "eleves", Text = "Students", Url = "../../modules/eleves/eleves.aspx", Icon = "fas fa-users", Section = "Modules", Order = 2 },
-        new MenuItem { Code = "absences", Text = "Absences", Url = "../../modules/absences/absences.aspx", Icon = "fas fa-calendar-times", Section = "Modules", Order = 3 },
-        new MenuItem { Code = "bulletins", Text = "Grades", Url = "../../modules/bulletins/bulletins.aspx", Icon = "fas fa-file-alt", Section = "Modules", Order = 4 },
-        new MenuItem { Code = "agenda", Text = "Agenda", Url = "../../modules/agenda/agenda.aspx", Icon = "fas fa-calendar-alt", Section = "Modules", Order = 5 },
-        new MenuItem { Code = "emplois", Text = "Schedule", Url = "../../modules/emplois/emplois.aspx", Icon = "fas fa-clock", Section = "Modules", Order = 6 },
-        new MenuItem { Code = "frais", Text = "Fees", Url = "../../modules/frais/frais.aspx", Icon = "fas fa-money-bill-wave", Section = "Ecolage", Order = 7 },
-        new MenuItem { Code = "niveaux", Text = "Levels", Url = "../../parametres/niveaux/niveaux.aspx", Icon = "fas fa-layer-group", Section = "Settings", Order = 8 },
-        new MenuItem { Code = "salles", Text = "Rooms", Url = "../../parametres/salles/salles.aspx", Icon = "fas fa-door-open", Section = "Settings", Order = 9 },
-        new MenuItem { Code = "classes", Text = "Classes", Url = "../../parametres/classes/classes.aspx", Icon = "fas fa-folder", Section = "Settings", Order = 10 },
-        new MenuItem { Code = "matieres", Text = "Subjects", Url = "../../parametres/matieres/matieres.aspx", Icon = "fas fa-book", Section = "Settings", Order = 11 },
-        new MenuItem { Code = "importation", Text = "ImportStudents", Url = "../../administrations/utilitaires/utilitaires.aspx", Icon = "fas fa-cogs", Section = "Utilities", Order = 12 },
-        new MenuItem { Code = "annees", Text = "SchoolYears", Url = "../../administrations/annee/annee.aspx", Icon = "fas fa-calendar-alt", Section = "Administration", Order = 13 },
-        new MenuItem { Code = "utilisateurs", Text = "Users", Url = "../../administrations/utilisateur/utilisateur.aspx", Icon = "fas fa-user", Section = "Administration", Order = 14 },
-        new MenuItem { Code = "requetes", Text = "SQLQueries", Url = "../../administrations/requete/requetes.aspx", Icon = "fas fa-database", Section = "Administration", Order = 15 }
-    };
-
-    // ============================================================
-    // GESTION DES PERMISSIONS
-    // ============================================================
-    public static List<string> GetUserPermissions()
-    {
-        var session = HttpContext.Current.Session;
-
-        if (session != null && session[SK_USER_PERMISSIONS] != null)
-        {
-            return session[SK_USER_PERMISSIONS] as List<string>;
-        }
-
-        if (IsSuperAdmin())
-        {
-            var allPerms = new List<string>();
-            foreach (var menu in AllMenus)
-            {
-                allPerms.Add(menu.Code);
-            }
-            if (session != null) session[SK_USER_PERMISSIONS] = allPerms;
-            return allPerms;
-        }
-
-        if (IsAdmin())
-        {
-            var adminPerms = new List<string>();
-            foreach (var menu in AllMenus)
-            {
-                if (menu.Code != "requetes")
-                {
-                    adminPerms.Add(menu.Code);
-                }
-            }
-            if (session != null) session[SK_USER_PERMISSIONS] = adminPerms;
-            return adminPerms;
-        }
-
-        int? userId = GetCurrentUserId();
-        if (userId.HasValue && userId.Value > 0)
-        {
-            var permissions = LoadPermissionsFromDatabase(userId.Value);
-            if (session != null) session[SK_USER_PERMISSIONS] = permissions;
-            return permissions;
-        }
-
-        return new List<string>();
-    }
-
-    private static List<string> LoadPermissionsFromDatabase(int userId)
-    {
-        var permissions = new List<string>();
-
-        try
-        {
-            if (string.IsNullOrEmpty(connStr)) return permissions;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                conn.Open();
-
-                string checkColumnQuery = @"
-                    SELECT COUNT(*) 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
-                    WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
-
-                using (SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn))
-                {
-                    int columnExists = (int)checkCmd.ExecuteScalar();
-
-                    if (columnExists > 0)
-                    {
-                        string sql = "SELECT MENU_PERMISSIONS FROM USERS WHERE IDUSER = @id";
-                        using (SqlCommand cmd = new SqlCommand(sql, conn))
-                        {
-                            cmd.Parameters.AddWithValue("@id", userId);
-                            object result = cmd.ExecuteScalar();
-
-                            if (result != null && result != DBNull.Value && !string.IsNullOrEmpty(result.ToString()))
-                            {
-                                try
-                                {
-                                    var serializer = new JavaScriptSerializer();
-                                    permissions = serializer.Deserialize<List<string>>(result.ToString());
-                                }
-                                catch { }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        catch { }
-
-        return permissions;
-    }
-
-    public static bool HasPermission(string permissionCode)
-    {
-        if (IsSuperAdmin()) return true;
-        if (IsAdmin() && permissionCode != "requetes") return true;
-
-        var permissions = GetUserPermissions();
-        return permissions.Contains(permissionCode);
-    }
-
-    public static List<MenuItem> GetAuthorizedMenus()
-    {
-        var authorizedMenus = new List<MenuItem>();
-
-        foreach (var menu in AllMenus)
-        {
-            if (HasPermission(menu.Code))
-            {
-                authorizedMenus.Add(menu);
-            }
-        }
-
-        return authorizedMenus;
-    }
-
-    public static bool SaveUserPermissions(int userId, List<string> permissions)
-    {
-        try
-        {
-            if (string.IsNullOrEmpty(connStr)) return false;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                conn.Open();
-
-                string checkColumnQuery = @"
-                    SELECT COUNT(*) 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
-                    WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
-
-                using (SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn))
-                {
-                    int columnExists = (int)checkCmd.ExecuteScalar();
-
-                    if (columnExists > 0)
-                    {
-                        var serializer = new JavaScriptSerializer();
-                        string permissionsJson = serializer.Serialize(permissions);
-
-                        string sql = "UPDATE USERS SET MENU_PERMISSIONS = @permissions WHERE IDUSER = @id";
-                        using (SqlCommand cmd = new SqlCommand(sql, conn))
-                        {
-                            cmd.Parameters.AddWithValue("@permissions", permissionsJson);
-                            cmd.Parameters.AddWithValue("@id", userId);
-                            cmd.ExecuteNonQuery();
-                        }
-                    }
-                    else
-                    {
-                        string deleteSql = "DELETE FROM USER_PERMISSIONS WHERE USER_ID = @id";
-                        using (SqlCommand deleteCmd = new SqlCommand(deleteSql, conn))
-                        {
-                            deleteCmd.Parameters.AddWithValue("@id", userId);
-                            deleteCmd.ExecuteNonQuery();
-                        }
-
-                        foreach (string perm in permissions)
-                        {
-                            string insertSql = "INSERT INTO USER_PERMISSIONS (USER_ID, PERMISSION_NAME) VALUES (@id, @perm)";
-                            using (SqlCommand insertCmd = new SqlCommand(insertSql, conn))
-                            {
-                                insertCmd.Parameters.AddWithValue("@id", userId);
-                                insertCmd.Parameters.AddWithValue("@perm", perm);
-                                insertCmd.ExecuteNonQuery();
-                            }
-                        }
-                    }
-                }
-
-                var session = HttpContext.Current.Session;
-                if (session != null && session[SK_IDUSER] != null && Convert.ToInt32(session[SK_IDUSER]) == userId)
-                {
-                    session[SK_USER_PERMISSIONS] = permissions;
-                }
-
-                return true;
-            }
-        }
-        catch
-        {
-            return false;
-        }
-    }
-
-    // ============================================================
-    // MULTI-LANGAGE (délégation à LocalizationHelper)
-    // ============================================================
-    public static string T(string key)
-    {
-        return LocalizationHelper.GetString(key);
-    }
-
-    public static string T(string key, params object[] args)
-    {
-        return LocalizationHelper.GetString(key, args);
-    }
-
-    public static string RenderLanguageSelector()
-    {
-        return LocalizationHelper.RenderLanguageSelector();
-    }
-
-    // ============================================================
-    // GÉNÉRATION DU PROFIL UTILISATEUR (HTML)
-    // ============================================================
-    public static string RenderUserProfileHTML()
-    {
-        try
-        {
-            string userName = GetUserName();
-            string roleName = GetRoleName();
-
-            if (string.IsNullOrEmpty(userName))
-            {
-                userName = T("User");
-            }
-
-            var html = new StringBuilder();
-            html.Append(@"
+      var html = new StringBuilder();
+      html.Append(@"
             <div class=""user-profile-nav"">
                 <div class=""user-avatar"">
                     <i class=""fas fa-user-tie""></i>
@@ -407,169 +460,176 @@ public static class AuthHelper
                 </div>
                 <div class=""user-info"">
                     <span id=""profilUsername"" class=""user-role"">");
-            html.Append(roleName);
-            html.Append(@"</span>
+      html.Append(roleName);
+      html.Append(@"</span>
                     <span id=""navbarUsername"" class=""user-name"">");
-            html.Append(HttpUtility.HtmlEncode(userName));
-            html.Append(@"</span>
+      html.Append(HttpUtility.HtmlEncode(userName));
+      html.Append(@"</span>
                 </div>
             </div>");
 
-            return html.ToString();
-        }
-        catch (Exception ex)
-        {
-            return "<div style='color:red;padding:10px;'>Erreur profil: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
-        }
+      return html.ToString();
     }
-
-    // ============================================================
-    // GÉNÉRATION DU MENU HTML (avec navigation active)
-    // ============================================================
-    public static string RenderMenuHTML()
+    catch (Exception ex)
     {
-        try
+      return "<div style='color:red;padding:10px;'>Erreur profil: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
+    }
+  }
+
+  // ============================================================
+  // GÉNÉRATION DU MENU HTML (avec navigation active)
+  // ============================================================
+  public static string RenderMenuHTML()
+  {
+    try
+    {
+      var menus = GetAuthorizedMenus();
+
+      if (menus == null || menus.Count == 0)
+      {
+        return "<div class='nav-section' style='padding:15px;text-align:center;'>" +
+               T("NoData") +
+               "<br><small>" + T("ContactAdmin") + "</small></div>";
+      }
+
+      // ✅ Récupérer la page actuelle (nom du fichier sans extension)
+      string currentPage = "";
+      try
+      {
+        if (HttpContext.Current != null && HttpContext.Current.Request != null && HttpContext.Current.Request.Url != null)
         {
-            var menus = GetAuthorizedMenus();
+          currentPage = System.IO.Path.GetFileNameWithoutExtension(
+              HttpContext.Current.Request.Url.AbsolutePath).ToLower();
+        }
+      }
+      catch { }
 
-            if (menus == null || menus.Count == 0)
-            {
-                return "<div class='nav-section' style='padding:15px;text-align:center;'>" +
-                       T("NoData") +
-                       "<br><small>" + T("ContactAdmin") + "</small></div>";
-            }
+      var sections = new Dictionary<string, List<MenuItem>>();
 
-            // ✅ Récupérer la page actuelle (nom du fichier sans extension)
-            string currentPage = "";
-            try
-            {
-                if (HttpContext.Current != null && HttpContext.Current.Request != null && HttpContext.Current.Request.Url != null)
-                {
-                    currentPage = System.IO.Path.GetFileNameWithoutExtension(
-                        HttpContext.Current.Request.Url.AbsolutePath).ToLower();
-                }
-            }
-            catch { }
+      foreach (var menu in menus)
+      {
+        string sectionKey = menu.Section;
+        if (!sections.ContainsKey(sectionKey))
+        {
+          sections[sectionKey] = new List<MenuItem>();
+        }
+        sections[sectionKey].Add(menu);
+      }
 
-            var sections = new Dictionary<string, List<MenuItem>>();
+      var html = new StringBuilder();
+      html.Append(RenderUserProfileHTML());
+      html.Append(@"<ul class=""nav-pills"">");
 
-            foreach (var menu in menus)
-            {
-                string sectionKey = menu.Section;
-                if (!sections.ContainsKey(sectionKey))
-                {
-                    sections[sectionKey] = new List<MenuItem>();
-                }
-                sections[sectionKey].Add(menu);
-            }
-
-            var html = new StringBuilder();
-            html.Append(RenderUserProfileHTML());
-            html.Append(@"<ul class=""nav-pills"">");
-
-            foreach (var section in sections)
-            {
-                string sectionName = T(section.Key);
-                html.AppendFormat(@"
+      foreach (var section in sections)
+      {
+        string sectionName = T(section.Key);
+        html.AppendFormat(@"
                 <li class=""nav-item"">
                     <div class=""nav-section"">{0}</div>", sectionName);
 
-                foreach (var menu in section.Value)
-                {
-                    string menuText = T(menu.Text);
+        foreach (var menu in section.Value.OrderBy(m => m.Order))
+        {
+          string menuText = T(menu.Text);
 
-                    // ✅ Détection de la page active
-                    bool isActive = false;
-                    if (!string.IsNullOrEmpty(currentPage) && !string.IsNullOrEmpty(menu.Url))
-                    {
-                        string menuFileName = System.IO.Path.GetFileNameWithoutExtension(menu.Url).ToLower();
-                        isActive = currentPage == menuFileName;
-                    }
+          // ✅ Détection de la page active
+          bool isActive = false;
+          if (!string.IsNullOrEmpty(currentPage) && !string.IsNullOrEmpty(menu.Url))
+          {
+            string menuFileName = System.IO.Path.GetFileNameWithoutExtension(menu.Url).ToLower();
+            isActive = currentPage == menuFileName;
+          }
 
-                    string activeClass = isActive ? " active" : "";
+          string activeClass = isActive ? " active" : "";
 
-                    html.AppendFormat(@"
+          html.AppendFormat(@"
                     <a href=""{0}"" class=""nav-link{1}"" data-menu=""{2}"">
                         <div style=""width:30px; text-align:center; margin-right:10px;"">
                             <i class=""{3}""></i>
                         </div>
                         <span>{4}</span>
                     </a>", menu.Url, activeClass, menu.Code, menu.Icon, menuText);
-                }
-
-                html.Append(@"</li>");
-            }
-
-            html.Append(@"</ul>");
-            return html.ToString();
         }
-        catch (Exception ex)
-        {
-            return "<div style='color:red;padding:10px;'>Erreur: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
-        }
+
+        html.Append(@"</li>");
+      }
+
+      html.Append(@"</ul>");
+      return html.ToString();
     }
-
-    // ============================================================
-    // GÉNÉRATION DE LA TOPBAR HTML
-    // ============================================================
-    public static string RenderTopBarHTML()
+    catch (Exception ex)
     {
+      return "<div style='color:red;padding:10px;'>Erreur: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
+    }
+  }
+
+  // ============================================================
+  // GÉNÉRATION DE LA TOPBAR HTML
+  // ============================================================
+  public static string RenderTopBarHTML()
+{
+    try
+    {
+        var html = new StringBuilder();
+
+        string currentPage = "";
+        bool isUsersPage = false;
+
         try
         {
-            var html = new StringBuilder();
-
-            string currentPage = "";
-            bool isUsersPage = false;
-
-            try
+            if (HttpContext.Current != null && HttpContext.Current.Request != null && HttpContext.Current.Request.Url != null)
             {
-                if (HttpContext.Current != null && HttpContext.Current.Request != null && HttpContext.Current.Request.Url != null)
-                {
-                    currentPage = HttpContext.Current.Request.Url.AbsolutePath.ToLower();
-                }
+                currentPage = HttpContext.Current.Request.Url.AbsolutePath.ToLower();
             }
-            catch { }
+        }
+        catch { }
 
-            if (!string.IsNullOrEmpty(currentPage))
-            {
-                isUsersPage = currentPage.Contains("utilisateur.aspx") || currentPage.Contains("users.aspx");
-            }
+        if (!string.IsNullOrEmpty(currentPage))
+        {
+            isUsersPage = currentPage.Contains("utilisateur.aspx") || currentPage.Contains("users.aspx");
+        }
 
-            html.Append(@"
-            <nav class=""main-header"">
-                <ul class=""navbar-nav"">
-                    <li class=""nav-item"">
-                        <a class=""nav-link"" id=""menuToggle"" role=""button"">
-                            <i class=""fas fa-bars""></i>
-                        </a>
-                    </li>
-                </ul>
-                <ul class=""navbar-nav"">");
-
-            string langSelector = RenderLanguageSelector();
-            if (!string.IsNullOrEmpty(langSelector))
-            {
-                html.Append(@"
-                <li class=""nav-item language-selector-wrapper"" style=""display:flex;align-items:center;margin:0 5px;""><span><i class=""fas fa-globe""></i></span>");
-                html.Append(langSelector);
-                html.Append(@"</li>");
-            }
-
-            html.Append(@"
+        html.Append(@"
+        <nav class=""main-header"">
+            <ul class=""navbar-nav"">
                 <li class=""nav-item"">
-                    <span style=""display:flex;align-items:center;gap:6px;font-size:13px;"">
-                        <i class=""fas fa-moon""></i>
-                        <span style=""font-size:12px;"">" + T("DarkMode") + @"</span>
-                    </span>
-                    <label class=""switch"">
-                        <input type=""checkbox"" id=""toggleDarkMode"">
-                        <span class=""slider round""></span>
-                    </label>
-                </li>");
+                    <a class=""nav-link"" id=""menuToggle"" role=""button"">
+                        <i class=""fas fa-bars""></i>
+                    </a>
+                </li>
+            </ul>
+            <ul class=""navbar-nav"">");
 
-            if (HasPermission("dashboard"))
-            {
-                html.Append(@"
+        // ---- NOUVEAU SÉLECTEUR DE LANGUE (remplace l'ancien) ----
+        string currentCulture = LocalizationHelper.CurrentCultureCode; // "fr", "en", "mg"
+        html.Append(@"
+                <li class=""nav-item language-selector-wrapper"" style=""display:flex;align-items:center;margin:0 10px;"">
+                    <select id=""langSelect"" class=""form-select form-select-sm"" style=""background:transparent;border:1px solid #ced4da;border-radius:4px;padding:4px 8px;color:#333;font-size:13px;"">");
+
+        for (int i = 0; i < LocalizationHelper.SupportedCultures.Length; i++)
+        {
+            string code = LocalizationHelper.SupportedCultures[i];
+            string flag = LocalizationHelper.CultureFlags[i];
+            string name = LocalizationHelper.CultureNames[i];
+            string selected = (code == currentCulture) ? " selected" : "";
+            html.AppendFormat(@"<option value=""{0}""{1}>{2}</option>", code, selected, name);
+        }
+
+        html.Append(@"</select>
+                </li>");
+        // ---- FIN SÉLECTEUR ----
+
+        // Le reste du code (dark mode, notifications, etc.)
+        html.Append(@"
+                  <li class=""nav-item d-flex align-items-center"">
+                      <label class=""switch"" for=""toggleDarkMode"">
+                          <input type=""checkbox"" id=""toggleDarkMode"">
+                          <span class=""slider round""></span>
+                      </label>
+                  </li>");
+
+        if (HasPermission("accceuil"))
+        {
+            html.Append(@"
                 <li class=""nav-item"">
                     <a class=""nav-link"" id=""notifToggle"" title=""" + T("Notifications") + @""" style=""position:relative;"">
                         <i class=""fas fa-bell""></i>
@@ -592,60 +652,60 @@ public static class AuthHelper
                         </a>
                     </div>
                 </li>");
-            }
+        }
 
-            html.Append(@"
+        html.Append(@"
                 <li class=""nav-item"">
                     <a href=""../../../auth/Logout.aspx"" class=""nav-link"" title=""" + T("Logout") + @""">
                         <i class=""fas fa-sign-out-alt""></i>
                     </a>
                 </li>");
 
-            html.Append(@"
+        html.Append(@"
                 <li class=""nav-item"">
                     <a class=""nav-link"" id=""fullscreenToggle"" title=""" + T("Fullscreen") + @""">
                         <i class=""fas fa-expand-arrows-alt""></i>
                     </a>
                 </li>");
 
-            if (isUsersPage && HasPermission("utilisateurs"))
-            {
-                html.Append(@"
+        if (isUsersPage && HasPermission("parametres-users"))
+        {
+            html.Append(@"
                 <li class=""nav-item"">
                     <a class=""nav-link"" id=""toggleSidebarBtn"" title=""" + T("Settings") + @""" style=""cursor: pointer;"">
-                        <i class=""fas fa-cog""></i>
+                        <i class=""fas fa-database""></i>
                     </a>
                 </li>");
-            }
-
-            html.Append(@"
-                </ul>
-            </nav>");
-
-            return html.ToString();
         }
-        catch (Exception ex)
-        {
-            return "<div style='color:red;padding:10px;'>Erreur topbar: " + ex.Message + "</div>";
-        }
+
+        html.Append(@"
+            </ul>
+        </nav>");
+
+        return html.ToString();
     }
-
-    // ============================================================
-    // GÉNÉRATION DU CONTROL SIDEBAR HTML (paramètres)
-    // ============================================================
-    public static string RenderControlSidebarHTML()
+    catch (Exception ex)
     {
-        try
-        {
-            var html = new StringBuilder();
+        return "<div style='color:red;padding:10px;'>Erreur topbar: " + ex.Message + "</div>";
+    }
+}
 
-            html.Append(@"
+  // ============================================================
+  // GÉNÉRATION DU CONTROL SIDEBAR HTML (paramètres)
+  // ============================================================
+  public static string RenderControlSidebarHTML()
+  {
+    try
+    {
+      var html = new StringBuilder();
+
+      html.Append(@"
             <aside class=""control-sidebar control-sidebar-dark"" id=""controlSidebar""
                 style=""position: fixed;top: 0;right: -300px;width: 300px;padding: 20px;height: 100%;background: #343a40;color: #fff;transition: right 0.3s ease-in-out;z-index: 1050;box-shadow: -2px 0 5px rgba(0,0,0,0.2);overflow-y: auto;"">
                 <div class=""p-3"">
                     <div style=""display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #4a5259; padding-bottom: 10px; margin-bottom: 15px;"">
                         <h5 style=""margin: 0; color: #fff;"">
-                            <i class=""fas fa-cog""></i> " + T("Settings") + @"
+                            <i class=""fas fa-database""></i> " + T("Settings") + @"
                         </h5>
                         <button type=""button"" id=""closeSidebarBtn""
                             style=""background: none; border: none; color: #fff; font-size: 20px; cursor: pointer;"">
@@ -665,9 +725,9 @@ public static class AuthHelper
 
                     <hr style=""border-color: #4a5259;"">");
 
-            if (IsSuperAdmin())
-            {
-                html.Append(@"
+      if (IsSuperAdmin())
+      {
+        html.Append(@"
                     <div style=""display: flex; flex-direction: column; gap: 10px; padding: 10px;"">
                         <div style=""width: 100%;"">
                             <button type=""button"" id=""btnCheckUpdates"" class=""btn btn-primary""
@@ -693,9 +753,9 @@ public static class AuthHelper
                     </div>
 
                     <hr style=""border-color: #4a5259;"">");
-            }
+      }
 
-            html.Append(@"
+      html.Append(@"
                 </div>
             </aside>
 
@@ -703,677 +763,515 @@ public static class AuthHelper
                 style=""position: fixed;top: 0;left: 0;width: 100%;height: 100%;background: rgba(0,0,0,0.5);z-index: 1040;display: none;cursor: pointer;"">
             </div>");
 
-            return html.ToString();
-        }
-        catch (Exception ex)
-        {
-            return "<div style='color:red;padding:10px;'>Erreur control sidebar: " + ex.Message + "</div>";
-        }
+      return html.ToString();
     }
-
-    // ============================================================
-    // MÉTHODES DE SESSION ET UTILISATEUR
-    // ============================================================
-    public static void VerifySession(Page page)
+    catch (Exception ex)
     {
-        if (page.Session[SK_AUTHENTICATED] == null || !(bool)page.Session[SK_AUTHENTICATED])
-        {
-            page.Response.Redirect("~/auth/Login.aspx");
-
-            return;
-        }
-
-        if (!IsTokenValid())
-        {
-            ForceLogout(page, true);
-            return;
-        }
-
-        if (!page.IsPostBack)
-        {
-            SetUsername(page);
-            SetRolename(page);
-        }
+      return "<div style='color:red;padding:10px;'>Erreur control sidebar: " + ex.Message + "</div>";
     }
+  }
 
-    private static int? GetUserRoleId()
+  // ============================================================
+  // MÉTHODES DE SESSION ET UTILISATEUR
+  // ============================================================
+  public static void VerifySession(Page page)
+  {
+    if (page.Session[SK_AUTHENTICATED] == null || !(bool)page.Session[SK_AUTHENTICATED])
     {
-        var session = HttpContext.Current.Session;
-        if (session == null || session[SK_USERROLE] == null) return null;
-        try { return Convert.ToInt32(session[SK_USERROLE]); }
-        catch { return null; }
+      page.Response.Redirect("~/auth/Login.aspx");
+
+      return;
     }
 
-    private static int? GetCurrentUserId()
+    if (!IsTokenValid())
     {
-        var session = HttpContext.Current.Session;
-        if (session == null || session[SK_IDUSER] == null) return null;
-        try { return Convert.ToInt32(session[SK_IDUSER]); }
-        catch { return null; }
+      ForceLogout(page, true);
+      return;
     }
 
-    public static int GetUserRole(HttpContext context)
+    if (!page.IsPostBack)
     {
-        if (context == null || context.Session == null) return -1;
-        object val = context.Session[SK_USERROLE];
-        return (val != null) ? Convert.ToInt32(val) : -1;
+      SetUsername(page);
+      SetRolename(page);
     }
+  }
 
-    public static string GetUsername(HttpContext context)
+  private static bool IsTokenValid()
+  {
+    var session = HttpContext.Current.Session;
+    if (session == null || session[SK_IDUSER] == null || session[SK_SESSION_TOKEN] == null)
+      return false;
+
+    try
     {
-        if (context == null || context.Session == null) return "Inconnu";
-        return context.Session[SK_USERNAME] as string ?? "Inconnu";
-    }
+      int idUser = (int)session[SK_IDUSER];
+      string tokenSession = session[SK_SESSION_TOKEN].ToString();
 
-    public static int GetUserId(HttpContext context)
+      if (string.IsNullOrEmpty(connStr)) return false;
+
+      using (SqlConnection conn = new SqlConnection(connStr))
+      {
+        using (SqlCommand cmd = new SqlCommand("SELECT SESSION_TOKEN FROM USERS WHERE IDUSER=@id", conn))
+        {
+          cmd.Parameters.AddWithValue("@id", idUser);
+          conn.Open();
+          object tokenDb = cmd.ExecuteScalar();
+          return tokenDb != null && tokenDb.ToString() == tokenSession;
+        }
+      }
+    }
+    catch
     {
-        if (context == null || context.Session == null) return 0;
-        object val = context.Session[SK_IDUSER];
-        return (val != null) ? Convert.ToInt32(val) : 0;
+      return false;
     }
+  }
 
-    public static string GetUserName()
+  private static void SetUsername(Page page)
+  {
+    var session = HttpContext.Current.Session;
+    if (session == null || session[SK_USERNAME] == null) return;
+    string username = session[SK_USERNAME].ToString();
+    string script = "var el=document.getElementById('navbarUsername'); if(el){el.textContent="
+        + HttpUtility.JavaScriptStringEncode(username, true) + ";}";
+    page.ClientScript.RegisterStartupScript(page.GetType(), "username", script, true);
+  }
+
+  private static void SetRolename(Page page)
+  {
+    string roleName = GetRoleName();
+    string script = "var el=document.getElementById('profilUsername'); if(el){el.textContent="
+        + HttpUtility.JavaScriptStringEncode(roleName, true) + ";}";
+    page.ClientScript.RegisterStartupScript(page.GetType(), "rolename", script, true);
+  }
+
+  private static void ForceLogout(Page page, bool otherPc)
+  {
+    HttpContext.Current.Session.Clear();
+    HttpContext.Current.Session.Abandon();
+    string url = otherPc ? "~/auth/Login.aspx?msg=other_pc" : "~/auth/Login.aspx";
+    page.Response.Redirect(url, true);
+  }
+
+  public static void Logout(HttpContext context)
+  {
+    if (context == null || context.Session == null) return;
+
+    // Supprimer le token en base si l'utilisateur est connecté
+    int userId = GetUserId(context);
+    if (userId > 0)
     {
-        var session = HttpContext.Current.Session;
-        if (session == null) return "Inconnu";
-        return session[SK_USERNAME] as string ?? "Inconnu";
+      try
+      {
+        using (SqlConnection conn = new SqlConnection(connStr))
+        {
+          string sql = "UPDATE USERS SET SESSION_TOKEN = NULL WHERE IDUSER = @id";
+          using (SqlCommand cmd = new SqlCommand(sql, conn))
+          {
+            cmd.Parameters.AddWithValue("@id", userId);
+            conn.Open();
+            cmd.ExecuteNonQuery();
+          }
+        }
+      }
+      catch { /* ignorer */ }
     }
 
-    public static bool IsSuperAdmin()
+    // Nettoyer la session
+    context.Session.Clear();
+    context.Session.Abandon();
+
+    // Supprimer les cookies de session et d'authentification
+    if (context.Request.Cookies["ASP.NET_SessionId"] != null)
     {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 0;
+      var cookie = new HttpCookie("ASP.NET_SessionId");
+      cookie.Expires = DateTime.Now.AddDays(-1);
+      context.Response.Cookies.Add(cookie);
     }
 
-    public static bool IsAdmin()
+    try
     {
-        var role = GetUserRoleId();
-        return role.HasValue && (role.Value == 0 || role.Value == 1);
+      System.Web.Security.FormsAuthentication.SignOut();
+      string authCookieName = System.Web.Security.FormsAuthentication.FormsCookieName;
+      if (context.Request.Cookies[authCookieName] != null)
+      {
+        var authCookie = new HttpCookie(authCookieName);
+        authCookie.Expires = DateTime.Now.AddDays(-1);
+        context.Response.Cookies.Add(authCookie);
+      }
     }
+    catch { }
 
-    public static bool IsProfessor()
+    // En-têtes anti-cache
+    context.Response.Cache.SetCacheability(System.Web.HttpCacheability.NoCache);
+    context.Response.Cache.SetNoStore();
+    context.Response.Cache.SetExpires(DateTime.UtcNow.AddYears(-1));
+    context.Response.AppendHeader("Pragma", "no-cache");
+    context.Response.AppendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    context.Response.AppendHeader("Expires", "0");
+  }
+
+  // ============================================================
+  // GETTERS
+  // ============================================================
+  public static int GetUserId(HttpContext context)
+  {
+    if (context == null || context.Session == null) return 0;
+    object val = context.Session[SK_IDUSER];
+    return (val != null) ? Convert.ToInt32(val) : 0;
+  }
+
+  public static string GetUserName()
+  {
+    var session = HttpContext.Current.Session;
+    if (session == null) return "Inconnu";
+    return session[SK_USERNAME] as string ?? "Inconnu";
+  }
+
+  public static int GetUserRole(HttpContext context)
+  {
+    if (context == null || context.Session == null) return -1;
+    object val = context.Session[SK_USERROLE];
+    return (val != null) ? Convert.ToInt32(val) : -1;
+  }
+
+  private static int? GetUserRoleId()
+  {
+    var session = HttpContext.Current.Session;
+    if (session == null || session[SK_USERROLE] == null) return null;
+    try { return Convert.ToInt32(session[SK_USERROLE]); }
+    catch { return null; }
+  }
+
+  private static int? GetCurrentUserId()
+  {
+    var session = HttpContext.Current.Session;
+    if (session == null || session[SK_IDUSER] == null) return null;
+    try { return Convert.ToInt32(session[SK_IDUSER]); }
+    catch { return null; }
+  }
+
+  // ============================================================
+  // VÉRIFICATIONS DE RÔLES (mis à jour pour les nouveaux rôles)
+  // ============================================================
+  public static bool IsSuperAdmin()
+  {
+    var role = GetUserRoleId();
+    return role.HasValue && role.Value == 0;
+  }
+
+  public static bool IsAdmin()
+  {
+    var role = GetUserRoleId();
+    return role.HasValue && (role.Value == 0 || role.Value == 1);
+  }
+
+  public static bool IsUser()
+  {
+    var role = GetUserRoleId();
+    return role.HasValue && role.Value == 2;
+  }
+
+  public static bool IsLogisticien()
+  {
+    var role = GetUserRoleId();
+    return role.HasValue && role.Value == 3;
+  }
+
+  public static bool IsComptable()
+  {
+    var role = GetUserRoleId();
+    return role.HasValue && role.Value == 4;
+  }
+
+  // ============================================================
+  // OBTENTION DU NOM DU RÔLE
+  // ============================================================
+  public static string GetRoleName()
+  {
+    var roleId = GetUserRoleId();
+    if (!roleId.HasValue) return T("Unknown");
+
+    switch (roleId.Value)
     {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 3;
+      case 0: return T("SuperAdmin");
+      case 1: return T("Admin");
+      case 2: return T("User");
+      case 3: return T("Logisticien");
+      case 4: return T("Comptable");
+      default: return T("User");
     }
+  }
 
-    public static bool IsSecretaire()
+  // ============================================================
+  // VERSION
+  // ============================================================
+  public static string Version
+  {
+    get
     {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 4;
+      var version = ConfigurationManager.AppSettings["Version"];
+      return string.IsNullOrEmpty(version) ? "1.0.0" : version;
     }
+  }
 
-    public static bool IsComptable()
+  // ============================================================
+  // GESTION DE LA LICENCE (SOLUTION 2 - COMPLÈTE)
+  // ============================================================
+
+  private enum LicenceStatus { Valide, Manquante, Expiree, Invalide }
+
+  private static readonly object _licenceLock = new object();
+  private static DateTime _cachedExpirationDate = DateTime.MinValue;
+  private static int _cachedMaxUsers = 0;
+  private static DateTime _cacheTime = DateTime.MinValue;
+  private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5);
+
+  public static string GetExpirationDateString()
+  {
+    DateTime expirationDate;
+    int maxUsers;
+    LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
+
+    if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
     {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 5;
+      return expirationDate.ToString("dd/MM/yyyy");
     }
-
-    public static string GetRoleName()
+    else if (status == LicenceStatus.Manquante)
     {
-        var roleId = GetUserRoleId();
-        if (!roleId.HasValue) return "Inconnu";
-
-        switch (roleId.Value)
-        {
-            case 0: return T("SuperAdmin");
-            case 1: return T("Admin");
-            case 3: return T("Teacher");
-            case 4: return T("Secretary");
-            case 5: return T("Accountant");
-            default: return T("User");
-        }
+      return T("LicenceMissing");
     }
-
-    private static bool IsTokenValid()
+    else
     {
-        var session = HttpContext.Current.Session;
-        if (session == null || session[SK_IDUSER] == null || session[SK_SESSION_TOKEN] == null)
-            return false;
-
-        try
-        {
-            int idUser = (int)session[SK_IDUSER];
-            string tokenSession = session[SK_SESSION_TOKEN].ToString();
-
-            if (string.IsNullOrEmpty(connStr)) return false;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                using (SqlCommand cmd = new SqlCommand("SELECT SESSION_TOKEN FROM USERS WHERE IDUSER=@id", conn))
-                {
-                    cmd.Parameters.AddWithValue("@id", idUser);
-                    conn.Open();
-                    object tokenDb = cmd.ExecuteScalar();
-                    return tokenDb != null && tokenDb.ToString() == tokenSession;
-                }
-            }
-        }
-        catch
-        {
-            return false;
-        }
+      return T("LicenceInvalid");
     }
+  }
 
-    private static void SetUsername(Page page)
+  public static string GetMaxUsersString()
+  {
+    DateTime expirationDate;
+    int maxUsers;
+    LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
+
+    if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
     {
-        var session = HttpContext.Current.Session;
-        if (session == null || session[SK_USERNAME] == null) return;
-        string username = session[SK_USERNAME].ToString();
-        string script = "var el=document.getElementById('navbarUsername'); if(el){el.textContent="
-            + HttpUtility.JavaScriptStringEncode(username, true) + ";}";
-        page.ClientScript.RegisterStartupScript(page.GetType(), "username", script, true);
+      return maxUsers.ToString();
     }
-
-    private static void SetRolename(Page page)
+    else
     {
-        string roleName = GetRoleName();
-        string script = "var el=document.getElementById('profilUsername'); if(el){el.textContent="
-            + HttpUtility.JavaScriptStringEncode(roleName, true) + ";}";
-        page.ClientScript.RegisterStartupScript(page.GetType(), "rolename", script, true);
+      return "0";
     }
+  }
 
-    private static void ForceLogout(Page page, bool otherPc)
+  public static bool IsMaxUsersReached()
+  {
+    DateTime expirationDate;
+    int maxUsers;
+    LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
+
+    if (status != LicenceStatus.Valide)
     {
-        HttpContext.Current.Session.Clear();
-        HttpContext.Current.Session.Abandon();
-        string url = otherPc ? "~/auth/Login.aspx?msg=other_pc" : "~/auth/Login.aspx";
-        page.Response.Redirect(url, true);
+      return true;
     }
 
-    public static string Version
+    try
     {
-        get
-        {
-            var version = ConfigurationManager.AppSettings["Version"];
-            return string.IsNullOrEmpty(version) ? "1.0.0" : version;
-        }
-    }
+      if (string.IsNullOrEmpty(connStr)) return true;
 
-    public static int GetCurrentAnneeId()
+      using (SqlConnection conn = new SqlConnection(connStr))
+      {
+        using (SqlCommand cmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE SESSION_TOKEN IS NOT NULL", conn))
+        {
+          conn.Open();
+          int activeUsers = (int)cmd.ExecuteScalar();
+          return activeUsers >= maxUsers;
+        }
+      }
+    }
+    catch
     {
-        var session = HttpContext.Current.Session;
-        if (session != null && session["ID_ANNEE_ACTIVE"] != null)
-        {
-            return Convert.ToInt32(session["ID_ANNEE_ACTIVE"]);
-        }
-
-        try
-        {
-            if (string.IsNullOrEmpty(connStr)) return 0;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                string sql = "SELECT TOP 1 ID FROM RANNEE WHERE CLOTURE = 0 ORDER BY DATE_DEBUT DESC";
-                using (SqlCommand cmd = new SqlCommand(sql, conn))
-                {
-                    conn.Open();
-                    object result = cmd.ExecuteScalar();
-                    return result != null ? (int)result : 0;
-                }
-            }
-        }
-        catch
-        {
-            return 0;
-        }
+      return false;
     }
+  }
 
-    // ============================================================
-    // GESTION DE LA LICENCE
-    // ============================================================
-    private enum LicenceStatus { Valide, Manquante, Expiree, Invalide }
+  public static bool IsLicenceValid()
+  {
+    DateTime expirationDate;
+    int maxUsers;
+    LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
+    return status == LicenceStatus.Valide;
+  }
 
-    private static readonly object _licenceLock = new object();
-    private static DateTime _cachedExpirationDate = DateTime.MinValue;
-    private static int _cachedMaxUsers = 0;
-    private static DateTime _cacheTime = DateTime.MinValue;
-    private static readonly TimeSpan _cacheDuration = TimeSpan.FromMinutes(5);
+  public static SidebarInfo GetSidebarInfo()
+  {
+    DateTime expirationDate;
+    int maxUsers;
+    LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
 
-    public static string GetExpirationDateString()
+    string expirationText;
+    string maxUsersText;
+
+    if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
     {
-        DateTime expirationDate;
-        int maxUsers;
-        LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
-
-        if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
-        {
-            return expirationDate.ToString("dd/MM/yyyy");
-        }
-        else if (status == LicenceStatus.Manquante)
-        {
-            return T("LicenceMissing");
-        }
-        else
-        {
-            return T("LicenceInvalid");
-        }
+      expirationText = expirationDate.ToString("dd/MM/yyyy");
+      maxUsersText = maxUsers.ToString();
     }
-
-    public static string GetMaxUsersString()
+    else if (status == LicenceStatus.Manquante)
     {
-        DateTime expirationDate;
-        int maxUsers;
-        LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
-
-        if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
-        {
-            return maxUsers.ToString();
-        }
-        else
-        {
-            return "0";
-        }
+      expirationText = T("LicenceMissing");
+      maxUsersText = "0";
     }
-
-    public static bool IsMaxUsersReached()
+    else
     {
-        DateTime expirationDate;
-        int maxUsers;
-        LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
-
-        if (status != LicenceStatus.Valide)
-        {
-            return true;
-        }
-
-        try
-        {
-            if (string.IsNullOrEmpty(connStr)) return true;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                using (SqlCommand cmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE SESSION_TOKEN IS NOT NULL", conn))
-                {
-                    conn.Open();
-                    int activeUsers = (int)cmd.ExecuteScalar();
-                    return activeUsers >= maxUsers;
-                }
-            }
-        }
-        catch
-        {
-            return false;
-        }
+      expirationText = T("LicenceInvalid");
+      maxUsersText = "0";
     }
 
-    public static bool IsLicenceValid()
+    return new SidebarInfo
     {
-        DateTime expirationDate;
-        int maxUsers;
-        LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
-        return status == LicenceStatus.Valide;
-    }
+      ExpirationDate = expirationText,
+      MaxUsers = maxUsersText,
+      IsValid = (status == LicenceStatus.Valide),
+      IsExpired = (status == LicenceStatus.Expiree)
+    };
+  }
 
-    public static SidebarInfo GetSidebarInfo()
+  private static LicenceStatus CheckLicence(out DateTime expirationDate, out int maxUsers)
+  {
+    expirationDate = DateTime.MinValue;
+    maxUsers = 0;
+
+    lock (_licenceLock)
     {
-        DateTime expirationDate;
-        int maxUsers;
-        LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
+      if (_cacheTime > DateTime.Now.Subtract(_cacheDuration))
+      {
+        expirationDate = _cachedExpirationDate;
+        maxUsers = _cachedMaxUsers;
 
-        string expirationText;
-        string maxUsersText;
+        if (_cachedExpirationDate == DateTime.MinValue)
+          return LicenceStatus.Invalide;
 
-        if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
-        {
-            expirationText = expirationDate.ToString("dd/MM/yyyy");
-            maxUsersText = maxUsers.ToString();
-        }
-        else if (status == LicenceStatus.Manquante)
-        {
-            expirationText = T("LicenceMissing");
-            maxUsersText = "0";
-        }
-        else
-        {
-            expirationText = T("LicenceInvalid");
-            maxUsersText = "0";
-        }
+        if (DateTime.Now.Date > _cachedExpirationDate.Date)
+          return LicenceStatus.Expiree;
 
-        return new SidebarInfo
-        {
-            ExpirationDate = expirationText,
-            MaxUsers = maxUsersText,
-            IsValid = (status == LicenceStatus.Valide),
-            IsExpired = (status == LicenceStatus.Expiree)
-        };
+        return LicenceStatus.Valide;
+      }
     }
 
-    private static LicenceStatus CheckLicence(out DateTime expirationDate, out int maxUsers)
+    if (HttpContext.Current == null)
+      return LicenceStatus.Invalide;
+
+    string path = HttpContext.Current.Server.MapPath("~/bin/licence.key");
+    if (!File.Exists(path))
+      return LicenceStatus.Manquante;
+
+    string secret = ConfigurationManager.AppSettings["LicenceSecret"];
+    if (string.IsNullOrEmpty(secret))
+      return LicenceStatus.Invalide;
+
+    try
     {
-        expirationDate = DateTime.MinValue;
-        maxUsers = 0;
+      string[] lines = File.ReadAllLines(path);
 
-        lock (_licenceLock)
-        {
-            if (_cacheTime > DateTime.Now.Subtract(_cacheDuration))
-            {
-                expirationDate = _cachedExpirationDate;
-                maxUsers = _cachedMaxUsers;
+      string expClear = GetValueFromLines(lines, "EXPIRATIONS", false);
+      string maxClear = GetValueFromLines(lines, "MAX_USERSS", false);
 
-                if (_cachedExpirationDate == DateTime.MinValue)
-                    return LicenceStatus.Invalide;
+      string expHash = GetValueFromLines(lines, "EXPIRATION", true);
+      string maxHash = GetValueFromLines(lines, "MAX_USERS", true);
+      string sigHash = GetValueFromLines(lines, "SIGNATURE", true);
 
-                if (DateTime.Now.Date > _cachedExpirationDate.Date)
-                    return LicenceStatus.Expiree;
+      if (!DateTime.TryParseExact(expClear, "yyyy-MM-dd",
+          System.Globalization.CultureInfo.InvariantCulture,
+          System.Globalization.DateTimeStyles.None, out expirationDate))
+        return LicenceStatus.Invalide;
 
-                return LicenceStatus.Valide;
-            }
-        }
+      if (!int.TryParse(maxClear, out maxUsers) || maxUsers <= 0)
+        return LicenceStatus.Invalide;
 
-        if (HttpContext.Current == null)
-            return LicenceStatus.Invalide;
+      string expCalc = ComputeHmacSha256(expClear, secret);
+      string maxCalc = ComputeHmacSha256(maxUsers.ToString(), secret);
+      string sigCalc = ComputeHmacSha256(expCalc + maxCalc, secret);
 
-        string path = HttpContext.Current.Server.MapPath("~/bin/licence.key");
-        if (!File.Exists(path))
-            return LicenceStatus.Manquante;
+      if (expCalc != expHash || maxCalc != maxHash || sigCalc != sigHash)
+        return LicenceStatus.Invalide;
 
-        string secret = ConfigurationManager.AppSettings["LicenceSecret"];
-        if (string.IsNullOrEmpty(secret))
-            return LicenceStatus.Invalide;
+      lock (_licenceLock)
+      {
+        _cachedExpirationDate = expirationDate;
+        _cachedMaxUsers = maxUsers;
+        _cacheTime = DateTime.Now;
+      }
 
-        try
-        {
-            string[] lines = File.ReadAllLines(path);
+      if (DateTime.Now.Date > expirationDate.Date)
+        return LicenceStatus.Expiree;
 
-            string expClear = GetValueFromLines(lines, "EXPIRATIONS", false);
-            string maxClear = GetValueFromLines(lines, "MAX_USERSS", false);
-
-            string expHash = GetValueFromLines(lines, "EXPIRATION", true);
-            string maxHash = GetValueFromLines(lines, "MAX_USERS", true);
-            string sigHash = GetValueFromLines(lines, "SIGNATURE", true);
-
-            if (!DateTime.TryParseExact(expClear, "yyyy-MM-dd",
-                System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out expirationDate))
-                return LicenceStatus.Invalide;
-
-            if (!int.TryParse(maxClear, out maxUsers) || maxUsers <= 0)
-                return LicenceStatus.Invalide;
-
-            string expCalc = ComputeHmacSha256(expClear, secret);
-            string maxCalc = ComputeHmacSha256(maxUsers.ToString(), secret);
-            string sigCalc = ComputeHmacSha256(expCalc + maxCalc, secret);
-
-            if (expCalc != expHash || maxCalc != maxHash || sigCalc != sigHash)
-                return LicenceStatus.Invalide;
-
-            lock (_licenceLock)
-            {
-                _cachedExpirationDate = expirationDate;
-                _cachedMaxUsers = maxUsers;
-                _cacheTime = DateTime.Now;
-            }
-
-            if (DateTime.Now.Date > expirationDate.Date)
-                return LicenceStatus.Expiree;
-
-            return LicenceStatus.Valide;
-        }
-        catch
-        {
-            return LicenceStatus.Invalide;
-        }
+      return LicenceStatus.Valide;
     }
-
-    private static string GetValueFromLines(string[] lines, string key, bool first)
+    catch
     {
-        var values = new List<string>();
-        foreach (var line in lines)
-        {
-            if (line.StartsWith(key + "="))
-            {
-                values.Add(line.Substring(key.Length + 1).Trim());
-            }
-        }
-
-        if (values.Count == 0) return null;
-        return first ? values[0] : values[values.Count - 1];
+      return LicenceStatus.Invalide;
     }
+  }
 
-    private static string ComputeHmacSha256(string data, string key)
+  private static string GetValueFromLines(string[] lines, string key, bool first)
+  {
+    var values = new List<string>();
+    foreach (var line in lines)
     {
-        using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key)))
-        {
-            byte[] hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
-            return BitConverter.ToString(hash).Replace("-", "").ToLower();
-        }
+      if (line.StartsWith(key + "="))
+      {
+        values.Add(line.Substring(key.Length + 1).Trim());
+      }
     }
 
-    // ============================================================
-    // INFORMATIONS DE LICENCE (objet complet)
-    // ============================================================
-    public class LicenceInfo
+    if (values.Count == 0) return null;
+    return first ? values[0] : values[values.Count - 1];
+  }
+
+  private static string ComputeHmacSha256(string data, string key)
+  {
+    using (var hmac = new HMACSHA256(Encoding.UTF8.GetBytes(key)))
     {
-        public DateTime ExpirationDate { get; set; }
-        public int MaxUsers { get; set; }
-        public bool IsValid { get; set; }
-        public bool IsExpired { get; set; }
-        public int DaysLeft { get; set; }
+      byte[] hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(data));
+      return BitConverter.ToString(hash).Replace("-", "").ToLower();
     }
+  }
 
-    public static LicenceInfo GetLicenceInfo()
+  // ============================================================
+  // INFORMATIONS DE LICENCE (objet complet)
+  // ============================================================
+  public class LicenceInfo
+  {
+    public DateTime ExpirationDate { get; set; }
+    public int MaxUsers { get; set; }
+    public bool IsValid { get; set; }
+    public bool IsExpired { get; set; }
+    public int DaysLeft { get; set; }
+  }
+
+  public static LicenceInfo GetLicenceInfo()
+  {
+    DateTime exp;
+    int max;
+    var status = CheckLicence(out exp, out max);
+    var info = new LicenceInfo
     {
-        DateTime exp;
-        int max;
-        var status = CheckLicence(out exp, out max);
-        var info = new LicenceInfo
-        {
-            ExpirationDate = exp,
-            MaxUsers = max,
-            IsValid = (status == LicenceStatus.Valide),
-            IsExpired = (status == LicenceStatus.Expiree)
-        };
-        info.DaysLeft = (exp.Date - DateTime.Now.Date).Days;
-        return info;
-    }
+      ExpirationDate = exp,
+      MaxUsers = max,
+      IsValid = (status == LicenceStatus.Valide),
+      IsExpired = (status == LicenceStatus.Expiree)
+    };
+    info.DaysLeft = (exp.Date - DateTime.Now.Date).Days;
+    return info;
+  }
 
-    // ============================================================
-    // DÉCONNEXION UNIFIÉE
-    // ============================================================
-    public static void Logout(HttpContext context)
-    {
-        if (context == null || context.Session == null) return;
-
-        // Supprimer le token en base si l'utilisateur est connecté
-        int userId = GetUserId(context);
-        if (userId > 0)
-        {
-            try
-            {
-                using (SqlConnection conn = new SqlConnection(connStr))
-                {
-                    string sql = "UPDATE USERS SET SESSION_TOKEN = NULL WHERE IDUSER = @id";
-                    using (SqlCommand cmd = new SqlCommand(sql, conn))
-                    {
-                        cmd.Parameters.AddWithValue("@id", userId);
-                        conn.Open();
-                        cmd.ExecuteNonQuery();
-                    }
-                }
-            }
-            catch { /* ignorer */ }
-        }
-
-        // Nettoyer la session
-        context.Session.Clear();
-        context.Session.Abandon();
-
-        // Supprimer les cookies de session et d'authentification
-        if (context.Request.Cookies["ASP.NET_SessionId"] != null)
-        {
-            var cookie = new HttpCookie("ASP.NET_SessionId");
-            cookie.Expires = DateTime.Now.AddDays(-1);
-            context.Response.Cookies.Add(cookie);
-        }
-
-        try
-        {
-            System.Web.Security.FormsAuthentication.SignOut();
-            string authCookieName = System.Web.Security.FormsAuthentication.FormsCookieName;
-            if (context.Request.Cookies[authCookieName] != null)
-            {
-                var authCookie = new HttpCookie(authCookieName);
-                authCookie.Expires = DateTime.Now.AddDays(-1);
-                context.Response.Cookies.Add(authCookie);
-            }
-        }
-        catch { }
-
-        // En-têtes anti-cache
-        context.Response.Cache.SetCacheability(System.Web.HttpCacheability.NoCache);
-        context.Response.Cache.SetNoStore();
-        context.Response.Cache.SetExpires(DateTime.UtcNow.AddYears(-1));
-        context.Response.AppendHeader("Pragma", "no-cache");
-        context.Response.AppendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
-        context.Response.AppendHeader("Expires", "0");
-    }
-
-    // ============================================================
-    // MÉTHODES POUR LES CLASSES ET MATIÈRES AUTORISÉES
-    // ============================================================
-
-    public static string GetClassesAutorisees()
-    {
-        var session = HttpContext.Current.Session;
-        if (session != null && session["ClassesAutorisees"] != null)
-        {
-            return session["ClassesAutorisees"].ToString();
-        }
-
-        // Si l'utilisateur est SuperAdmin ou Admin, retourner "all"
-        if (IsSuperAdmin() || IsAdmin())
-        {
-            return "all";
-        }
-
-        // Pour les professeurs, charger depuis la base
-        int? userId = GetCurrentUserId();
-        if (userId.HasValue && userId.Value > 0)
-        {
-            var classes = LoadClassesForProfessor(userId.Value);
-            var serializer = new JavaScriptSerializer();
-            string json = serializer.Serialize(classes);
-            if (session != null) session["ClassesAutorisees"] = json;
-            return json;
-        }
-
-        return "[]";
-    }
-
-    public static string GetMatieresAutorisees()
-    {
-        var session = HttpContext.Current.Session;
-        if (session != null && session["MatieresAutorisees"] != null)
-        {
-            return session["MatieresAutorisees"].ToString();
-        }
-
-        // Si l'utilisateur est SuperAdmin ou Admin, retourner "all"
-        if (IsSuperAdmin() || IsAdmin())
-        {
-            return "all";
-        }
-
-        // Pour les professeurs, charger depuis la base
-        int? userId = GetCurrentUserId();
-        if (userId.HasValue && userId.Value > 0)
-        {
-            var matieres = LoadMatieresForProfessor(userId.Value);
-            var serializer = new JavaScriptSerializer();
-            string json = serializer.Serialize(matieres);
-            if (session != null) session["MatieresAutorisees"] = json;
-            return json;
-        }
-
-        return "[]";
-    }
-
-    private static List<object> LoadClassesForProfessor(int professeurId)
-    {
-        var classes = new List<object>();
-        try
-        {
-            if (string.IsNullOrEmpty(connStr)) return classes;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                string sql = @"SELECT DISTINCT c.ID, c.NOM 
-                        FROM CLASSES c
-                        INNER JOIN MATIERES m ON m.CLASSE_ID = c.ID
-                        WHERE m.ENSEIGNANT = @professeurId
-                        ORDER BY c.NOM";
-                SqlCommand cmd = new SqlCommand(sql, conn);
-                cmd.Parameters.AddWithValue("@professeurId", professeurId);
-                conn.Open();
-                using (SqlDataReader reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        classes.Add(new
-                        {
-                            ID = reader["ID"].ToString(),
-                            NOM = reader["NOM"].ToString()
-                        });
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine("Erreur LoadClassesForProfessor: " + ex.Message);
-        }
-        return classes;
-    }
-
-    private static List<object> LoadMatieresForProfessor(int professeurId)
-    {
-        var matieres = new List<object>();
-        try
-        {
-            if (string.IsNullOrEmpty(connStr)) return matieres;
-
-            using (SqlConnection conn = new SqlConnection(connStr))
-            {
-                string sql = @"SELECT m.ID, m.NOM, m.COEFFICIENT, m.CLASSE_ID, c.NOM AS CLASSE_NOM
-                        FROM MATIERES m
-                        INNER JOIN CLASSES c ON m.CLASSE_ID = c.ID
-                        WHERE m.ENSEIGNANT = @professeurId
-                        ORDER BY c.NOM, m.NOM";
-                SqlCommand cmd = new SqlCommand(sql, conn);
-                cmd.Parameters.AddWithValue("@professeurId", professeurId);
-                conn.Open();
-                using (SqlDataReader reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        matieres.Add(new
-                        {
-                            ID = reader["ID"].ToString(),
-                            NOM = reader["NOM"].ToString(),
-                            COEFFICIENT = reader["COEFFICIENT"] != DBNull.Value ? Convert.ToDecimal(reader["COEFFICIENT"]) : 1,
-                            CLASSE_ID = reader["CLASSE_ID"] != DBNull.Value ? Convert.ToInt32(reader["CLASSE_ID"]) : 0,
-                            CLASSE_NOM = reader["CLASSE_NOM"] != DBNull.Value ? reader["CLASSE_NOM"].ToString() : ""
-                        });
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine("Erreur LoadMatieresForProfessor: " + ex.Message);
-        }
-        return matieres;
-    }
-
-    // ============================================================
-    // CLASSES PUBLIQUES
-    // ============================================================
-    public class SidebarInfo
-    {
-        public string ExpirationDate { get; set; }
-        public string MaxUsers { get; set; }
-        public bool IsValid { get; set; }
-        public bool IsExpired { get; set; }
-    }
+  // ============================================================
+  // CLASSES PUBLIQUES
+  // ============================================================
+  public class SidebarInfo
+  {
+    public string ExpirationDate { get; set; }
+    public string MaxUsers { get; set; }
+    public bool IsValid { get; set; }
+    public bool IsExpired { get; set; }
+  }
 }

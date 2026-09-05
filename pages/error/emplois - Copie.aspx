@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Emploi du temps — Gestion Scolaire</title>
+    <title>Emploi du temps — Gestion de Stock</title>
     <link rel="stylesheet" href="../../_assets/css/all.min.css?v=<%=AuthHelper.Version %>">
     <link rel="stylesheet" href="../../_assets/css/global.css?v=<%=AuthHelper.Version %>">
     <link rel="stylesheet" href="css/emplois.css?v=<%=AuthHelper.Version %>">
@@ -20,7 +20,7 @@
             <aside class="main-sidebar" id="sidebar">
                 <a href="#" class="brand-link" onclick="loadDashboard()">
                     <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Ccircle cx='16.5' cy='16.5' r='16.5' fill='%23007bff'/%3E%3Ctext x='16.5' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EGS%3C/text%3E%3C/svg%3E" alt="Logo" class="brand-image">
-                    <span class="brand-text">Gestion Scolaire</span>
+                    <span class="brand-text">Gestion de Stock</span>
                 </a>
                 <div class="sidebar">
                     <%= AuthHelper.RenderMenuHTML() %>

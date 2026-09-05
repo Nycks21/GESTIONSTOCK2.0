@@ -20,7 +20,7 @@ function formatNetDate(jsonDate) {
 function executeCustomSQL() {
     var queryArea = document.getElementById('sqlConsole');
     var resultDiv = document.getElementById('sqlExecutionResult');
-    
+
     if (!queryArea || !queryArea.value.trim()) {
         Swal.fire({ icon: 'error', title: 'Champ vide', text: 'Veuillez saisir une requête.' });
         return;
@@ -33,15 +33,15 @@ function executeCustomSQL() {
     lancerExecution();
 
     function lancerExecution() {
-        Swal.fire({ 
-            title: 'Confirmer l\'exécution ?', 
-            text: 'Action directe sur la base de données.', 
-            icon: 'warning', 
-            showCancelButton: true, 
-            confirmButtonText: 'Oui, exécuter' 
+        Swal.fire({
+            title: 'Confirmer l\'exécution ?',
+            text: 'Action directe sur la base de données.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Oui, exécuter'
         }).then(function (result) {
             if (!result.isConfirmed) return;
-            
+
             Swal.showLoading();
             var formData = new URLSearchParams();
             formData.append('query', queryText);
@@ -53,10 +53,10 @@ function executeCustomSQL() {
                 sqlHeaders['X-CSRF-Token'] = csrf;
             }
 
-            fetch('handlers/ExecuteSQL.ashx', { 
-                method: 'POST', 
-                headers: sqlHeaders, 
-                body: formData 
+            fetch('handlers/ExecuteSQL.ashx', {
+                method: 'POST',
+                headers: sqlHeaders,
+                body: formData
             })
             .then(function (r) { return r.json(); })
             .then(function (res) {
@@ -78,8 +78,8 @@ function executeCustomSQL() {
                     }
                 }
             })
-            .catch(function () { 
-                Swal.fire('Erreur', 'Erreur de communication avec le serveur.', 'error'); 
+            .catch(function () {
+                Swal.fire('Erreur', 'Erreur de communication avec le serveur.', 'error');
             });
         });
     }
@@ -88,7 +88,7 @@ function executeCustomSQL() {
 // ── Rendu du tableau (LOGIQUE CONSERVÉE + RESIZE) ─────────────────────────────
 function renderSqlTablePaged(container) {
     if (!sqlAllData || sqlAllData.length === 0) {
-        container.innerHTML = '<div class="p-3">Aucun résultat.</div>';
+        container.innerHTML = '<div class="p-3">Requête exécutée avec succès.</div>';
         return;
     }
 
@@ -100,13 +100,13 @@ function renderSqlTablePaged(container) {
                      '<span>Page ' + sqlCurrentPage + '</span>' +
                      '<select onchange="onRowsPerPageChange(this.value)">' + [10, 20, 50].map(function(n){ return '<option '+(n==sqlRowsPerPage?'selected':'')+'>'+n+'</option>'; }).join('') + '</select></div>';
 
-    var tableHtml = 
+    var tableHtml =
         '<table style="width:100%; min-width:1200px; border-collapse:collapse; table-layout:fixed; background:#fff;">' +
             '<thead style="background:#343a40; color:#fff;"><tr>' +
-                sqlAllColumns.map(function(col) { 
+                sqlAllColumns.map(function(col) {
                     // Ajout du div "resizer" ici
-                    return '<th style="width:150px; padding:12px; text-align:left; border:1px solid #454d55; white-space:nowrap; position:relative;">' + 
-                             col + '<div class="resizer" style="width:5px; height:100%; position:absolute; top:0; right:0; cursor:col-resize;"></div></th>'; 
+                    return '<th style="width:150px; padding:12px; text-align:left; border:1px solid #454d55; white-space:nowrap; position:relative;">' +
+                             col + '<div class="resizer" style="width:5px; height:100%; position:absolute; top:0; right:0; cursor:col-resize;"></div></th>';
                 }).join('') +
             '</tr></thead>' +
             '<tbody>' +
@@ -114,7 +114,7 @@ function renderSqlTablePaged(container) {
                     return '<tr>' + sqlAllColumns.map(function(col) {
                         var val = row[col];
                         var display = formatNetDate(val);
-                        return '<td style="padding:10px; border:1px solid #dee2e6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px;">' + 
+                        return '<td style="padding:10px; border:1px solid #dee2e6; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px;">' +
                                (val === null ? '<i>null</i>' : escSql(display)) + '</td>';
                     }).join('') + '</tr>';
                 }).join('') +

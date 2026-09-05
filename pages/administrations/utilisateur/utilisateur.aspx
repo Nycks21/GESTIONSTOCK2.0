@@ -5,7 +5,7 @@
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Utilisateur — Gestion Scolaire</title>
+        <title>Utilisateur — Gestion Stock</title>
 
         <!-- Font Awesome -->
         <link rel="stylesheet" href="../../_assets/css/all.min.css?v=<%=AuthHelper.Version %>">
@@ -28,7 +28,7 @@
                         <a href="#" class="brand-link">
                             <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Ccircle cx='16.5' cy='16.5' r='16.5' fill='%23007bff'/%3E%3Ctext x='16.5' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EGS%3C/text%3E%3C/svg%3E"
                                 alt="Logo" class="brand-image">
-                            <span class="brand-text">Gestion Scolaire</span>
+                            <span class="brand-text">Gestion de Stock</span>
                         </a>
 
                         <div class="sidebar">
@@ -75,14 +75,8 @@
                                                 data-i18n="common.ajouter">
                                                 <i class="fas fa-plus"></i> Ajouter
                                             </button>
-                                            <button class="btn btn-primary btn-sm" onclick="exportUsers()">
-                                                <i class="fas fa-download"></i> Exporter
-                                            </button>
-                                            <button class="btn btn-success btn-sm" onclick="exportUsersToExcelOnly()">
+                                            <button class="btn btn-primary btn-sm" onclick="exportUsersToExcelOnly()">
                                                 <i class="fas fa-file-excel"></i> Excel
-                                            </button>
-                                            <button class="btn btn-info btn-sm" onclick="exportUsersToCsvOnly()">
-                                                <i class="fas fa-file-csv"></i> CSV
                                             </button>
                                         </div>
                                     </div>
@@ -167,11 +161,10 @@
                                 <div class="form-group">
                                     <label>Rôle</label>
                                     <select id="userRole" class="form-control">
-                                        <option value="Administrateur">Administrateur</option>
-                                        <option value="Professeur">Professeur</option>
-                                        <option value="Secrétaire">Secrétaire</option>
-                                        <option value="Comptable">Comptable</option>
-                                        <option value="User">User</option>
+                                        <option value="1">Administrateur</option>
+                                        <option value="2">User</option>
+                                        <option value="3">Logisticien</option>
+                                        <option value="4">Comptable</option>
                                     </select>
                                 </div>
                             </div>
@@ -219,76 +212,60 @@
                                     <div
                                         style="display: flex; flex-wrap: wrap; gap: 15px; padding: 10px; background: #f8f9fa; border-radius: 8px;">
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permDashboard" value="dashboard"
+                                            <input type="checkbox" id="permDashboard" value="accueil"
                                                 style="margin-right: 8px;">
-                                            <label for="permDashboard" style="margin: 0;">📊 Dashboard</label>
+                                            <label for="permDashboard" style="margin: 0;">📊 Accueil</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permEleves" value="eleves"
+                                            <input type="checkbox" id="permArticles" value="articles"
                                                 style="margin-right: 8px;">
-                                            <label for="permEleves" style="margin: 0;">👥 Élèves</label>
+                                            <label for="permArticles" style="margin: 0;">👥 Articles</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permAbsences" value="absences"
+                                            <input type="checkbox" id="permCategories" value="categories"
                                                 style="margin-right: 8px;">
-                                            <label for="permAbsences" style="margin: 0;">📅 Absences</label>
+                                            <label for="permCategories" style="margin: 0;">📅 Catégories</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permBulletins" value="bulletins"
+                                            <input type="checkbox" id="permFournisseurs" value="fournisseurs"
                                                 style="margin-right: 8px;">
-                                            <label for="permBulletins" style="margin: 0;">📄 Bulletins</label>
+                                            <label for="permFournisseurs" style="margin: 0;">📄 Fournisseurs</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permAgenda" value="agenda"
+                                            <input type="checkbox" id="permEntrees" value="entrees"
                                                 style="margin-right: 8px;">
-                                            <label for="permAgenda" style="margin: 0;">📆 Agenda</label>
+                                            <label for="permEntrees" style="margin: 0;">📆 Entrées</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permEmplois" value="emplois"
+                                            <input type="checkbox" id="permSorties" value="sorties"
                                                 style="margin-right: 8px;">
-                                            <label for="permEmplois" style="margin: 0;">⏰ Emplois du temps</label>
+                                            <label for="permSorties" style="margin: 0;">⏰ Sorties</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permFrais" value="frais"
+                                            <input type="checkbox" id="permInventaire" value="inventaire"
                                                 style="margin-right: 8px;">
-                                            <label for="permFrais" style="margin: 0;">💰 Frais scolaires</label>
+                                            <label for="permInventaire" style="margin: 0;">💰 Inventaire</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permNiveaux" value="niveaux"
+                                            <input type="checkbox" id="permMouvements" value="mouvements"
                                                 style="margin-right: 8px;">
-                                            <label for="permNiveaux" style="margin: 0;">📚 Niveaux</label>
+                                            <label for="permMouvements" style="margin: 0;">📚 Historique</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permSalles" value="salles"
+                                            <input type="checkbox" id="permSalles" value="rapports-stock"
                                                 style="margin-right: 8px;">
-                                            <label for="permSalles" style="margin: 0;">🚪 Salles</label>
+                                            <label for="permSalles" style="margin: 0;">🚪 Exploitations</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permClasses" value="classes"
+                                            <input type="checkbox" id="permRapports-stock" value="parametres-stock"
                                                 style="margin-right: 8px;">
-                                            <label for="permClasses" style="margin: 0;">📁 Classes</label>
+                                            <label for="permRapports-stock" style="margin: 0;">📁 Paramètres Stock</label>
                                         </div>
                                         <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permMatieres" value="matieres"
+                                            <input type="checkbox" id="permMatieres" value="parametres-users"
                                                 style="margin-right: 8px;">
-                                            <label for="permMatieres" style="margin: 0;">📖 Matières</label>
+                                            <label for="permMatieres" style="margin: 0;">📖 Utilisateurs</label>
                                         </div>
-                                        <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permImportation" value="importation"
-                                                style="margin-right: 8px;">
-                                            <label for="permImportation" style="margin: 0;">📤 Importation</label>
-                                        </div>
-                                        <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permAnnees" value="annees"
-                                                style="margin-right: 8px;">
-                                            <label for="permAnnees" style="margin: 0;">📅 Années</label>
-                                        </div>
-                                        <div style="display: flex; align-items: center;">
-                                            <input type="checkbox" id="permUtilisateurs" value="utilisateurs"
-                                                style="margin-right: 8px;">
-                                            <label for="permUtilisateurs" style="margin: 0;">👤 Utilisateurs</label>
-                                        </div>
-
                                     </div>
                                 </div>
                             </div>

@@ -100,10 +100,26 @@ function renderSimpleTable() {
         row.insertCell(6).innerHTML = (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true')
             ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
             : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
-        row.insertCell(7).innerHTML = `
-            <button type="button" class="btn btn-sm btn-primary" onclick="openEditUserModal(${user.IDUSER}, event)"><i class="fas fa-edit"></i></button>
-            <button type="button" class="btn btn-sm btn-danger" onclick="supprimerContact(${user.IDUSER}, event)"><i class="fas fa-trash"></i></button>
-        `;
+
+        // --- Modification ici ---
+        var isAdmin = (user.ROLEID === 0); // true si ROLEID = 0
+
+        // Bouton Modifier : désactivé et grisé si admin
+        var editBtn = `<button type="button" class="btn btn-sm ${isAdmin ? 'btn-secondary' : 'btn-primary'}"
+                                ${isAdmin ? 'disabled' : ''}
+                                onclick="openEditUserModal(${user.IDUSER}, event)">
+                            <i class="fas fa-edit"></i>
+                        </button>`;
+
+        // Bouton Supprimer : désactivé et grisé si admin
+        var deleteBtn = `<button type="button" class="btn btn-sm ${isAdmin ? 'btn-secondary' : 'btn-danger'}"
+                                  ${isAdmin ? 'disabled' : ''}
+                                  onclick="supprimerContact(${user.IDUSER}, event)">
+                              <i class="fas fa-trash"></i>
+                          </button>`;
+
+        row.insertCell(7).innerHTML = editBtn + ' ' + deleteBtn;
+        // --- Fin modification ---
     });
     updateCounter();
     createPaginationControls(totalPages);

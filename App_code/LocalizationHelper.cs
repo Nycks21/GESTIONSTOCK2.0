@@ -5,18 +5,25 @@ using System.Web;
 using System.Web.UI;
 using System.Web.SessionState;
 using System.Text;
-using System.Collections.Generic; 
+using System.Collections.Generic;
 
 public static class LocalizationHelper
 {
     // Langues supportées
     public static readonly string[] SupportedCultures = { "fr", "en", "mg" };
-    
+
     // Noms des langues
-    public static readonly string[] CultureNames = { "Français", "English", "Malagasy" };
-    
-    // Drapeaux
-    public static readonly string[] CultureFlags = { "🇫🇷", "🇬🇧", "🇲🇬" };
+    public static readonly string[] CultureNames = { "FR", "EN", "MG" };
+
+    // Drapeaux d'usage général (fallback visuel)
+    public static readonly string[] CultureFlags = { "🇫🇷", "EN", "🇲🇬" };
+
+    // Chemins réels vers les fichiers de drapeaux dans /img
+    public static readonly string[] CultureFlagPaths = {
+        "/img/Flag_FR.svg",
+        "/img/Flag_US.svg",
+        "/img/Flag_MG.svg"
+    };
 
     // Noms courts
     public static readonly string[] CultureShortNames = { "FR", "EN", "MG" };
@@ -287,6 +294,33 @@ public static class LocalizationHelper
     }
 
     /// <summary>
+    /// Normalise et valide un code de langue supporté.
+    /// Accepte par exemple : fr, fr-FR, en-US, mg-MG.
+    /// </summary>
+    public static string NormalizeCultureCode(string cultureCode)
+    {
+        if (string.IsNullOrWhiteSpace(cultureCode))
+            return "fr";
+
+        string normalized = cultureCode.Trim();
+        if (string.IsNullOrEmpty(normalized))
+            return "fr";
+
+        normalized = normalized.Replace("_", "-");
+
+        // Cas direct: fr, en, mg
+        if (Array.Exists(SupportedCultures, c => string.Equals(c, normalized, StringComparison.OrdinalIgnoreCase)))
+            return normalized.ToLowerInvariant();
+
+        // Cas standard avec région: fr-FR => fr ; en-US => en ; mg-MG => mg
+        string baseCode = normalized.Split('-')[0];
+        if (Array.Exists(SupportedCultures, c => string.Equals(c, baseCode, StringComparison.OrdinalIgnoreCase)))
+            return baseCode.ToLowerInvariant();
+
+        return "fr";
+    }
+
+    /// <summary>
     /// Obtient la culture actuelle
     /// </summary>
     public static CultureInfo CurrentCulture
@@ -298,13 +332,15 @@ public static class LocalizationHelper
                 if (HttpContext.Current != null && HttpContext.Current.Session != null)
                 {
                     string culture = HttpContext.Current.Session["CurrentCulture"] as string;
-                    if (!string.IsNullOrEmpty(culture) && Array.Exists(SupportedCultures, c => c == culture))
+                    if (!string.IsNullOrEmpty(culture))
                     {
-                        return new CultureInfo(culture);
+                        string normalized = NormalizeCultureCode(culture);
+                        return new CultureInfo(normalized);
                     }
                 }
             }
             catch { }
+
             return new CultureInfo("fr");
         }
     }
@@ -318,38 +354,44 @@ public static class LocalizationHelper
     }
 
     /// <summary>
+    /// Applique la culture de manière robuste à la session, au thread et à la page.
+    /// </summary>
+    public static void ApplyCulture(string cultureCode)
+    {
+        string normalized = NormalizeCultureCode(cultureCode);
+        var culture = new CultureInfo(normalized);
+
+        try
+        {
+            Thread.CurrentThread.CurrentCulture = culture;
+            Thread.CurrentThread.CurrentUICulture = culture;
+
+            if (HttpContext.Current != null)
+            {
+                if (HttpContext.Current.Session != null)
+                {
+                    HttpContext.Current.Session["CurrentCulture"] = normalized;
+                }
+
+                if (HttpContext.Current.CurrentHandler is Page)
+                {
+                    Page page = (Page)HttpContext.Current.CurrentHandler;
+                    page.UICulture = normalized;
+                    page.Culture = normalized;
+                }
+
+                SetCultureCookie(normalized);
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
     /// Définit la culture pour la session en cours
     /// </summary>
     public static void SetCulture(string cultureCode)
     {
-        if (string.IsNullOrEmpty(cultureCode))
-            return;
-
-        if (!Array.Exists(SupportedCultures, c => c == cultureCode))
-            return;
-
-        try
-        {
-            if (HttpContext.Current != null && HttpContext.Current.Session != null)
-            {
-                HttpContext.Current.Session["CurrentCulture"] = cultureCode;
-                
-                var culture = new CultureInfo(cultureCode);
-                Thread.CurrentThread.CurrentCulture = culture;
-                Thread.CurrentThread.CurrentUICulture = culture;
-                
-                if (HttpContext.Current.CurrentHandler is Page)
-                {
-                    Page page = (Page)HttpContext.Current.CurrentHandler;
-                    page.UICulture = cultureCode;
-                    page.Culture = cultureCode;
-                }
-
-                // Cookie pour persister la langue
-                SetCultureCookie(cultureCode);
-            }
-        }
-        catch { }
+        ApplyCulture(cultureCode);
     }
 
     private static void SetCultureCookie(string cultureCode)
@@ -363,7 +405,7 @@ public static class LocalizationHelper
                 Value = cultureCode,
                 Expires = DateTime.UtcNow.AddYears(1),
                 HttpOnly = true,
-                Secure = HttpContext.Current.Request.IsSecureConnection,
+                Secure = HttpContext.Current.Request != null && HttpContext.Current.Request.IsSecureConnection,
                 Path = "/"
             };
             HttpContext.Current.Response.Cookies.Set(cookie);
@@ -377,9 +419,42 @@ public static class LocalizationHelper
         {
             if (HttpContext.Current == null || HttpContext.Current.Request == null) return null;
             var cookie = HttpContext.Current.Request.Cookies["UserLanguage"];
-            return cookie != null ? cookie.Value : null;
+            return cookie != null ? NormalizeCultureCode(cookie.Value) : null;
         }
         catch { return null; }
+    }
+
+    private static string BuildCleanUrlForLanguage(HttpRequest request)
+    {
+        if (request == null || request.Url == null)
+            return "/";
+
+        var urlBuilder = new StringBuilder();
+        urlBuilder.Append(request.Url.AbsolutePath);
+
+        bool firstParam = true;
+        foreach (string key in request.QueryString.Keys)
+        {
+            if (string.IsNullOrEmpty(key) || key.Equals("lang", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (firstParam)
+            {
+                urlBuilder.Append("?");
+                firstParam = false;
+            }
+            else
+            {
+                urlBuilder.Append("&");
+            }
+
+            string value = request.QueryString[key];
+            urlBuilder.Append(HttpUtility.UrlEncode(key));
+            urlBuilder.Append("=");
+            urlBuilder.Append(HttpUtility.UrlEncode(value));
+        }
+
+        return urlBuilder.ToString();
     }
 
     /// <summary>
@@ -455,24 +530,24 @@ public static class LocalizationHelper
             string currentCulture = CurrentCultureCode;
 
             html.Append(@"<div class=""language-selector"" style=""display:inline-block;position:relative;"">");
-            html.Append(@"<button class=""btn btn-sm btn-outline-secondary dropdown-toggle"" type=""button"" style=""background:transparent;border:1px solid rgba(255,255,255,0.3);color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;display:flex;align-items:center;gap:4px;font-size:13px;"">");
-            
+            html.Append(@"<button class=""btn btn-sm btn-outline-secondary dropdown-toggle"" type=""button"" aria-label=""Changer de langue"" style=""background:rgba(17,24,39,0.55);border:1px solid rgba(255,255,255,0.18);color:#fff;padding:6px 12px;border-radius:6px;cursor:pointer;display:flex;align-items:center;gap:7px;font-size:13px;line-height:1.4;"">");
+
             int currentIndex = Array.IndexOf(SupportedCultures, currentCulture);
             if (currentIndex >= 0)
             {
-                html.AppendFormat(@"<span style=""font-size:16px;"">{0}</span>", CultureFlags[currentIndex]);
-                html.AppendFormat(@"<span style=""font-size:13px;"">{0}</span>", CultureNames[currentIndex]);
+                html.AppendFormat(@"<img src=""{0}"" alt=""{1}"" style=""width:18px;height:12px;object-fit:cover;border-radius:2px;vertical-align:middle;"" />", CultureFlagPaths[currentIndex], CultureNames[currentIndex]);
+                html.AppendFormat(@"<span style=""font-size:13px;font-weight:600;white-space:nowrap;"">{0}</span>", CultureNames[currentIndex]);
             }
             else
             {
-                html.Append(@"🌍");
-                html.Append(@" Langue");
+                html.Append(@"<img src=""/img/Flag_FR.svg"" alt=""Français"" style=""width:18px;height:12px;object-fit:cover;border-radius:2px;vertical-align:middle;"" />");
+                html.Append(@"<span style=""font-size:13px;font-weight:600;white-space:nowrap;"">Langue</span>");
             }
-            
-            html.Append(@" <span style=""font-size:10px;opacity:0.6;"">▼</span>");
+
+            html.Append(@" <span style=""font-size:10px;opacity:0.7;"">▼</span>");
             html.Append(@"</button>");
-            
-            html.Append(@"<div class=""dropdown-menu"" style=""position:absolute;top:100%;right:0;left:auto;min-width:160px;padding:6px 0;margin-top:4px;background:#2d3436;border:1px solid rgba(255,255,255,0.1);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);display:none;z-index:99999;"">");
+
+            html.Append(@"<div class=""dropdown-menu"" style=""position:absolute;top:100%;right:0;left:auto;min-width:170px;padding:6px 0;margin-top:4px;background:#2d3436;border:1px solid rgba(255,255,255,0.1);border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,0.4);display:none;z-index:99999;"">");
             html.Append(@"<div style=""padding:6px 14px;font-size:11px;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.05);"">🌐 Langue</div>");
 
             for (int i = 0; i < SupportedCultures.Length; i++)
@@ -481,11 +556,10 @@ public static class LocalizationHelper
                 string activeBg = isActive ? "background:rgba(79,125,243,0.15);" : "";
                 string activeColor = isActive ? "color:#5b8def;" : "";
                 string checkMark = isActive ? @" <i class=""fas fa-check"" style=""color:#34ce57;margin-left:auto;""></i>" : "";
-                
+
                 html.AppendFormat(@"<a class=""dropdown-item"" href=""#"" onclick=""setLanguage('{0}'); return false;"" style=""display:flex;align-items:center;gap:10px;padding:7px 14px;font-size:13px;color:#e8edf5;text-decoration:none;cursor:pointer;transition:background 0.2s;{1}{2}"">",
                     SupportedCultures[i], activeBg, activeColor);
-                html.AppendFormat(@"<span style=""font-size:18px;"">{0}</span>", CultureFlags[i]);
-                html.AppendFormat(@"<span>{0}</span>", CultureNames[i]);
+                html.AppendFormat(@"<img src=""{0}"" alt=""{1}"" style=""width:18px;height:12px;object-fit:cover;border-radius:2px;vertical-align:middle;"" />", CultureFlagPaths[i], CultureNames[i]);
                 html.Append(checkMark);
                 html.Append(@"</a>");
             }
@@ -502,7 +576,7 @@ public static class LocalizationHelper
                         var selector = selectors[i];
                         var btn = selector.querySelector('button');
                         var dropdown = selector.querySelector('.dropdown-menu');
-                        
+
                         if (btn && dropdown) {
                             btn.addEventListener('click', function(e) {
                                 e.preventDefault();
@@ -519,7 +593,7 @@ public static class LocalizationHelper
                             });
                         }
                     }
-                    
+
                     // Fermer le dropdown si on clique ailleurs
                     document.addEventListener('click', function(e) {
                         var allSelectors = document.querySelectorAll('.language-selector');
@@ -532,7 +606,7 @@ public static class LocalizationHelper
                             }
                         }
                     });
-                    
+
                     // Fonction pour changer la langue
                     window.setLanguage = function(culture) {
                         var currentUrl = window.location.href;
@@ -561,7 +635,8 @@ public static class LocalizationHelper
     }
 
     /// <summary>
-    /// Gère la langue depuis l'URL ou la session
+    /// Gère la langue depuis l'URL, la session, le cookie ou le navigateur.
+    /// Logique robuste : normalisation, persistance, pas de redirection inutile, pas de boucle.
     /// </summary>
     public static void HandleLanguage()
     {
@@ -573,72 +648,57 @@ public static class LocalizationHelper
             HttpResponse response = HttpContext.Current.Response;
             HttpSessionState session = HttpContext.Current.Session;
 
-            // Vérifier si la langue est dans l'URL
-            string langParam = request.QueryString["lang"];
-            if (!string.IsNullOrEmpty(langParam))
+            string requestedCulture = NormalizeCultureCode(request.QueryString["lang"]);
+            string currentCulture = session != null ? NormalizeCultureCode(session["CurrentCulture"] as string) : "fr";
+
+            if (!string.IsNullOrEmpty(request.QueryString["lang"]))
             {
-                SetCulture(langParam);
-                
-                // Supprimer le paramètre lang de l'URL
-                var urlBuilder = new StringBuilder();
-                urlBuilder.Append(request.Url.AbsolutePath);
-                
-                bool firstParam = true;
-                foreach (string key in request.QueryString.Keys)
+                string normalizedRequested = NormalizeCultureCode(request.QueryString["lang"]);
+
+                if (!string.Equals(normalizedRequested, currentCulture, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!string.IsNullOrEmpty(key) && key.ToLower() != "lang")
-                    {
-                        if (firstParam)
-                        {
-                            urlBuilder.Append("?");
-                            firstParam = false;
-                        }
-                        else
-                        {
-                            urlBuilder.Append("&");
-                        }
-                        urlBuilder.AppendFormat("{0}={1}", key, request.QueryString[key]);
-                    }
+                    ApplyCulture(normalizedRequested);
                 }
-                
-                response.Redirect(urlBuilder.ToString());
+
+                string cleanUrl = BuildCleanUrlForLanguage(request);
+                if (!string.Equals(request.RawUrl, cleanUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    response.Redirect(cleanUrl, false);
+                    HttpContext.Current.ApplicationInstance.CompleteRequest();
+                    return;
+                }
+
                 return;
             }
 
-            // Si pas dans l'URL, utiliser la session, le cookie ou le navigateur
             if (session != null)
             {
                 string sessionCulture = session["CurrentCulture"] as string;
-                if (string.IsNullOrEmpty(sessionCulture))
+                if (!string.IsNullOrEmpty(sessionCulture))
                 {
-                    // Essayer le cookie
-                    string cookieCulture = GetCultureFromCookie();
-                    if (!string.IsNullOrEmpty(cookieCulture) && Array.Exists(SupportedCultures, c => c == cookieCulture))
-                    {
-                        SetCulture(cookieCulture);
-                    }
-                    else
-                    {
-                        // Utiliser la langue du navigateur
-                        string browserCulture = "fr";
-                        if (request.UserLanguages != null && request.UserLanguages.Length > 0)
-                        {
-                            browserCulture = request.UserLanguages[0].Split('-')[0];
-                            if (!Array.Exists(SupportedCultures, c => c == browserCulture))
-                            {
-                                browserCulture = "fr";
-                            }
-                        }
-                        SetCulture(browserCulture);
-                    }
-                }
-                else
-                {
-                    var culture = new CultureInfo(sessionCulture);
-                    Thread.CurrentThread.CurrentCulture = culture;
-                    Thread.CurrentThread.CurrentUICulture = culture;
+                    ApplyCulture(sessionCulture);
+                    return;
                 }
             }
+
+            string cookieCulture = GetCultureFromCookie();
+            if (!string.IsNullOrEmpty(cookieCulture))
+            {
+                ApplyCulture(cookieCulture);
+                return;
+            }
+
+            string browserCulture = "fr";
+            if (request.UserLanguages != null && request.UserLanguages.Length > 0)
+            {
+                string firstLanguage = request.UserLanguages[0];
+                if (!string.IsNullOrEmpty(firstLanguage))
+                {
+                    browserCulture = NormalizeCultureCode(firstLanguage);
+                }
+            }
+
+            ApplyCulture(browserCulture);
         }
         catch { }
     }
@@ -692,14 +752,27 @@ public static class LocalizationHelper
     }
 
     /// <summary>
-    /// Obtient le drapeau d'une culture
+    /// Obtient le drapeau d'une culture.
+    /// Utilise les fichiers SVG réels du dossier /img.
     /// </summary>
     public static string GetCultureFlag(string cultureCode)
     {
-        int index = Array.IndexOf(SupportedCultures, cultureCode);
-        if (index >= 0 && index < CultureFlags.Length)
-            return CultureFlags[index];
-        return "🌍";
+        string normalized = NormalizeCultureCode(cultureCode);
+        int index = Array.IndexOf(SupportedCultures, normalized);
+        if (index >= 0 && index < CultureFlagPaths.Length)
+            return CultureFlagPaths[index];
+        return "/img/Flag_FR.svg";
+    }
+
+    public static string GetCultureFlagHtml(string cultureCode)
+    {
+        string normalized = NormalizeCultureCode(cultureCode);
+        int index = Array.IndexOf(SupportedCultures, normalized);
+        if (index < 0 || index >= CultureFlagPaths.Length)
+            return "<img src=\"/img/Flag_FR.svg\" alt=\"Français\" style=\"width:18px;height:12px;object-fit:cover;border-radius:2px;vertical-align:middle;\" />";
+
+        return string.Format("<img src=\"{0}\" alt=\"{1}\" style=\"width:18px;height:12px;object-fit:cover;border-radius:2px;vertical-align:middle;\" />",
+            CultureFlagPaths[index], CultureNames[index]);
     }
 
     /// <summary>
