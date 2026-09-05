@@ -183,9 +183,9 @@ public static class AuthHelper
         // Dashboard
         new MenuItem { Code = "accueil", Text = "Accueil", Url = "/pages/accueil/index.aspx", Icon = "fas fa-chalkboard", Section = "Accueil", Order = 1 },
         // Stock
-        new MenuItem { Code = "unites", Text = "Unité", Url = "/pages/modules/unites/unites.aspx", Icon = "fas fa-ruler", Section = "Paramètres", Order = 2 },
-        new MenuItem { Code = "categories", Text = "Catégories", Url = "/pages/modules/categories/categories.aspx", Icon = "fas fa-tags", Section = "Paramètres", Order = 3 },
-        new MenuItem { Code = "fournisseurs", Text = "Fournisseurs", Url = "/pages/modules/fournisseurs/fournisseurs.aspx", Icon = "fas fa-truck", Section = "Paramètres", Order = 4 },
+        new MenuItem { Code = "unites", Text = "Unité", Url = "/pages/parametres/unites/unites.aspx", Icon = "fas fa-ruler", Section = "Paramètres", Order = 2 },
+        new MenuItem { Code = "categories", Text = "Catégories", Url = "/pages/parametres/categories/categories.aspx", Icon = "fas fa-tags", Section = "Paramètres", Order = 3 },
+        new MenuItem { Code = "fournisseurs", Text = "Fournisseurs", Url = "/pages/parametres/fournisseurs/fournisseurs.aspx", Icon = "fas fa-truck", Section = "Paramètres", Order = 4 },
 
         // Mouvements
         new MenuItem { Code = "articles", Text = "Articles", Url = "/pages/modules/articles/articles.aspx", Icon = "fas fa-boxes", Section = "Mouvements", Order = 5 },

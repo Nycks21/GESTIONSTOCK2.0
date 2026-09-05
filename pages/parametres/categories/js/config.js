@@ -1,6 +1,6 @@
 window.API = {
     BASE: window.BASE_PATH || '/',
-    HANDLERS_PATH: 'pages/modules/categories/handlers/',
+    HANDLERS_PATH: 'pages/parametres/categories/handlers/',
     LIST: 'GetCategories.ashx',
     ADD: 'CategorieAdd.ashx',
     EDIT: 'CategorieEdit.ashx',

@@ -1,6 +1,6 @@
 window.API = {
     BASE: window.BASE_PATH || '/',
-    HANDLERS_PATH: 'pages/modules/sorties/handlers/',
+    HANDLERS_PATH: 'pages/parametres/sorties/handlers/',
     LIST: 'GetSorties.ashx',
     ADD: 'SortieAdd.ashx',
     EDIT: 'SortieEdit.ashx',

@@ -1,7 +1,7 @@
 // config.js
 window.API = {
     BASE: window.BASE_PATH || '/',
-    HANDLERS_PATH: 'pages/modules/fournisseurs/handlers/',
+    HANDLERS_PATH: 'pages/parametres/fournisseurs/handlers/',
     LIST: 'GetFournisseurs.ashx',
     ADD: 'FournisseurAdd.ashx',
     EDIT: 'FournisseurEdit.ashx',
