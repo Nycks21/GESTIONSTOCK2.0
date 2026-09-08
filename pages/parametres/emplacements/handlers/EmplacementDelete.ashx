@@ -53,6 +53,25 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
                     }
                 }
 
+                // Vérifier si l'emplacement est utilisé par un article
+                string referenceSql = @"
+                    SELECT COUNT(*)
+                    FROM MARTICLE
+                    WHERE EMPLACEMENT_ID = @id AND DELETION_AT IS NULL";
+                using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
+                {
+                    referenceCmd.Parameters.AddWithValue("@id", id);
+                    if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
+                    {
+                        ctx.Response.Write(serializer.Serialize(new
+                        {
+                            success = false,
+                            message = "Impossible de supprimer, codification rattachée."
+                        }));
+                        return;
+                    }
+                }
+
                 // Suppression logique
                 string sql = "UPDATE SEMPLACEMENT SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ID = @id AND DELETION_AT IS NULL";
                 using (var cmd = new SqlCommand(sql, conn))
@@ -84,5 +103,8 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
         return null;
     }
 
-    public bool IsReusable => false;
-}
+    public bool IsReusable
+    {
+        get { return false; }
+    }
+}   // ← Accolade fermante manquante ajoutée

@@ -1,4 +1,4 @@
-// loaders.js
+﻿// loaders.js
 
 async function loadArticles(options) {
     const silent = !!(options && options.silent);
@@ -148,7 +148,7 @@ function renderTable(articles) {
 
         html += `<tr>
             <td><span class="badge bg-secondary" style="color:#6c757d; font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">${a.CODE || ''}</span></td>
-            <td><span class="badge bg-secondary" style="font-weight:bold; padding:4px 10px;">${a.NOM || ''}</span></td>
+            <td><span class="badge bg-secondary" style="font-weight:bold; width: 300px; padding:3px 8px;">${a.NOM || ''}</span></td>
             <td>${a.CATEGORIE_NOM || ''}</td>
             <td>${a.FOURNISSEUR_NOM || ''}</td>
             <td>${a.UNITE_SYMBOLE || a.UNITE || ''}</td>

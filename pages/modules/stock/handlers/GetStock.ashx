@@ -45,37 +45,86 @@ public class GetStock : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                // Construction de la requête avec jointures
-                string whereClause = "WHERE s.DELETION_AT IS NULL AND a.DELETION_AT IS NULL AND e.DELETION_AT IS NULL";
+                string whereClause = @"
+                    WHERE a.DELETION_AT IS NULL
+                      AND EXISTS (
+                          SELECT 1
+                          FROM MLENTREE le
+                          INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
+                          WHERE le.ARTICLE_ID = a.ID
+                            AND le.DELETION_AT IS NULL
+                            AND be.STATUT = 'VALIDE'
+                            AND be.DELETION_AT IS NULL
+                      )";
                 if (!string.IsNullOrEmpty(search))
                     whereClause += " AND (a.CODE LIKE @search OR a.NOM LIKE @search)";
                 if (!string.IsNullOrEmpty(article))
                     whereClause += " AND a.ID = @article";
                 if (!string.IsNullOrEmpty(emplacement))
-                    whereClause += " AND e.ID = @emplacement";
+                    whereClause += @" AND EXISTS (
+                        SELECT 1 FROM SSTOCK sf
+                        WHERE sf.ARTICLE_ID = a.ID
+                          AND sf.EMPLACEMENT_ID = @emplacement
+                          AND sf.DELETION_AT IS NULL)";
 
-                string orderBy = "ORDER BY " + sortField + " " + sortOrder;
+                string sortColumn = "ARTICLE_NOM";
+                switch (sortField.ToUpperInvariant())
+                {
+                    case "ARTICLE_CODE": sortColumn = "ARTICLE_CODE"; break;
+                    case "ENTREE": sortColumn = "ENTREE"; break;
+                    case "SORTIE": sortColumn = "SORTIE"; break;
+                    case "DISPONIBLE": sortColumn = "DISPONIBLE"; break;
+                    case "STATUT": sortColumn = "STATUT"; break;
+                }
+                string orderBy = "ORDER BY " + sortColumn + " " + (sortOrder.ToUpperInvariant() == "DESC" ? "DESC" : "ASC");
 
-                string countSql = @"
-                    SELECT COUNT(*)
-                    FROM SSTOCK s
-                    INNER JOIN MARTICLE a ON s.ARTICLE_ID = a.ID
-                    INNER JOIN SEMPLACEMENT e ON s.EMPLACEMENT_ID = e.ID
-                    " + whereClause;
+                string fromSql = @"
+                    FROM MARTICLE a
+                    LEFT JOIN (
+                        SELECT le.ARTICLE_ID, SUM(le.QUANTITE) AS ENTREE
+                        FROM MLENTREE le
+                        INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
+                        WHERE le.DELETION_AT IS NULL
+                          AND be.STATUT = 'VALIDE'
+                          AND be.DELETION_AT IS NULL
+                        GROUP BY le.ARTICLE_ID
+                    ) ent ON ent.ARTICLE_ID = a.ID
+                    LEFT JOIN (
+                        SELECT ls.ARTICLE_ID, SUM(ls.QUANTITE_R) AS SORTIE
+                        FROM MLSORTIE ls
+                        INNER JOIN SSORTIE bs ON bs.ID = ls.BON_SORTIE_ID
+                        WHERE ls.DELETION_AT IS NULL
+                          AND bs.STATUT = 'VALIDE'
+                          AND bs.DELETION_AT IS NULL
+                        GROUP BY ls.ARTICLE_ID
+                    ) sor ON sor.ARTICLE_ID = a.ID
+                    OUTER APPLY (
+                        SELECT TOP 1 s.EMPLACEMENT_ID, e.NOM AS EMPLACEMENT_NOM
+                        FROM SSTOCK s
+                        INNER JOIN SEMPLACEMENT e ON e.ID = s.EMPLACEMENT_ID
+                        WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL
+                        ORDER BY s.QUANTITE_ACTUELLE DESC
+                    ) emp";
 
-                string selectSql = @"
-                    SELECT
-                        s.ARTICLE_ID,
-                        s.EMPLACEMENT_ID,
-                        a.CODE AS ARTICLE_CODE,
-                        a.NOM AS ARTICLE_NOM,
-                        a.SEUIL_ALERTE,
-                        e.NOM AS EMPLACEMENT_NOM,
-                        s.QUANTITE_ACTUELLE
-                    FROM SSTOCK s
-                    INNER JOIN MARTICLE a ON s.ARTICLE_ID = a.ID
-                    INNER JOIN SEMPLACEMENT e ON s.EMPLACEMENT_ID = e.ID
-                    " + whereClause + @"
+                string calculatedColumns = @"
+                    a.ID AS ARTICLE_ID,
+                    a.CODE AS ARTICLE_CODE,
+                    a.NOM AS ARTICLE_NOM,
+                    emp.EMPLACEMENT_ID,
+                    emp.EMPLACEMENT_NOM,
+                    a.SEUIL_ALERTE,
+                    ISNULL(ent.ENTREE, 0) AS ENTREE,
+                    ISNULL(sor.SORTIE, 0) AS SORTIE,
+                    ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) AS DISPONIBLE,
+                    CASE
+                        WHEN ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) <= 0 THEN 'Rupture de stock'
+                        WHEN ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) <= a.SEUIL_ALERTE THEN 'Stock faible'
+                        ELSE 'Normal'
+                    END AS STATUT";
+
+                string countSql = "SELECT COUNT(*) " + fromSql + " " + whereClause;
+
+                string selectSql = "SELECT " + calculatedColumns + " " + fromSql + " " + whereClause + @"
                     " + orderBy + @"
                     OFFSET @offset ROWS FETCH NEXT @fetch ROWS ONLY";
 
@@ -104,7 +153,10 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                                 d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
                                 d["SEUIL_ALERTE"] = reader["SEUIL_ALERTE"];
                                 d["EMPLACEMENT_NOM"] = reader["EMPLACEMENT_NOM"];
-                                d["QUANTITE_ACTUELLE"] = reader["QUANTITE_ACTUELLE"];
+                                d["ENTREE"] = reader["ENTREE"];
+                                d["SORTIE"] = reader["SORTIE"];
+                                d["DISPONIBLE"] = reader["DISPONIBLE"];
+                                d["STATUT"] = reader["STATUT"];
                                 list.Add(d);
                             }
                         }
@@ -112,20 +164,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                 }
                 else
                 {
-                    string allSql = @"
-                        SELECT
-                            s.ARTICLE_ID,
-                            s.EMPLACEMENT_ID,
-                            a.CODE AS ARTICLE_CODE,
-                            a.NOM AS ARTICLE_NOM,
-                            a.SEUIL_ALERTE,
-                            e.NOM AS EMPLACEMENT_NOM,
-                            s.QUANTITE_ACTUELLE
-                        FROM SSTOCK s
-                        INNER JOIN MARTICLE a ON s.ARTICLE_ID = a.ID
-                        INNER JOIN SEMPLACEMENT e ON s.EMPLACEMENT_ID = e.ID
-                        " + whereClause + @"
-                        " + orderBy;
+                    string allSql = "SELECT " + calculatedColumns + " " + fromSql + " " + whereClause + " " + orderBy;
                     using (var cmd = new SqlCommand(allSql, conn))
                     {
                         AddParameters(cmd, search, article, emplacement);
@@ -140,7 +179,10 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                                 d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
                                 d["SEUIL_ALERTE"] = reader["SEUIL_ALERTE"];
                                 d["EMPLACEMENT_NOM"] = reader["EMPLACEMENT_NOM"];
-                                d["QUANTITE_ACTUELLE"] = reader["QUANTITE_ACTUELLE"];
+                                d["ENTREE"] = reader["ENTREE"];
+                                d["SORTIE"] = reader["SORTIE"];
+                                d["DISPONIBLE"] = reader["DISPONIBLE"];
+                                d["STATUT"] = reader["STATUT"];
                                 list.Add(d);
                             }
                         }

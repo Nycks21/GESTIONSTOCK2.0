@@ -103,10 +103,10 @@ async function deleteFournisseur(id) {
             loadFournisseurs();
             loadFournisseurStats();
         } else {
-            showToast('Erreur', result.message || 'Échec de la suppression', 'error');
+            showToast('Attention', result.message || 'Échec de la suppression', 'error');
         }
     } catch (e) {
-        showToast('Erreur', e.message, 'error');
+        showToast('Attention', e.message, 'error');
     } finally {
         hideSpinner();
     }

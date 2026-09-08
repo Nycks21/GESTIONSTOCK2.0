@@ -59,10 +59,10 @@ async function saveEmplacement(e) {
             loadEmplacements();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Une erreur est survenue', 'error');
+            showToast('Attention', result.message || 'Une erreur est survenue', 'error');
         }
     } catch (err) {
-        showToast('Erreur', err.message, 'error');
+        showToast('Attention', err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -100,10 +100,10 @@ async function deleteEmplacement(id) {
             loadEmplacements();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Échec de la suppression', 'error');
+            showToast('Attention', result.message || 'Échec de la suppression', 'error');
         }
     } catch (err) {
-        showToast('Erreur', err.message, 'error');
+        showToast('Attention', err.message, 'error');
     } finally {
         hideSpinner();
     }

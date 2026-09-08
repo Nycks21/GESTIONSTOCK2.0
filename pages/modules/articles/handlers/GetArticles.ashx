@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="GetArticles" %>
+﻿<%@ WebHandler Language="C#" Class="GetArticles" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;

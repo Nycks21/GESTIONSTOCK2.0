@@ -31,6 +31,7 @@ public class StockAdjust : IHttpHandler, IRequiresSessionState
             string emplacementId = GetString(data, "emplacementId");
             string type = GetString(data, "type"); // "ENTREE" ou "SORTIE"
             decimal quantite = GetDecimal(data, "quantite", 0);
+
             string motif = GetString(data, "motif") ?? "";
 
             if (string.IsNullOrEmpty(articleId) || string.IsNullOrEmpty(emplacementId) || string.IsNullOrEmpty(type) || quantite <= 0)
@@ -49,6 +50,7 @@ public class StockAdjust : IHttpHandler, IRequiresSessionState
                 {
                     try
                     {
+                        string userName = GetUserName(conn, trans, userId);
                         // Récupérer la quantité actuelle
                         decimal quantiteActuelle = 0;
                         string getQte = "SELECT QUANTITE_ACTUELLE FROM SSTOCK WHERE ARTICLE_ID = @articleId AND EMPLACEMENT_ID = @emplacementId AND DELETION_AT IS NULL";
@@ -122,7 +124,7 @@ public class StockAdjust : IHttpHandler, IRequiresSessionState
                             cmd.Parameters.AddWithValue("@quantite", quantite);
                             cmd.Parameters.AddWithValue("@avant", quantiteActuelle);
                             cmd.Parameters.AddWithValue("@apres", nouvelleQuantite);
-                            cmd.Parameters.AddWithValue("@motif", motif);
+                            cmd.Parameters.AddWithValue("@motif", BuildMotif(motif, userName));
                             cmd.Parameters.AddWithValue("@userId", userId);
                             cmd.ExecuteNonQuery();
                         }
@@ -161,6 +163,24 @@ public class StockAdjust : IHttpHandler, IRequiresSessionState
                 return val;
         }
         return defaultValue;
+    }
+
+    private string GetUserName(SqlConnection conn, SqlTransaction trans, int userId)
+    {
+        using (var cmd = new SqlCommand("SELECT NOM FROM USERS WHERE IDUSER = @userId", conn, trans))
+        {
+            cmd.Parameters.AddWithValue("@userId", userId);
+            var value = cmd.ExecuteScalar();
+            if (value == null || value == DBNull.Value)
+                throw new Exception("Utilisateur connecté introuvable.");
+            return value.ToString().Trim();
+        }
+    }
+
+    private string BuildMotif(string motif, string userName)
+    {
+        motif = (motif ?? "").Trim();
+        return (motif.Length > 0 ? motif : "Action") + " par @" + userName;
     }
 
     public bool IsReusable { get { return false; } }

@@ -78,6 +78,7 @@ async function loadDropdownsEntree() {
                         return '<option value="' + a.ID + '">' + a.CODE + ' - ' + a.NOM + '</option>';
                     }).join('');
                 sel.value = currentVal;
+                    refreshArticleSelect(sel);
             });
         }
     } catch (e) { /* ignore */ }
@@ -139,31 +140,6 @@ function formatDateValue(value, includeTime) {
     return date.toLocaleString('fr-FR', options);
 }
 
-/**
- * Formate un nombre avec séparateur de millier et nombre de décimales fixe.
- * @param {number|string} value - La valeur à formater.
- * @param {number} decimals - Nombre de décimales (par défaut 2).
- * @returns {string} Le nombre formaté (ex: "1 234,56").
- */
-function formatNumber(value, decimals) {
-    decimals = decimals || 2;
-    var num = parseFloat(value);
-    if (isNaN(num)) return '0,00';
-
-    // Arrondir et garder les décimales
-    var fixed = num.toFixed(decimals);
-    // Séparer partie entière et décimale
-    var parts = fixed.split('.');
-    var integerPart = parts[0];
-    var decimalPart = parts[1] || '';
-
-    // Ajouter séparateur de millier (espace) sur la partie entière
-    var integerWithSpaces = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-
-    // Retourner avec la virgule comme séparateur décimal
-    return integerWithSpaces + ',' + decimalPart;
-}
-
 function renderEntreesTable(entrees) {
     var tbody = document.getElementById('entreesTableBody');
     if (!tbody) return;
@@ -175,17 +151,31 @@ function renderEntreesTable(entrees) {
     var html = '';
     entrees.forEach(function (e) {
         var statutBadge = {
-            'BROUILLON': '<span class="badge bg-warning" style="background:#ffc107;color:#212529;">Brouillon</span>',
-            'VALIDE': '<span class="badge bg-success" style="background:#28a745;">Validé</span>',
-            'ANNULE': '<span class="badge bg-danger" style="background:#dc3545;">Annulé</span>'
+            'BROUILLON': '<span class="badge bg-warning" style="background:#B6D8F2;padding:4px 10px;border-radius:20px;color:#1E0F1C;">En cours</span>',
+            'VALIDE': '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:#fff;">Validé</span>',
+            'ANNULE': '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:#fff;">Annulé</span>'
         }[e.STATUT] || e.STATUT;
+        var lignes = e.Lignes || [];
+        var articlesHtml = lignes.length
+            ? lignes.map(function (ligne) {
+                return '<div class="bon-article-item">' +
+                    '<span>' + (ligne.ARTICLE_CODE ? ligne.ARTICLE_CODE + ' - ' : '') +
+                    (ligne.ARTICLE_NOM || ligne.ARTICLE_ID || '') + '</span>' +
+                    '</div>';
+            }).join('')
+            : '<span class="text-muted">Aucun article</span>';
+        var quantitesHtml = lignes.length
+            ? lignes.map(function (ligne) {
+                return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE, 2) + '</div>';
+            }).join('')
+            : '<span class="text-muted">-</span>';
         html += '<tr>' +
             '<td><strong>' + e.NUMERO + '</strong></td>' +
             '<td>' + formatDateValue(e.DATE_ENTREE, true) + '</td>' +
-            '<td>' + (e.FOURNISSEUR || '') + '</td>' +
+            '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
+            '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
             '<td>' + statutBadge + '</td>' +
             '<td style="text-align:right;"><strong>' + formatNumber(e.TOTAL_TTC, 2) + '</strong></td>' +
-            '<td>' + formatDateValue(e.CREATED_AT, true) + '</td>' +
             '<td>' +
             '<button type="button" class="btn btn-sm btn-primary" onclick="editEntree(\'' + e.ID + '\')"><i class="fas fa-edit"></i></button> ' +
             '<button type="button" class="btn btn-sm btn-danger" onclick="deleteEntree(\'' + e.ID + '\')"><i class="fas fa-trash"></i></button> ' +
@@ -197,7 +187,6 @@ function renderEntreesTable(entrees) {
 }
 
 // Expositions globales
-window.formatNumber = formatNumber;
 window.formatDateValue = formatDateValue;
 window.loadEntrees = loadEntrees;
 window.loadEntreeStats = loadEntreeStats;

@@ -38,16 +38,29 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                 {
                     try
                     {
-                        // 1. Vérifier le statut
-                        string checkSql = "SELECT STATUT FROM SENTREE WHERE ID = @id";
-                        string statut;
+                        string userName = GetUserName(conn, trans, userId);
+                        // 1. Vérifier le statut et récupérer le numéro
+                        string checkSql = "SELECT STATUT, NUMERO FROM SENTREE WHERE ID = @id";
+                        string statut = null;
+                        string numero = null;
                         using (var cmd = new SqlCommand(checkSql, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", id);
-                            statut = cmd.ExecuteScalar() as string;
+                            using (var reader = cmd.ExecuteReader())
+                            {
+                                if (reader.Read())
+                                {
+                                    statut = reader["STATUT"] as string;
+                                    numero = reader["NUMERO"] as string;
+                                }
+                            }
                         }
+
                         if (statut != "BROUILLON")
                             throw new Exception("Seul un bon en brouillon peut être validé.");
+
+                        if (string.IsNullOrEmpty(numero))
+                            throw new Exception("Numéro de bon introuvable.");
 
                         // 2. Récupérer les lignes
                         string lignesSql = @"
@@ -71,7 +84,10 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                             }
                         }
 
-                        // 3. Mettre à jour le stock (utiliser un emplacement par défaut)
+                        if (lignes.Count == 0)
+                            throw new Exception("Impossible de valider un bon sans ligne.");
+
+                        // 3. Ajouter les quantités et journaliser les mouvements.
                         string getEmplacement = "SELECT TOP 1 ID FROM SEMPLACEMENT WHERE ACTIVE = 1 AND DELETION_AT IS NULL";
                         string emplacementId;
                         using (var cmd = new SqlCommand(getEmplacement, conn, trans))
@@ -88,20 +104,34 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                             decimal quantite = Convert.ToDecimal(ligne["quantite"]);
 
                             // Vérifier si une ligne de stock existe
-                            string checkStock = "SELECT ID FROM SSTOCK WHERE ARTICLE_ID = @articleId AND EMPLACEMENT_ID = @empl";
+                            string checkStock = @"
+                                SELECT ID, QUANTITE_ACTUELLE
+                                FROM SSTOCK WITH (UPDLOCK, HOLDLOCK)
+                                WHERE ARTICLE_ID = @articleId AND EMPLACEMENT_ID = @empl AND DELETION_AT IS NULL";
                             string stockId = null;
+                            decimal quantiteAvant = 0;
                             using (var cmd = new SqlCommand(checkStock, conn, trans))
                             {
                                 cmd.Parameters.AddWithValue("@articleId", articleId);
                                 cmd.Parameters.AddWithValue("@empl", emplacementId);
-                                var obj = cmd.ExecuteScalar();
-                                if (obj != null)
-                                    stockId = obj.ToString();
+                                using (var reader = cmd.ExecuteReader())
+                                {
+                                    if (reader.Read())
+                                    {
+                                        stockId = reader["ID"].ToString();
+                                        quantiteAvant = Convert.ToDecimal(reader["QUANTITE_ACTUELLE"]);
+                                    }
+                                }
                             }
 
                             if (stockId != null)
                             {
-                                string updateStock = "UPDATE SSTOCK SET QUANTITE = QUANTITE + @qte, UPDATED_AT = GETDATE(), UPDATED_BY = @userId WHERE ID = @stockId";
+                                string updateStock = @"
+                                    UPDATE SSTOCK SET
+                                        QUANTITE_MVT = QUANTITE_MVT + @qte,
+                                        QUANTITE_ACTUELLE = QUANTITE_ACTUELLE + @qte,
+                                        UPDATED_AT = GETDATE(), UPDATED_BY = @userId
+                                    WHERE ID = @stockId";
                                 using (var cmd = new SqlCommand(updateStock, conn, trans))
                                 {
                                     cmd.Parameters.AddWithValue("@qte", quantite);
@@ -113,8 +143,8 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                             else
                             {
                                 string insertStock = @"
-                                    INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE, CREATED_BY, CREATED_AT)
-                                    VALUES (@articleId, @empl, @qte, @userId, GETDATE())";
+                                    INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE_INITIAL, QUANTITE_MVT, QUANTITE_ACTUELLE, CREATED_BY, CREATED_AT)
+                                    VALUES (@articleId, @empl, 0, @qte, @qte, @userId, GETDATE())";
                                 using (var cmd = new SqlCommand(insertStock, conn, trans))
                                 {
                                     cmd.Parameters.AddWithValue("@articleId", articleId);
@@ -123,6 +153,26 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                                     cmd.Parameters.AddWithValue("@userId", userId);
                                     cmd.ExecuteNonQuery();
                                 }
+                            }
+
+                            string insertMvt = @"
+                                INSERT INTO MSTOCK
+                                    (ARTICLE_ID, EMPLACEMENT_ID, TYPE, QUANTITE, QUANTITE_AVANT, QUANTITE_APRES,
+                                     REFERENCE_TYPE, REFERENCE_NUMERO, MOTIF, CREATED_BY, CREATED_AT)
+                                VALUES
+                                    (@articleId, @empl, 'ENTREE', @qte, @avant, @apres,
+                                     'BON_ENTREE', @numero, @motif, @userId, GETDATE())";
+                            using (var cmd = new SqlCommand(insertMvt, conn, trans))
+                            {
+                                cmd.Parameters.AddWithValue("@articleId", articleId);
+                                cmd.Parameters.AddWithValue("@empl", emplacementId);
+                                cmd.Parameters.AddWithValue("@qte", quantite);
+                                cmd.Parameters.AddWithValue("@avant", quantiteAvant);
+                                cmd.Parameters.AddWithValue("@apres", quantiteAvant + quantite);
+                                cmd.Parameters.AddWithValue("@numero", numero);
+                                cmd.Parameters.AddWithValue("@motif", BuildMotif("Validation", userName));
+                                cmd.Parameters.AddWithValue("@userId", userId);
+                                cmd.ExecuteNonQuery();
                             }
                         }
 
@@ -151,6 +201,23 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
             ctx.Response.StatusCode = 500;
             ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
+    }
+
+    private string GetUserName(SqlConnection conn, SqlTransaction trans, int userId)
+    {
+        using (var cmd = new SqlCommand("SELECT NOM FROM USERS WHERE IDUSER = @userId", conn, trans))
+        {
+            cmd.Parameters.AddWithValue("@userId", userId);
+            var value = cmd.ExecuteScalar();
+            if (value == null || value == DBNull.Value)
+                throw new Exception("Utilisateur connecté introuvable.");
+            return value.ToString().Trim();
+        }
+    }
+
+    private string BuildMotif(string motif, string userName)
+    {
+        return (motif ?? "Action").Trim() + " par @" + userName;
     }
 
     public bool IsReusable { get { return false; } }

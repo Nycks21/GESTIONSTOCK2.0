@@ -31,33 +31,38 @@ public class GetStatsStock : IHttpHandler, IRequiresSessionState
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                // Nombre d'articles ayant au moins un stock > 0
-                string sqlTotalArticles = "SELECT COUNT(DISTINCT ARTICLE_ID) FROM SSTOCK WHERE DELETION_AT IS NULL AND QUANTITE_ACTUELLE > 0";
+                string totalsFromMovements = @"
+                    FROM MARTICLE a
+                    INNER JOIN (
+                        SELECT le.ARTICLE_ID, SUM(le.QUANTITE) AS ENTREE
+                        FROM MLENTREE le
+                        INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
+                        WHERE le.DELETION_AT IS NULL AND be.STATUT = 'VALIDE' AND be.DELETION_AT IS NULL
+                        GROUP BY le.ARTICLE_ID
+                    ) ent ON ent.ARTICLE_ID = a.ID
+                    LEFT JOIN (
+                        SELECT ls.ARTICLE_ID, SUM(ls.QUANTITE_R) AS SORTIE
+                        FROM MLSORTIE ls
+                        INNER JOIN SSORTIE bs ON bs.ID = ls.BON_SORTIE_ID
+                        WHERE ls.DELETION_AT IS NULL AND bs.STATUT = 'VALIDE' AND bs.DELETION_AT IS NULL
+                        GROUP BY ls.ARTICLE_ID
+                    ) sor ON sor.ARTICLE_ID = a.ID
+                    WHERE a.DELETION_AT IS NULL";
+
+                // Les cartes utilisent la même formule que le tableau.
+                string sqlTotalArticles = "SELECT COUNT(*) " + totalsFromMovements + " AND ent.ENTREE - ISNULL(sor.SORTIE, 0) > 0";
                 using (var cmd = new SqlCommand(sqlTotalArticles, conn))
                     totalArticles = (int)cmd.ExecuteScalar();
 
-                // Quantité totale
-                string sqlTotalQuantite = "SELECT ISNULL(SUM(QUANTITE_ACTUELLE), 0) FROM SSTOCK WHERE DELETION_AT IS NULL";
+                string sqlTotalQuantite = "SELECT ISNULL(SUM(ent.ENTREE - ISNULL(sor.SORTIE, 0)), 0) " + totalsFromMovements;
                 using (var cmd = new SqlCommand(sqlTotalQuantite, conn))
                     totalQuantite = (decimal)cmd.ExecuteScalar();
 
-                // Sous seuil d'alerte (quantite < seuil_alerte et > 0)
-                string sqlSousSeuil = @"
-                    SELECT COUNT(*)
-                    FROM SSTOCK s
-                    INNER JOIN MARTICLE a ON s.ARTICLE_ID = a.ID
-                    WHERE s.DELETION_AT IS NULL AND a.DELETION_AT IS NULL
-                    AND s.QUANTITE_ACTUELLE < a.SEUIL_ALERTE AND s.QUANTITE_ACTUELLE > 0";
+                string sqlSousSeuil = "SELECT COUNT(*) " + totalsFromMovements + " AND ent.ENTREE - ISNULL(sor.SORTIE, 0) <= a.SEUIL_ALERTE AND ent.ENTREE - ISNULL(sor.SORTIE, 0) > 0";
                 using (var cmd = new SqlCommand(sqlSousSeuil, conn))
                     sousSeuil = (int)cmd.ExecuteScalar();
 
-                // Rupture (quantite = 0)
-                string sqlRupture = @"
-                    SELECT COUNT(*)
-                    FROM SSTOCK s
-                    INNER JOIN MARTICLE a ON s.ARTICLE_ID = a.ID
-                    WHERE s.DELETION_AT IS NULL AND a.DELETION_AT IS NULL
-                    AND s.QUANTITE_ACTUELLE = 0";
+                string sqlRupture = "SELECT COUNT(*) " + totalsFromMovements + " AND ent.ENTREE - ISNULL(sor.SORTIE, 0) = 0";
                 using (var cmd = new SqlCommand(sqlRupture, conn))
                     rupture = (int)cmd.ExecuteScalar();
             }

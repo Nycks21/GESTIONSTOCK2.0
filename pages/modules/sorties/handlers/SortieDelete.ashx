@@ -38,6 +38,23 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
+                string referenceSql = @"
+                    SELECT COUNT(*)
+                    FROM SSORTIE
+                    WHERE STATUT = 'VALIDÉ' AND VALIDE_BY IS NOT NULL AND VALIDE_AT IS NOT NULL AND ID = @id";
+                using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
+                {
+                    referenceCmd.Parameters.AddWithValue("@id", id);
+                    if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
+                    {
+                        ctx.Response.Write(serializer.Serialize(new
+                        {
+                            success = false,
+                            message = "Impossible de supprimer : le bon est déjà validé"
+                        }));
+                        return;
+                    }
+                }
                 string sql = "UPDATE SSORTIE SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ID = @id AND STATUT = 'BROUILLON'";
                 using (var cmd = new SqlCommand(sql, conn))
                 {
@@ -45,7 +62,7 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@userId", userId);
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
-                        throw new Exception("Impossible de supprimer : bon non trouvé ou déjà validé/annulé.");
+                        throw new Exception("Impossible de supprimer : le bon est déjà validé.");
                 }
             }
 

@@ -119,10 +119,10 @@ async function deleteEntree(id) {
             loadEntrees();
             loadEntreeStats();
         } else {
-            showToast('Erreur', result.message || 'Échec de la suppression', 'error');
+            showToast('Attention', result.message || 'Échec de la suppression', 'error');
         }
     } catch (err) {
-        showToast('Erreur', err.message, 'error');
+        showToast('Attention', err.message, 'error');
     } finally {
         hideSpinner();
     }

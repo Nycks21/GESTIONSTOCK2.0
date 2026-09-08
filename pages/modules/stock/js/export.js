@@ -1,19 +1,19 @@
 'use strict';
 
 function buildExportRows(stock) {
-    var rows = [['CODE', 'ARTICLE', 'EMPLACEMENT', 'QUANTITÉ', 'SEUIL', 'STATUT']];
+    var rows = [['ARTICLE', 'ENTRÉE', 'SORTIE', 'DISPONIBLE', 'STATUT']];
     var data = stock || (typeof AppState !== 'undefined' && AppState.stock) || [];
     data.forEach(function(s) {
+        var disponible = Number(s.DISPONIBLE || 0);
         var statut = '';
-        if (s.QUANTITE_ACTUELLE <= 0) statut = 'Rupture';
-        else if (s.QUANTITE_ACTUELLE < s.SEUIL_ALERTE) statut = 'Alerte';
+        if (disponible <= 0) statut = 'Rupture de stock';
+        else if (disponible <= Number(s.SEUIL_ALERTE || 0)) statut = 'Stock faible';
         else statut = 'Normal';
         rows.push([
-            s.ARTICLE_CODE || '',
-            s.ARTICLE_NOM || '',
-            s.EMPLACEMENT_NOM || '',
-            s.QUANTITE_ACTUELLE || 0,
-            s.SEUIL_ALERTE || 0,
+            (s.ARTICLE_CODE ? s.ARTICLE_CODE + ' - ' : '') + (s.ARTICLE_NOM || ''),
+            s.ENTREE || 0,
+            s.SORTIE || 0,
+            disponible,
             statut
         ]);
     });
@@ -41,18 +41,18 @@ window.exportStockPDF = function() {
     try {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF('l', 'mm', 'a4');
-        const head = [['CODE', 'ARTICLE', 'EMPLACEMENT', 'QUANTITÉ', 'SEUIL', 'STATUT']];
+        const head = [['ARTICLE', 'ENTRÉE', 'SORTIE', 'DISPONIBLE', 'STATUT']];
         const body = stock.map(function(s) {
+            var disponible = Number(s.DISPONIBLE || 0);
             var statut = '';
-            if (s.QUANTITE_ACTUELLE <= 0) statut = 'Rupture';
-            else if (s.QUANTITE_ACTUELLE < s.SEUIL_ALERTE) statut = 'Alerte';
+            if (disponible <= 0) statut = 'Rupture de stock';
+            else if (disponible <= Number(s.SEUIL_ALERTE || 0)) statut = 'Stock faible';
             else statut = 'Normal';
             return [
-                s.ARTICLE_CODE || '',
-                s.ARTICLE_NOM || '',
-                s.EMPLACEMENT_NOM || '',
-                s.QUANTITE_ACTUELLE || 0,
-                s.SEUIL_ALERTE || 0,
+                (s.ARTICLE_CODE ? s.ARTICLE_CODE + ' - ' : '') + (s.ARTICLE_NOM || ''),
+                s.ENTREE || 0,
+                s.SORTIE || 0,
+                disponible,
                 statut
             ];
         });

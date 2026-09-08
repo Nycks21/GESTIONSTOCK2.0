@@ -39,6 +39,24 @@ public class UniteDelete : IHttpHandler, IRequiresSessionState
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
+                string referenceSql = @"
+                    SELECT COUNT(*)
+                    FROM MARTICLE
+                    WHERE UNITE_MESURE_ID = @id";
+                using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
+                {
+                    referenceCmd.Parameters.AddWithValue("@id", id);
+                    if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
+                    {
+                        ctx.Response.Write(serializer.Serialize(new
+                        {
+                            success = false,
+                            message = "Impossible de supprimer, codification rattachée"
+                        }));
+                        return;
+                    }
+                }
+
                 string sql = @"
                     UPDATE SUNITE
                     SET DELETION_AT = GETDATE(),
@@ -58,6 +76,20 @@ public class UniteDelete : IHttpHandler, IRequiresSessionState
             }
 
             ctx.Response.Write(serializer.Serialize(new { success = true, message = "Unité supprimée." }));
+        }
+        catch (SqlException ex)
+        {
+            if (ex.Number == 547)
+            {
+                ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                {
+                    success = false,
+                    message = "Impossible de supprimer, codification rattachée"
+                }));
+                return;
+            }
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
         catch (Exception ex)
         {

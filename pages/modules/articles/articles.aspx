@@ -372,7 +372,7 @@
           </div>
           <div class="modal-body">
             <div style="overflow-x:auto;">
-              <table class="dash-table" style="width:100%;">
+              <table class="dash-table" style="width:100%; text-align: left;">
                 <thead>
                   <tr>
                     <th>Date</th>
@@ -380,7 +380,7 @@
                     <th>Quantité</th>
                     <th>Avant</th>
                     <th>Après</th>
-                    <th>Motif</th>
+                    <th style="width:150px;">Statut de Validation</th>
                     <th>Référence</th>
                   </tr>
                 </thead>

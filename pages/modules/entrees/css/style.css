@@ -199,6 +199,29 @@
 #lignesTable .btn-sm {
     padding: 2px 6px;
 }
+
+.bon-articles-cell {
+    min-width: 240px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+
+.bon-quantities-cell {
+    min-width: 90px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.bon-article-item,
+.bon-quantity-item {
+    padding: 3px 0;
+    line-height: 1.35;
+}
+
+.bon-article-item + .bon-article-item,
+.bon-quantity-item + .bon-quantity-item {
+    border-top: 1px solid #edf0f2;
+}
 .modal-article {
     max-width: 900px !important;
 }

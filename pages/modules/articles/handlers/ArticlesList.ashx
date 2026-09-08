@@ -51,7 +51,7 @@ public class ArticlesList : IHttpHandler
             conn.Open();
 
             // Sous-requête pour le stock total par article
-            string stockSubquery = @"(SELECT ISNULL(SUM(QUANTITE), 0) FROM SSTOCK WHERE ARTICLE_ID = a.ID AND DELETION_AT IS NULL)";
+            string stockSubquery = @"(SELECT ISNULL(SUM(QUANTITE_ACTUELLE), 0) FROM SSTOCK WHERE ARTICLE_ID = a.ID AND DELETION_AT IS NULL)";
 
             string where = "a.DELETION_AT IS NULL";
             if (!string.IsNullOrEmpty(search))
@@ -149,7 +149,7 @@ public class ArticlesList : IHttpHandler
             conn.Open();
             string sql = @"
                 WITH StockTotal AS (
-                    SELECT ARTICLE_ID, ISNULL(SUM(QUANTITE), 0) AS STOCK
+                    SELECT ARTICLE_ID, ISNULL(SUM(QUANTITE_ACTUELLE), 0) AS STOCK
                     FROM SSTOCK WHERE DELETION_AT IS NULL
                     GROUP BY ARTICLE_ID
                 )

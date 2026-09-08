@@ -144,10 +144,10 @@
                                         <tr style="background-color:#f8f9fa;">
                                             <th onclick="sortData('NUMERO')" style="cursor:pointer; width:120px; text-align:left;">N° <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('DATE_ENTREE')" style="cursor:pointer; width:130px; text-align:left;">Date <i class="fas fa-sort ml-1"></i></th>
-                                            <th onclick="sortData('FOURNISSEUR')" style="cursor:pointer; width:160px; text-align:left;">Fournisseur <i class="fas fa-sort ml-1"></i></th>
+                                            <th style="width:260px; text-align:left;">Articles</th>
+                                            <th style="width:110px; text-align:right;">Quantité</th>
                                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px; text-align:left;">Statut <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('TOTAL_TTC')" style="cursor:pointer; width:120px; text-align:right;">Total TTC <i class="fas fa-sort ml-1"></i></th>
-                                            <th onclick="sortData('CREATED_AT')" style="cursor:pointer; width:130px; text-align:left;">Créé le <i class="fas fa-sort ml-1"></i></th>
                                             <th style="width:160px; text-align:left;">Actions</th>
                                         </tr>
                                     </thead>
@@ -221,7 +221,7 @@
 
                     <!-- Lignes du bon -->
                     <h5><i class="fas fa-list"></i> Lignes d'articles</h5>
-                    <div class="table-responsive" style="max-height:300px; overflow-y:auto; border:1px solid #ddd; border-radius:6px;">
+                    <div class="table-responsive lignes-table-container" style="max-height:300px; overflow-y:visible; border:1px solid #ddd; border-radius:6px;">
                         <table class="table table-bordered table-sm" id="lignesTable" style="margin-bottom:0;">
                             <thead style="background:#f1f1f1; position:sticky; top:0; z-index:1;">
                                 <tr>
@@ -294,6 +294,7 @@
         <script src="../../_assets/js/xlsx.full.min.js?v=<%=AuthHelper.Version %>"></script>
         <script src="../../_assets/js/vfs_fonts.js?v=<%=AuthHelper.Version %>"></script>
         <script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
+        <script src="../../_assets/js/article-picker.js?v=<%=AuthHelper.Version %>"></script>
         <script src="js/config.js?v=<%=AuthHelper.Version %>"></script>
         <script src="js/state.js?v=<%=AuthHelper.Version %>"></script>
         <script src="js/utils.js?v=<%=AuthHelper.Version %>"></script>

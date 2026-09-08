@@ -40,7 +40,7 @@ function showToast(title, message, icon, timer) {
         toast: true,
         position: 'top-end',
         showConfirmButton: false,
-        timer: timer,
+        timer: 8000,
         timerProgressBar: true,
         didOpen: function (toast) {
             toast.addEventListener('mouseenter', Swal.stopTimer);

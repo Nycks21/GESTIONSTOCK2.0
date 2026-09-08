@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="GetMouvements" %>
+﻿<%@ WebHandler Language="C#" Class="GetMouvements" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -74,17 +74,18 @@ public class GetMouvements : IHttpHandler, IRequiresSessionState
                     {
                         while (rdr.Read())
                         {
+                            // ⚠️ Remplacement de l'opérateur ?. par Convert.ToString (gère DBNull)
                             mouvements.Add(new
                             {
-                                ID = rdr["ID"].ToString(),
-                                TYPE = rdr["TYPE"]?.ToString() ?? "",
+                                ID = Convert.ToString(rdr["ID"]),
+                                TYPE = Convert.ToString(rdr["TYPE"]),
                                 QUANTITE = Convert.ToDecimal(rdr["QUANTITE"]),
                                 QUANTITE_AVANT = Convert.ToDecimal(rdr["QUANTITE_AVANT"]),
                                 QUANTITE_APRES = Convert.ToDecimal(rdr["QUANTITE_APRES"]),
-                                MOTIF = rdr["MOTIF"]?.ToString() ?? "",
-                                REFERENCE_TYPE = rdr["REFERENCE_TYPE"]?.ToString() ?? "",
-                                REFERENCE_NUMERO = rdr["REFERENCE_NUMERO"]?.ToString() ?? "",
-                                CREATED_AT = rdr["CREATED_AT"]?.ToString() ?? ""
+                                MOTIF = Convert.ToString(rdr["MOTIF"]),
+                                REFERENCE_TYPE = Convert.ToString(rdr["REFERENCE_TYPE"]),
+                                REFERENCE_NUMERO = Convert.ToString(rdr["REFERENCE_NUMERO"]),
+                                CREATED_AT = Convert.ToString(rdr["CREATED_AT"])
                             });
                         }
                     }
@@ -107,5 +108,8 @@ public class GetMouvements : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable { get { return false; } }
+    public bool IsReusable
+    {
+        get { return false; }
+    }
 }

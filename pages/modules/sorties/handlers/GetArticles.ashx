@@ -33,7 +33,7 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
             int.TryParse(ctx.Request.QueryString["pageSize"], out pageSize);
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 10;
-            if (pageSize > 100) pageSize = 100;
+            if (pageSize > 100 && pageSize != 999999) pageSize = 100;
 
             string search = (ctx.Request.QueryString["search"] ?? "").Trim();
             string category = (ctx.Request.QueryString["category"] ?? "").Trim();
@@ -43,7 +43,22 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
 
             var articles = new List<object>();
 
-            string whereClause = " WHERE a.DELETION_AT IS NULL ";
+                        string whereClause = @"
+                                WHERE a.DELETION_AT IS NULL
+                                    AND EXISTS (
+                                            SELECT 1
+                                            FROM MLENTREE le
+                                            INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
+                                            WHERE le.ARTICLE_ID = a.ID
+                                                AND le.DELETION_AT IS NULL
+                                                AND be.STATUT = 'VALIDE'
+                                                AND be.DELETION_AT IS NULL
+                                    )
+                                    AND ISNULL((
+                                            SELECT SUM(s.QUANTITE_ACTUELLE)
+                                            FROM SSTOCK s
+                                            WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL
+                                    ), 0) > 0 ";
             if (!string.IsNullOrEmpty(search))
             {
                 whereClause += " AND (LOWER(a.CODE) LIKE @search OR LOWER(a.NOM) LIKE @search OR LOWER(a.DESCRIPTION) LIKE @search) ";
@@ -54,7 +69,7 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
             }
             if (!string.IsNullOrEmpty(status))
             {
-                whereClause += " AND CASE WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= 0 THEN 'RUPTURE' WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= a.SEUIL_ALERTE THEN 'ALERTE' ELSE 'NORMAL' END = @status ";
+                whereClause += " AND CASE WHEN ISNULL((SELECT SUM(QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) <= 0 THEN 'RUPTURE' WHEN ISNULL((SELECT SUM(QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) <= a.SEUIL_ALERTE THEN 'ALERTE' ELSE 'NORMAL' END = @status ";
             }
 
             string sortField = "a.NOM";
@@ -87,10 +102,10 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
                     a.EMPLACEMENT_ID,
                     a.SEUIL_MIN, a.SEUIL_ALERTE, a.POIDS, a.VOLUME,
                     a.ACTIVE, a.EST_SERVICE, a.EST_PERISSABLE,
-                    ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) AS STOCK_DISPONIBLE,
+                    ISNULL((SELECT SUM(QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) AS STOCK_DISPONIBLE,
                     CASE
-                        WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= 0 THEN 'RUPTURE'
-                        WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= a.SEUIL_ALERTE THEN 'ALERTE'
+                        WHEN ISNULL((SELECT SUM(QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) <= 0 THEN 'RUPTURE'
+                        WHEN ISNULL((SELECT SUM(QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) <= a.SEUIL_ALERTE THEN 'ALERTE'
                         ELSE 'NORMAL'
                     END AS STATUT_STOCK
                 FROM MARTICLE a

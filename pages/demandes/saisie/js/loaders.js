@@ -1,8 +1,8 @@
 // ============================================================
-// CHARGEMENT DES DONNÉES
+// CHARGEMENT DES DEMANDES (filtrées par utilisateur)
 // ============================================================
 
-async function loadSorties(options) {
+async function loadDemandes(options) {
     options = options || {};
     var silent = !!options.silent;
     if (!silent) showSpinner();
@@ -12,7 +12,6 @@ async function loadSorties(options) {
             page: AppState.page,
             pageSize: AppState.pageSize,
             search: AppState.filters.search || '',
-            destination: AppState.filters.destination || '',
             statut: AppState.filters.statut || '',
             sort: AppState.sortField,
             order: AppState.sortOrder
@@ -25,11 +24,11 @@ async function loadSorties(options) {
             AppState.sorties = data.Sorties || [];
             AppState.total = Number(data.total || 0);
             AppState.totalPages = Number(data.totalPages || Math.ceil(AppState.total / AppState.pageSize) || 0);
-            renderSortiesTable(AppState.sorties);
+            renderDemandesTable(AppState.sorties);
             createPaginationControls(AppState.totalPages);
-            loadSortieStats();
+            loadDemandesStats();
         } else {
-            showToast('Erreur', data.message || 'Impossible de charger les bons', 'error');
+            showToast('Erreur', data.message || 'Impossible de charger les demandes', 'error');
         }
     } catch (e) {
         showToast('Erreur', e.message, 'error');
@@ -38,7 +37,7 @@ async function loadSorties(options) {
     }
 }
 
-async function loadSortieStats() {
+async function loadDemandesStats() {
     try {
         var url = API.BASE + API.HANDLERS_PATH + API.STATS;
         var resp = await fetch(url);
@@ -54,70 +53,27 @@ async function loadSortieStats() {
     }
 }
 
-async function loadDropdownsSortie() {
-    // Récupération des articles pour les lignes
+async function loadArticlesForSaisie() {
     try {
-        var url = API.BASE + API.HANDLERS_PATH + API.ARTICLES + '?page=1&pageSize=999999';
+        var url = API.BASE + 'pages/modules/articles/handlers/' + API.ARTICLES + '?page=1&pageSize=999999';
         var resp = await fetch(url);
         var data = await resp.json();
         if (data.success) {
             AppState.articles = data.Articles || [];
-            // Mettre à jour les selects déjà présents
-            document.querySelectorAll('.ligne-article').forEach(function (sel) {
-                var currentVal = sel.value;
-                sel.innerHTML = '<option value="">-- Article --</option>' +
-                    AppState.articles.map(function (a) {
-                        return '<option value="' + a.ID + '">' + a.CODE + ' - ' + a.NOM + '</option>';
-                    }).join('');
-                sel.value = currentVal;
-                    refreshArticleSelect(sel);
-            });
         }
     } catch (e) { /* ignore */ }
 }
 
 // ============================================================
-// FONCTIONS D'AFFICHAGE
+// AFFICHAGE DU TABLEAU
 // ============================================================
 
-function formatDateValue(value, includeTime) {
-    if (value === null || value === undefined || value === '') return '-';
-    var date = null;
-    if (typeof value === 'string') {
-        var str = value.trim();
-        if (!str) return '-';
-        var msMatch = str.match(/-?\d+/);
-        if (str.indexOf('/Date(') !== -1 && msMatch) {
-            date = new Date(parseInt(msMatch[0], 10));
-        } else {
-            date = new Date(str);
-        }
-    } else if (value instanceof Date) {
-        date = value;
-    } else {
-        date = new Date(value);
-    }
-    if (!date || isNaN(date.getTime())) return '-';
-    var options = includeTime ? {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    } : {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    };
-    return date.toLocaleString('fr-FR', options);
-}
-
-function renderSortiesTable(sorties) {
-    var tbody = document.getElementById('sortiesTableBody');
+function renderDemandesTable(sorties) {
+    var tbody = document.getElementById('saisieTableBody');
     if (!tbody) return;
     if (!sorties.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Aucun bon de sortie trouvé</td></tr>';
-        document.getElementById('resultsCounter').textContent = '0 bon(s)';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucune demande trouvée</td></tr>';
+        document.getElementById('resultsCounter').textContent = '0 demande(s)';
         return;
     }
     var html = '';
@@ -138,29 +94,31 @@ function renderSortiesTable(sorties) {
             : '<span class="text-muted">Aucun article</span>';
         var quantitesHtml = lignes.length
             ? lignes.map(function (ligne) {
-                return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE_R, 2) + '</div>';
+                return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE_D, 2) + '</div>';
             }).join('')
             : '<span class="text-muted">-</span>';
+
         html += '<tr>' +
             '<td><strong>' + s.NUMERO + '</strong></td>' +
             '<td>' + formatDateValue(s.DATE_SORTIE, true) + '</td>' +
             '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
-            '<td>' + (s.NOM || '') + '</td>' +
+            '<td>' + (s.DESTINATION || '') + '</td>' +
             '<td>' + statutBadge + '</td>' +
             '<td>' +
-            '<button type="button" class="btn btn-sm btn-primary" onclick="editSortie(\'' + s.ID + '\')"><i class="fas fa-edit"></i></button> ' +
-            '<button type="button" class="btn btn-sm btn-danger" onclick="deleteSortie(\'' + s.ID + '\')"><i class="fas fa-trash"></i></button> ' +
-            (s.STATUT === 'BROUILLON' ? '<button type="button" class="btn btn-sm btn-success" onclick="validerSortie(\'' + s.ID + '\')"><i class="fas fa-check"></i></button>' : '') +
+            '<button type="button" class="btn btn-sm btn-info" onclick="viewDemande(\'' + s.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button> ' +
             '</td></tr>';
     });
     tbody.innerHTML = html;
-    document.getElementById('resultsCounter').textContent = AppState.total + ' bon(s)';
+    document.getElementById('resultsCounter').textContent = AppState.total + ' demande(s)';
 }
 
-// Expositions globales
-window.loadSorties = loadSorties;
-window.loadSortieStats = loadSortieStats;
-window.loadDropdownsSortie = loadDropdownsSortie;
-window.renderSortiesTable = renderSortiesTable;
-window.formatDateValue = formatDateValue;
+// Fonctions utilitaires (formatDateValue, formatNumber) à copier depuis sorties/loaders.js
+function formatDateValue(value, includeTime) { /* ... */ }
+function formatNumber(val, decimals) { /* ... */ }
+
+// Expositions
+window.loadDemandes = loadDemandes;
+window.loadDemandesStats = loadDemandesStats;
+window.loadArticlesForSaisie = loadArticlesForSaisie;
+window.renderDemandesTable = renderDemandesTable;

@@ -123,9 +123,11 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
     {
         var lignes = new List<Dictionary<string, object>>();
         string sql = @"
-            SELECT ARTICLE_ID, QUANTITE_D, QUANTITE_R, OBSERVATIONS
-            FROM MLSORTIE
-            WHERE BON_SORTIE_ID = @bonSortieId AND DELETION_AT IS NULL
+                 SELECT l.ARTICLE_ID, a.CODE AS ARTICLE_CODE, a.NOM AS ARTICLE_NOM,
+                     l.QUANTITE_D, l.QUANTITE_R, l.OBSERVATIONS
+                 FROM MLSORTIE l
+                LEFT JOIN MARTICLE a ON a.ID = l.ARTICLE_ID
+            WHERE l.BON_SORTIE_ID = @bonSortieId AND l.DELETION_AT IS NULL
             ORDER BY ARTICLE_ID";
         using (var cmd = new SqlCommand(sql, conn))
         {
@@ -136,6 +138,8 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
                 {
                     var ligne = new Dictionary<string, object>();
                     ligne["ARTICLE_ID"] = reader["ARTICLE_ID"] == DBNull.Value ? null : reader["ARTICLE_ID"].ToString();
+                    ligne["ARTICLE_CODE"] = reader["ARTICLE_CODE"] == DBNull.Value ? "" : reader["ARTICLE_CODE"].ToString();
+                    ligne["ARTICLE_NOM"] = reader["ARTICLE_NOM"] == DBNull.Value ? "" : reader["ARTICLE_NOM"].ToString();
                     ligne["QUANTITE_D"] = reader["QUANTITE_D"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["QUANTITE_D"]);
                     ligne["QUANTITE_R"] = reader["QUANTITE_R"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["QUANTITE_R"]);
                     ligne["OBSERVATIONS"] = reader["OBSERVATIONS"] == DBNull.Value ? "" : reader["OBSERVATIONS"].ToString();

@@ -39,6 +39,23 @@ public class CategorieDelete : IHttpHandler, IRequiresSessionState
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
+                string referenceSql = @"
+                    SELECT COUNT(*)
+                    FROM MARTICLE
+                    WHERE CATEGORIE_ID = @id";
+                using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
+                {
+                    referenceCmd.Parameters.AddWithValue("@id", id);
+                    if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
+                    {
+                        ctx.Response.Write(serializer.Serialize(new
+                        {
+                            success = false,
+                            message = "Impossible de supprimer, codification rattachée"
+                        }));
+                        return;
+                    }
+                }
                 string sql = @"
                     UPDATE SCATEGORIE
                     SET DELETION_AT = GETDATE(),

@@ -93,7 +93,7 @@ namespace GestionStock.Handlers
                 LEFT JOIN SFOURNISSEUR f ON f.ID = a.FOURNISSEUR_PREFERE_ID
                 LEFT JOIN SEMPLACEMENT e ON e.ID = a.EMPLACEMENT_ID
                 OUTER APPLY (
-                    SELECT SUM(QUANTITE) AS STOCK_TOTAL
+                    SELECT SUM(QUANTITE_ACTUELLE) AS STOCK_TOTAL
                     FROM SSTOCK st
                     WHERE st.ARTICLE_ID = a.ID AND st.DELETION_AT IS NULL
                 ) s

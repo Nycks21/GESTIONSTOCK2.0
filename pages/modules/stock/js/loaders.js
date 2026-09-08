@@ -110,44 +110,58 @@ function populateSelect(selectId, data, valueKey, textKey, addEmpty, emptyText) 
 
 function renderTable(stock) {
     var tbody = document.getElementById('stockTableBody');
+    if (!tbody) return;
     if (!stock || !stock.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun stock trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Aucun stock trouvé</td></tr>';
         document.getElementById('resultsCounter').textContent = '0 ligne(s)';
         return;
     }
+
     var html = '';
     stock.forEach(function(s) {
-        var statut = '';
+        // Utiliser des noms de champs flexibles
+        var disponible = Number(s.DISPONIBLE ?? s.quantite ?? s.stock ?? 0);
+        var seuil = Number(s.SEUIL_ALERTE ?? s.seuil ?? 0);
+        var nomArticle = s.ARTICLE_NOM || s.nomArticle || '';
+        var codeArticle = s.ARTICLE_CODE || s.codeArticle || '';
+        var entree = Number(s.ENTREE || 0);
+        var sortie = Number(s.SORTIE || 0);
+        var articleId = s.ARTICLE_ID || s.articleId || '';
+        var emplacementId = s.EMPLACEMENT_ID || s.emplacementId || '';
+
+        // Calcul du statut
+        var statutLabel = '';
         var badgeClass = '';
-        if (s.QUANTITE_ACTUELLE <= 0) {
-            statut = 'Rupture';
+        if (disponible <= 0) {
+            statutLabel = 'Rupture';
             badgeClass = 'badge-danger';
-        } else if (s.QUANTITE_ACTUELLE < s.SEUIL_ALERTE) {
-            statut = 'Alerte';
+        } else if (disponible <= seuil) {
+            statutLabel = 'Stock faible';
             badgeClass = 'badge-warning';
         } else {
-            statut = 'Normal';
+            statutLabel = 'Normal';
             badgeClass = 'badge-success';
         }
-        var statusHtml = '<span class="badge ' + badgeClass + '" style="padding:4px 10px;border-radius:20px;color:white;">' + statut + '</span>';
-        var codeHtml = '<span class="badge bg-secondary" style="font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">' + (s.ARTICLE_CODE || '') + '</span>';
-        var articleHtml = '<span style="font-weight:bold;">' + (s.ARTICLE_NOM || '') + '</span>';
+        var statusHtml = '<span class="badge ' + badgeClass + '" style="padding:4px 10px;border-radius:20px;color:white;">' + statutLabel + '</span>';
+
+        var articleHtml = '<span style="font-weight:bold;">' + (codeArticle ? codeArticle + ' - ' : '') + (nomArticle || '') + '</span>';
+
         html += '<tr>' +
-            '<td>' + codeHtml + '</td>' +
             '<td>' + articleHtml + '</td>' +
-            '<td>' + (s.EMPLACEMENT_NOM || '') + '</td>' +
-            '<td>' + (s.QUANTITE_ACTUELLE || 0) + '</td>' +
-            '<td>' + (s.SEUIL_ALERTE || 0) + '</td>' +
+            '<td>' + entree + '</td>' +
+            '<td>' + sortie + '</td>' +
+            '<td><strong>' + disponible + '</strong></td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' +
-            '<button type="button" class="btn btn-sm btn-info" onclick="viewHistory(\'' + s.ARTICLE_ID + '\', \'' + s.EMPLACEMENT_ID + '\')" title="Historique"><i class="fas fa-history"></i></button> ' +
-            '<button type="button" class="btn btn-sm btn-warning" onclick="openAdjustModalFromStock(event, \'' + s.ARTICLE_ID + '\', \'' + s.EMPLACEMENT_ID + '\')" title="Ajuster"><i class="fas fa-exchange-alt"></i></button>' +
+            '<button type="button" class="btn btn-sm btn-info" onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" title="Historique"><i class="fas fa-history"></i></button> ' +
+            '<button type="button" class="btn btn-sm btn-warning" onclick="openAdjustModalFromStock(event, \'' + articleId + '\', \'' + emplacementId + '\')" title="Ajuster"><i class="fas fa-exchange-alt"></i></button>' +
             '</td>' +
             '</tr>';
     });
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = AppState.total + ' ligne(s)';
 }
+
 
 // Expositions
 window.loadStock = loadStock;

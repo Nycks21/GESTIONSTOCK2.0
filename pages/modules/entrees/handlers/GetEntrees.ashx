@@ -144,9 +144,12 @@ public class GetEntrees : IHttpHandler, IRequiresSessionState
         var lignes = new List<Dictionary<string, object>>();
 
         string sql = @"
-            SELECT ARTICLE_ID, QUANTITE, PRIX_UNITAIRE_HT, TVA_TX, PRIX_UNITAIRE_TTC, TOTAL_HT, TOTAL_TVA, TOTAL_TTC
-            FROM MLENTREE
-            WHERE BON_ENTREE_ID = @bonEntreeId AND DELETION_AT IS NULL
+                 SELECT l.ARTICLE_ID, a.CODE AS ARTICLE_CODE, a.NOM AS ARTICLE_NOM,
+                     l.QUANTITE, l.PRIX_UNITAIRE_HT, l.TVA_TX, l.PRIX_UNITAIRE_TTC,
+                     l.TOTAL_HT, l.TOTAL_TVA, l.TOTAL_TTC
+                 FROM MLENTREE l
+                LEFT JOIN MARTICLE a ON a.ID = l.ARTICLE_ID
+            WHERE l.BON_ENTREE_ID = @bonEntreeId AND l.DELETION_AT IS NULL
             ORDER BY ARTICLE_ID";
 
         using (var cmd = new SqlCommand(sql, conn))
@@ -158,6 +161,8 @@ public class GetEntrees : IHttpHandler, IRequiresSessionState
                 {
                     var ligne = new Dictionary<string, object>();
                     ligne["ARTICLE_ID"] = reader["ARTICLE_ID"] != DBNull.Value ? reader["ARTICLE_ID"].ToString() : null;
+                    ligne["ARTICLE_CODE"] = reader["ARTICLE_CODE"] != DBNull.Value ? reader["ARTICLE_CODE"].ToString() : "";
+                    ligne["ARTICLE_NOM"] = reader["ARTICLE_NOM"] != DBNull.Value ? reader["ARTICLE_NOM"].ToString() : "";
                     ligne["QUANTITE"] = reader["QUANTITE"];
                     ligne["PRIX_UNITAIRE_HT"] = reader["PRIX_UNITAIRE_HT"];
                     ligne["TVA_TX"] = reader["TVA_TX"];

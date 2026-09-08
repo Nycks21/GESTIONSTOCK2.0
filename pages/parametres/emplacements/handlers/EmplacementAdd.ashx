@@ -89,5 +89,8 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
         return defaultValue;
     }
 
-    public bool IsReusable => false;
-}
+    public bool IsReusable
+    {
+        get { return false; }
+    }
+}   // ← cette accolade fermante était manquante

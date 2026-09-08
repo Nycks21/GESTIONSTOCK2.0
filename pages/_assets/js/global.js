@@ -4,6 +4,20 @@
    ═══════════════════════════════════════════════════════════════
 */
 
+function formatNumber(value, decimals) {
+  decimals = decimals || 2;
+  var num = parseFloat(value);
+  if (isNaN(num)) return '0,00';
+
+  var fixed = num.toFixed(decimals);
+  var parts = fixed.split('.');
+  var integerPart = parts[0];
+  var decimalPart = parts[1] || '';
+  var integerWithSpaces = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+
+  return integerWithSpaces + ',' + decimalPart;
+}
+
 // ============================================================================
 // INITIALISATION - ATTENDRE QUE jQuery SOIT CHARGÉ
 // ============================================================================

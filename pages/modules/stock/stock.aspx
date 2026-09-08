@@ -143,25 +143,22 @@
                         style="table-layout:fixed; width:100%; min-width:900px; border-collapse:collapse;">
                         <thead>
                           <tr style="background-color:#f8f9fa; text-align:left;">
-                            <th onclick="sortData('ARTICLE_CODE')" style="cursor:pointer; width:100px;">CODE <i
+                            <th onclick="sortData('ARTICLE_NOM')" style="cursor:pointer; width:260px;">ARTICLE <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('ARTICLE_NOM')" style="cursor:pointer; width:180px;">ARTICLE <i
-                                class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('EMPLACEMENT_NOM')" style="cursor:pointer; width:150px;">EMPLACEMENT
-                              <i class="fas fa-sort ml-1"></i>
-                            </th>
-                            <th onclick="sortData('QUANTITE_ACTUELLE')" style="cursor:pointer; width:100px;">QUANTITÉ <i
-                                class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('SEUIL_ALERTE')" style="cursor:pointer; width:90px;">SEUIL <i
-                                class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px;">STATUT <i
+                            <th onclick="sortData('ENTREE')" style="cursor:pointer; width:110px;">ENTRÉE <i
+                              class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('SORTIE')" style="cursor:pointer; width:110px;">SORTIE <i
+                              class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('DISPONIBLE')" style="cursor:pointer; width:120px;">DISPONIBLE <i
+                              class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('STATUT')" style="cursor:pointer; width:150px;">STATUT <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th style="width:150px;">ACTIONS</th>
                           </tr>
                         </thead>
                         <tbody id="stockTableBody">
                           <tr>
-                            <td colspan="7" style="text-align:center;padding:40px;">
+                            <td colspan="6" style="text-align:center;padding:40px;">
                               <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#ccc;"></i>
                             </td>
                           </tr>
@@ -238,13 +235,13 @@
             <div style="overflow-x:auto;">
               <table class="dash-table" style="width:100%; border-collapse:collapse;">
                 <thead>
-                  <tr style="background-color:#f8f9fa;">
+                  <tr style="background-color:#f8f9fa; text-align:left;">
                     <th>Date</th>
                     <th>Type</th>
                     <th>Quantité</th>
                     <th>Avant</th>
                     <th>Après</th>
-                    <th>Motif</th>
+                    <th style="width:150px;">Statut de Validation</th>
                     <th>Référence</th>
                   </tr>
                 </thead>

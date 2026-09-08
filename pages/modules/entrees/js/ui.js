@@ -146,7 +146,7 @@ function ajouterLigne(articleId, quantite, prixHT, tva) {
     tr.innerHTML = `
         <td>${rowCount + 1}</td>
         <td>
-            <select class="form-control form-control-sm ligne-article" required>
+            <select class="form-control form-control-lg ligne-article" required>
                 <option value="">-- Article --</option>
                 ${AppState.articles.map(a => `<option value="${a.ID}" ${a.ID === articleId ? 'selected' : ''}>${a.CODE} - ${a.NOM}</option>`).join('')}
             </select>
@@ -159,6 +159,7 @@ function ajouterLigne(articleId, quantite, prixHT, tva) {
         <td><button type="button" class="btn btn-sm btn-danger" onclick="supprimerLigne(this)"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(tr);
+    enhanceArticleSelect(tr.querySelector('.ligne-article'));
     var inputs = tr.querySelectorAll('input');
     inputs.forEach(function (inp) { inp.addEventListener('input', function () { calculerTotauxLigne(tr); }); });
     calculerTotauxLigne(tr);
