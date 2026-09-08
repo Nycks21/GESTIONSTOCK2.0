@@ -1,4 +1,5 @@
-<%@ WebHandler Language="C#" Class="GetCategories" %>
+<%@ WebHandler Language="C#" Class="GetEmplacementsForStock" %>
+
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -6,12 +7,14 @@ using System.Web;
 using System.Web.Script.Serialization;
 using System.Web.SessionState;
 
-public class GetCategories : IHttpHandler, IRequiresSessionState
+public class GetEmplacementsForStock : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
+
         if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -20,22 +23,27 @@ public class GetCategories : IHttpHandler, IRequiresSessionState
 
         try
         {
+            var emplacements = new List<Dictionary<string, object>>();
             string connStr = AuthHelper.ConnectionString;
-            var categories = new List<object>();
-            using (SqlConnection conn = new SqlConnection(connStr))
+            using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                string sql = "SELECT ID, NOM FROM SCATEGORIE WHERE DELETION_AT IS NULL AND ACTIVE = 1 ORDER BY NOM";
-                using (SqlCommand cmd = new SqlCommand(sql, conn))
-                using (SqlDataReader rdr = cmd.ExecuteReader())
+                string sql = "SELECT ID, NOM FROM SEMPLACEMENT WHERE DELETION_AT IS NULL AND ACTIVE = 1 ORDER BY NOM";
+                using (var cmd = new SqlCommand(sql, conn))
+                using (var reader = cmd.ExecuteReader())
                 {
-                    while (rdr.Read())
+                    while (reader.Read())
                     {
-                        categories.Add(new { ID = Convert.ToString(rdr["ID"]), NOM = Convert.ToString(rdr["NOM"]) });
+                        var d = new Dictionary<string, object>();
+                        d["ID"] = reader["ID"].ToString();
+                        d["NOM"] = reader["NOM"].ToString();
+                        emplacements.Add(d);
                     }
                 }
             }
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, Categories = categories }));
+
+            var result = new { success = true, Emplacements = emplacements };
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(result));
         }
         catch (Exception ex)
         {

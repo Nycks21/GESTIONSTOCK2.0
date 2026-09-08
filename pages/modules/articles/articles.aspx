@@ -1,4 +1,5 @@
 ﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="articles.aspx.cs" Inherits="articles" %>
+
   <!DOCTYPE html>
   <html lang="fr">
 
@@ -15,15 +16,13 @@
   <body class="hold-transition" data-version="<%=AuthHelper.Version %>">
     <form id="articleForm" runat="server">
       <div class="wrapper">
-        <!-- Topbar -->
         <%= AuthHelper.RenderTopBarHTML() %>
 
-          <!-- Sidebar -->
           <aside class="main-sidebar" id="sidebar">
             <a href="#" class="brand-link" onclick="loadDashboard()">
               <img
                 src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Ccircle cx='16.5' cy='16.5' r='16.5' fill='%23007bff'/%3E%3Ctext x='16.5' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EGS%3C/text%3E%3C/svg%3E"
-                alt="Logo" class="brand-image"/>
+                alt="Logo" class="brand-image" />
               <span class="brand-text">Gestion de Stock</span>
             </a>
             <div class="sidebar">
@@ -31,10 +30,8 @@
             </div>
           </aside>
 
-          <!-- Control Sidebar -->
           <%= AuthHelper.RenderControlSidebarHTML() %>
 
-            <!-- Content -->
             <div class="content-wrapper" id="contentWrapper">
               <div class="content-header">
                 <div class="container-fluid">
@@ -53,8 +50,7 @@
               </div>
 
               <section class="content" id="section-articles">
-
-                <!-- CARTES DE SYNTHÈSE -->
+                <!-- Cartes de synthèse -->
                 <div class="row articles-stats" id="articlesStats">
                   <div class="col-lg-3 col-6">
                     <div class="stat-card stat-card-total">
@@ -101,7 +97,8 @@
                       <button class="btn btn-success btn-sm" onclick="openAddArticleModal(event)" type="button">
                         <i class="fas fa-plus"></i> Ajouter
                       </button>
-                      <button class="btn btn-outline-secondary btn-sm" onclick="openImportModal(event)" type="button" disabled>
+                      <button class="btn btn-outline-secondary btn-sm" onclick="openImportModal(event)" type="button"
+                        disabled>
                         <i class="fas fa-file-import"></i> Importer
                       </button>
                       <button class="btn btn-primary btn-sm" onclick="exportArticlesPDF()" type="button">
@@ -114,7 +111,7 @@
                     </div>
                   </div>
 
-                  <!-- BARRE DE FILTRES PERSISTANTE (remplace l'ancienne modale de filtre bloquante) -->
+                  <!-- Barre de filtres persistante -->
                   <div class="dash-card-toolbar">
                     <div class="toolbar-search">
                       <i class="fas fa-search"></i>
@@ -154,15 +151,17 @@
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('NOM')" style="cursor:pointer; width:180px;">NOM <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('CATEGORIE')" style="cursor:pointer; width:130px;">CATÉGORIE <i
+                            <th onclick="sortData('CATEGORIE_NOM')" style="cursor:pointer; width:130px;">CATÉGORIE <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('FOURNISSEUR')" style="cursor:pointer; width:130px;">FOURNISSEUR <i
-                                class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('FOURNISSEUR_NOM')" style="cursor:pointer; width:130px;">FOURNISSEUR
+                              <i class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('UNITE_SYMBOLE')" style="cursor:pointer; width:80px;">UNITÉ <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('STOCK_DISPONIBLE')" style="cursor:pointer; width:100px;">STOCK <i
+                            <th onclick="sortData('STOCK_TOTAL')" style="cursor:pointer; width:100px;">STOCK <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('SEUIL_ALERTE')" style="cursor:pointer; width:90px;">SEUIL <i
+                            <th onclick="sortData('SEUIL_MIN')" style="cursor:pointer; width:90px;">SEUIL MIN <i
+                                class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('SEUIL_ALERTE')" style="cursor:pointer; width:90px;">SEUIL ALERTE <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('STATUT_STOCK')" style="cursor:pointer; width:100px;">STATUT <i
                                 class="fas fa-sort ml-1"></i></th>
@@ -171,9 +170,8 @@
                         </thead>
                         <tbody id="articlesTableBody">
                           <tr>
-                            <td colspan="9" style="text-align:center;padding:40px;">
-                              <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#ccc;"></i>
-                            </td>
+                            <td colspan="9" style="text-align:center;padding:40px;"><i class="fas fa-spinner fa-spin"
+                                style="font-size:24px;color:#ccc;"></i></td>
                           </tr>
                         </tbody>
                       </table>
@@ -181,14 +179,14 @@
                     <div class="pagination-wrapper" id="paginationWrapper"></div>
                   </div>
                 </div>
-              </sec>
+              </section>
             </div>
       </div>
 
-      <!-- MODAL AJOUT / MODIFICATION ARTICLE -->
+      <!-- MODAL AJOUT / MODIFICATION -->
       <div id="articleModal" class="modal">
         <input type="hidden" id="editingId" value="" />
-        <div class="modal-content modal-article" style="max-width:700px;">
+        <div class="modal-content modal-article" style="max-width:750px;">
           <div class="modal-header">
             <h3 id="modalTitle"><i class="fas fa-box"></i> Ajouter un article</h3>
             <span class="close" onclick="closeArticleModal()">&times;</span>
@@ -198,77 +196,78 @@
               <div class="col-md-6">
                 <div class="form-group">
                   <label>Code <span class="text-danger">*</span></label>
-                  <input type="text" id="articleCode" class="form-control" placeholder="Ex: ART-001" required>
+                  <input type="text" id="articleCode" class="form-control" placeholder="Ex: ART-001" required />
                   <small class="field-error" id="err-articleCode"></small>
                 </div>
               </div>
               <div class="col-md-6">
                 <div class="form-group">
                   <label>Nom <span class="text-danger">*</span></label>
-                  <input type="text" id="articleNom" class="form-control" placeholder="Nom de l'article" required>
+                  <input type="text" id="articleNom" class="form-control" placeholder="Nom de l'article" required />
                   <small class="field-error" id="err-articleNom"></small>
                 </div>
               </div>
             </div>
             <div class="form-group">
               <label>Description</label>
-              <textarea id="articleDescription" class="form-control" rows="2" placeholder="Description..."></textarea>
+              <textarea id="articleDescription" class="form-control" rows="2" placeholder="Description..." style="resize: vertical;"></textarea>
             </div>
             <div class="row">
               <div class="col-md-6">
                 <div class="form-group">
-                  <label>Catégorie <span class="text-danger">*</span></label>
+                  <label>Catégorie</label>
                   <select id="articleCategorie" class="form-control">
-                    <option value="">-- Sélectionner --</option>
+                    <option value="">-- Sélectionner Catégorie --</option>
                   </select>
                 </div>
               </div>
               <div class="col-md-6">
                 <div class="form-group">
-                  <label>Fournisseur <span class="text-danger">*</span></label>
+                  <label>Fournisseur préféré</label>
                   <select id="articleFournisseur" class="form-control">
                     <option value="">-- Aucun --</option>
                   </select>
-                  <small class="field-error" id="err-articleFournisseur"></small>
                 </div>
               </div>
             </div>
             <div class="row">
-              <div class="col-md-6">
-                <div class="form-group">
-                  <label>Quantité <span class="text-danger">*</span></label>
-                  <input type="number" id="articlePoids" class="form-control" step="0.01" min="0">
-                </div>
-              </div>
               <div class="col-md-6">
                 <div class="form-group">
                   <label>Unité de mesure <span class="text-danger">*</span></label>
                   <select id="articleUnite" class="form-control" required>
-                    <option value="">-- Sélectionner --</option>
+                    <option value="">-- Sélectionner Unité --</option>
                   </select>
                   <small class="field-error" id="err-articleUnite"></small>
                 </div>
               </div>
-            </div>
-            <div class="row">
               <div class="col-md-6">
                 <div class="form-group">
-                  <label>Seuil d'alerte <span class="text-danger">*</span></label>
-                  <input type="number" id="articleSeuilAlerte" class="form-control" value="0" step="0.01" min="0">
-                </div>
-              </div>
-              <div class="col-md-6">
-                <div class="form-group">
-                  <label>Seuil minimum <span class="text-danger">*</span></label>
-                  <input type="number" id="articleSeuilMin" class="form-control" value="0" step="0.01" min="0">
-                  <small class="field-error" id="err-articleSeuilMin"></small>
+                  <label>Emplacement par défaut <span class="text-danger">*</span></label>
+                  <select id="articleEmplacement" class="form-control" required>
+                    <option value="">-- Sélectionner Emplacement --</option>
+                  </select>
+                  <small class="field-error" id="err-articleEmplacement"></small>
                 </div>
               </div>
             </div>
             <div class="row">
               <div class="col-md-6">
                 <div class="form-group">
-                  <label>Actif <span class="text-danger">*</span></label>
+                  <label>Seuil minimum</label>
+                  <input type="number" id="articleSeuilMin" class="form-control" step="0.01" value="0" />
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label>Seuil d'alerte</label>
+                  <input type="number" id="articleSeuilAlerte" class="form-control" step="0.01" value="0" />
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-6">
+                <div class="form-group">
+                  <label>Actif</label>
                   <select id="articleActif" class="form-control">
                     <option value="1">Oui</option>
                     <option value="0">Non</option>
@@ -285,6 +284,7 @@
                 </div>
               </div>
             </div>
+            <!-- champs optionnels supplémentaires (poids, volume, etc.) peuvent être ajoutés ici -->
           </div>
           <div class="modal-footer">
             <button class="btn btn-primary" id="btnSaveArticle" onclick="saveArticle(event)" type="button">
@@ -306,14 +306,14 @@
           </div>
           <div class="modal-body">
             <p class="text-muted">Sélectionnez un fichier Excel (.xlsx) contenant les colonnes CODE, NOM, CATEGORIE,
-              UNITE, SEUIL_ALERTE.</p>
+              UNITE, SEUIL_ALERTE, STOCK_INITIAL.</p>
             <div class="form-group">
               <label class="btn btn-outline-primary btn-block" for="excelFile">
                 <i class="fas fa-upload"></i> Choisir un fichier
               </label>
-              <input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none;" onchange="updateFileName()">
+              <input type="file" id="excelFile" accept=".xlsx,.xls" style="display:none;" onchange="updateFileName()" />
               <input type="text" id="fileNameDisplay" class="form-control text-center mt-2" readonly
-                placeholder="Aucun fichier sélectionné">
+                placeholder="Aucun fichier sélectionné" />
             </div>
           </div>
           <div class="modal-footer">
@@ -323,6 +323,79 @@
             <button class="btn btn-danger" onclick="closeImportModal()" type="button">
               <i class="fas fa-times"></i> Annuler
             </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL AJUSTEMENT STOCK -->
+      <div id="adjustModal" class="modal">
+        <div class="modal-content" style="max-width:500px;">
+          <div class="modal-header">
+            <h3><i class="fas fa-exchange-alt"></i> Ajuster le stock</h3>
+            <span class="close" onclick="closeAdjustModal()">&times;</span>
+          </div>
+          <div class="modal-body">
+            <input type="hidden" id="adjustArticle" />
+            <input type="hidden" id="adjustEmplacement" />
+            <div class="form-group">
+              <label>Type de mouvement <span class="text-danger">*</span></label>
+              <select id="adjustType" class="form-control">
+                <option value="ENTREE">Entrée</option>
+                <option value="SORTIE">Sortie</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Quantité <span class="text-danger">*</span></label>
+              <input type="number" id="adjustQuantite" class="form-control" step="0.01" min="0.01" placeholder="0.00" />
+              <small class="field-error" id="err-adjustQuantite"></small>
+            </div>
+            <div class="form-group">
+              <label>Motif</label>
+              <input type="text" id="adjustMotif" class="form-control" placeholder="Motif de l'ajustement" />
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-primary" onclick="saveAdjust(event)" type="button"><i class="fas fa-save"></i>
+              Valider</button>
+            <button class="btn btn-danger" onclick="closeAdjustModal()" type="button"><i class="fas fa-times"></i>
+              Annuler</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODAL HISTORIQUE -->
+      <div id="historyModal" class="modal">
+        <div class="modal-content" style="max-width:800px;">
+          <div class="modal-header">
+            <h3><i class="fas fa-history"></i> Historique des mouvements</h3>
+            <span class="close" onclick="closeHistoryModal()">&times;</span>
+          </div>
+          <div class="modal-body">
+            <div style="overflow-x:auto;">
+              <table class="dash-table" style="width:100%;">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Quantité</th>
+                    <th>Avant</th>
+                    <th>Après</th>
+                    <th>Motif</th>
+                    <th>Référence</th>
+                  </tr>
+                </thead>
+                <tbody id="historyTableBody">
+                  <tr>
+                    <td colspan="7" style="text-align:center;">Aucun mouvement</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="pagination-wrapper" id="historyPagination"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-danger" onclick="closeHistoryModal()" type="button"><i class="fas fa-times"></i>
+              Fermer</button>
           </div>
         </div>
       </div>

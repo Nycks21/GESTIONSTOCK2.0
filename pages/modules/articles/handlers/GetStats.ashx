@@ -1,5 +1,4 @@
 <%@ WebHandler Language="C#" Class="GetStats" %>
-
 using System;
 using System.Data.SqlClient;
 using System.Web;
@@ -11,9 +10,7 @@ public class GetStats : IHttpHandler, IRequiresSessionState
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
-
         if (!AuthHelper.RequireApiAuth(ctx, 1))
         {
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -23,83 +20,49 @@ public class GetStats : IHttpHandler, IRequiresSessionState
         try
         {
             string connStr = AuthHelper.ConnectionString;
-            if (string.IsNullOrEmpty(connStr))
-                throw new Exception("Chaîne de connexion non trouvée.");
-
-            int total = 0, normal = 0, alerte = 0, rupture = 0;
-
-            using (var conn = new SqlConnection(connStr))
+            using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
 
-                // Total
-                string sqlTotal = "SELECT COUNT(*) FROM MARTICLE WHERE DELETION_AT IS NULL AND ACTIVE = 1";
-                using (var cmd = new SqlCommand(sqlTotal, conn))
+                // Requête corrigée avec CTE pour éviter les agrégations imbriquées
+                string sql = @"
+                    WITH StockTotal AS (
+                        SELECT ARTICLE_ID, ISNULL(SUM(QUANTITE_ACTUELLE), 0) AS STOCK
+                        FROM SSTOCK
+                        WHERE DELETION_AT IS NULL
+                        GROUP BY ARTICLE_ID
+                    )
+                    SELECT
+                        COUNT(a.ID) AS Total,
+                        SUM(CASE WHEN ISNULL(st.STOCK, 0) > a.SEUIL_ALERTE THEN 1 ELSE 0 END) AS Normal,
+                        SUM(CASE WHEN ISNULL(st.STOCK, 0) > 0 AND ISNULL(st.STOCK, 0) <= a.SEUIL_ALERTE THEN 1 ELSE 0 END) AS Alerte,
+                        SUM(CASE WHEN ISNULL(st.STOCK, 0) <= 0 THEN 1 ELSE 0 END) AS Rupture
+                    FROM MARTICLE a
+                    LEFT JOIN StockTotal st ON a.ID = st.ARTICLE_ID
+                    WHERE a.DELETION_AT IS NULL AND a.ACTIVE = 1";
+
+                int total = 0, normal = 0, alerte = 0, rupture = 0;
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                using (SqlDataReader rdr = cmd.ExecuteReader())
                 {
-                    total = Convert.ToInt32(cmd.ExecuteScalar());
+                    if (rdr.Read())
+                    {
+                        total = rdr["Total"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["Total"]);
+                        normal = rdr["Normal"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["Normal"]);
+                        alerte = rdr["Alerte"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["Alerte"]);
+                        rupture = rdr["Rupture"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["Rupture"]);
+                    }
                 }
 
-                // Normal
-                string sqlNormal = @"
-                    SELECT COUNT(*)
-                    FROM MARTICLE a
-                    WHERE a.DELETION_AT IS NULL AND a.ACTIVE = 1
-                      AND ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK WHERE ARTICLE_ID = a.ID), 0) > a.SEUIL_ALERTE";
-                using (var cmd = new SqlCommand(sqlNormal, conn))
-                {
-                    normal = Convert.ToInt32(cmd.ExecuteScalar());
-                }
-
-                // Alerte
-                string sqlAlerte = @"
-                    SELECT COUNT(*)
-                    FROM MARTICLE a
-                    WHERE a.DELETION_AT IS NULL AND a.ACTIVE = 1
-                      AND ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK WHERE ARTICLE_ID = a.ID), 0) <= a.SEUIL_ALERTE
-                      AND ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK WHERE ARTICLE_ID = a.ID), 0) > 0";
-                using (var cmd = new SqlCommand(sqlAlerte, conn))
-                {
-                    alerte = Convert.ToInt32(cmd.ExecuteScalar());
-                }
-
-                // Rupture
-                string sqlRupture = @"
-                    SELECT COUNT(*)
-                    FROM MARTICLE a
-                    WHERE a.DELETION_AT IS NULL AND a.ACTIVE = 1
-                      AND ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK WHERE ARTICLE_ID = a.ID), 0) <= 0";
-                using (var cmd = new SqlCommand(sqlRupture, conn))
-                {
-                    rupture = Convert.ToInt32(cmd.ExecuteScalar());
-                }
+                ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, total, normal, alerte, rupture }));
             }
-
-            var result = new
-            {
-                success = true,
-                total = total,
-                normal = normal,
-                alerte = alerte,
-                rupture = rupture
-            };
-
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(result));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
-            {
-                success = false,
-                message = ex.Message,
-                stack = ex.StackTrace
-            }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
     }
 
-    // Propriété traditionnelle pour éviter l'erreur CS1002
-    public bool IsReusable
-    {
-        get { return false; }
-    }
+    public bool IsReusable { get { return false; } }
 }

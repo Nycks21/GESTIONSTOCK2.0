@@ -1,4 +1,3 @@
-// state.js
 const AppState = {
     articles: [],
     total: 0,
@@ -10,30 +9,21 @@ const AppState = {
     filters: {
         search: '',
         category: '',
-        status: '',
+        status: ''
     },
-    editingId: null, // pour le modal (stocke l'ID de l'article en édition)
+    editingId: null,
     categories: [],
     fournisseurs: [],
     unites: [],
+    emplacements: []
 };
 
-// Exposer explicitement sur `window` pour éviter les erreurs de portée
 window.AppState = AppState;
-
-// Mise à jour de l'état global. Robuste si jQuery n'est pas encore chargé.
-window.updateState = function (newState) {
-    try {
-        Object.assign(AppState, newState || {});
-        if (typeof $ !== 'undefined' && typeof $(document).trigger === 'function') {
-            $(document).trigger('stateChanged');
-        } else if (typeof document !== 'undefined' && typeof Event === 'function') {
-            document.dispatchEvent(new Event('stateChanged'));
-        }
-    } catch (err) {
-        console.warn('updateState/updateStats failed:', err);
-    }
+window.updateState = function(newState) {
+    Object.assign(AppState, newState || {});
+    if (typeof $ !== 'undefined' && typeof $(document).trigger === 'function')
+        $(document).trigger('stateChanged');
+    else if (typeof document !== 'undefined' && typeof Event === 'function')
+        document.dispatchEvent(new Event('stateChanged'));
 };
-
-// Alias historical/alternate name used elsewhere in the app
 window.updateStats = window.updateState;

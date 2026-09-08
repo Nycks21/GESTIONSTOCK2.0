@@ -1,5 +1,4 @@
 <%@ WebHandler Language="C#" Class="GetArticles" %>
-
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -12,7 +11,6 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
-        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
         if (!AuthHelper.RequireApiAuth(ctx, 1))
@@ -23,150 +21,109 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
 
         try
         {
-            string connStr = AuthHelper.ConnectionString;
-            if (string.IsNullOrEmpty(connStr))
-                throw new Exception("Chaîne de connexion non trouvée.");
+            int page = 1, pageSize = 10;
+            string search = ctx.Request["search"] ?? "";
+            string category = ctx.Request["category"] ?? "";
+            string status = ctx.Request["status"] ?? "";
+            string sort = ctx.Request["sort"] ?? "NOM";
+            string order = ctx.Request["order"] ?? "ASC";
 
-            int page = 1;
-            int pageSize = 10;
-            int.TryParse(ctx.Request.QueryString["page"], out page);
-            int.TryParse(ctx.Request.QueryString["pageSize"], out pageSize);
+            int.TryParse(ctx.Request["page"], out page);
+            int.TryParse(ctx.Request["pageSize"], out pageSize);
             if (page < 1) page = 1;
             if (pageSize < 1) pageSize = 10;
-            if (pageSize > 100) pageSize = 100;
 
-            string search = (ctx.Request.QueryString["search"] ?? "").Trim();
-            string category = (ctx.Request.QueryString["category"] ?? "").Trim();
-            string status = (ctx.Request.QueryString["status"] ?? "").Trim();
-            string sort = (ctx.Request.QueryString["sort"] ?? "NOM").Trim();
-            string order = (ctx.Request.QueryString["order"] ?? "ASC").Trim();
+            string connStr = AuthHelper.ConnectionString;
 
-            var articles = new List<object>();
-
-            string whereClause = " WHERE a.DELETION_AT IS NULL ";
-            if (!string.IsNullOrEmpty(search))
-            {
-                whereClause += " AND (LOWER(a.CODE) LIKE @search OR LOWER(a.NOM) LIKE @search OR LOWER(a.DESCRIPTION) LIKE @search) ";
-            }
-            if (!string.IsNullOrEmpty(category))
-            {
-                whereClause += " AND a.CATEGORIE_ID = @category ";
-            }
-            if (!string.IsNullOrEmpty(status))
-            {
-                whereClause += " AND CASE WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= 0 THEN 'RUPTURE' WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= a.SEUIL_ALERTE THEN 'ALERTE' ELSE 'NORMAL' END = @status ";
-            }
-
-            string sortField = "a.NOM";
-            switch ((sort ?? "NOM").ToUpperInvariant())
-            {
-                case "CODE": sortField = "a.CODE"; break;
-                case "CATEGORIE": sortField = "c.NOM"; break;
-                case "FOURNISSEUR": sortField = "f.NOM"; break;
-                case "UNITE": sortField = "u.NOM"; break;
-                case "STOCK_DISPONIBLE": sortField = "STOCK_DISPONIBLE"; break;
-                case "SEUIL_ALERTE": sortField = "a.SEUIL_ALERTE"; break;
-                case "STATUT_STOCK": sortField = "STATUT_STOCK"; break;
-                default: sortField = "a.NOM"; break;
-            }
-
-            string sqlCount = @"
-                SELECT COUNT(*)
-                FROM MARTICLE a
-                LEFT JOIN SCATEGORIE c ON c.ID = a.CATEGORIE_ID
-                LEFT JOIN SUNITE u ON u.ID = a.UNITE_MESURE_ID
-                LEFT JOIN SFOURNISSEUR f ON f.ID = a.FOURNISSEUR_PREFERE_ID
-                " + whereClause;
-
-            string sqlList = @"
-                SELECT
-                    a.ID, a.CODE, a.CODE_BARRE, a.NOM, a.DESCRIPTION,
-                    a.CATEGORIE_ID, c.NOM AS CATEGORIE,
-                    a.UNITE_MESURE_ID, u.NOM AS UNITE,
-                    a.FOURNISSEUR_PREFERE_ID, f.NOM AS FOURNISSEUR,
-                    a.EMPLACEMENT_ID,
-                    a.SEUIL_MIN, a.SEUIL_ALERTE, a.POIDS, a.VOLUME,
-                    a.ACTIVE, a.EST_SERVICE, a.EST_PERISSABLE,
-                    ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) AS STOCK_DISPONIBLE,
-                    CASE
-                        WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= 0 THEN 'RUPTURE'
-                        WHEN ISNULL((SELECT SUM(QUANTITE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID), 0) <= a.SEUIL_ALERTE THEN 'ALERTE'
-                        ELSE 'NORMAL'
-                    END AS STATUT_STOCK
-                FROM MARTICLE a
-                LEFT JOIN SCATEGORIE c ON c.ID = a.CATEGORIE_ID
-                LEFT JOIN SUNITE u ON u.ID = a.UNITE_MESURE_ID
-                LEFT JOIN SFOURNISSEUR f ON f.ID = a.FOURNISSEUR_PREFERE_ID
-                " + whereClause + @"
-                ORDER BY " + sortField + " " + (string.Equals(order, "DESC", StringComparison.OrdinalIgnoreCase) ? "DESC" : "ASC") + @"
-                OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
-
-            int total = 0;
-            using (var conn = new SqlConnection(connStr))
-            using (var countCmd = new SqlCommand(sqlCount, conn))
+            using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                if (!string.IsNullOrEmpty(search)) countCmd.Parameters.AddWithValue("@search", "%" + search.ToLowerInvariant() + "%");
-                if (!string.IsNullOrEmpty(category)) countCmd.Parameters.AddWithValue("@category", category);
-                if (!string.IsNullOrEmpty(status)) countCmd.Parameters.AddWithValue("@status", status.ToUpperInvariant());
-                total = (int)countCmd.ExecuteScalar();
-            }
 
-            int totalPages = total > 0 ? (int)Math.Ceiling((double)total / pageSize) : 0;
-            if (page > totalPages && totalPages > 0) page = totalPages;
-            int offset = (page - 1) * pageSize;
-
-            var pageArticles = new List<object>();
-            using (var conn = new SqlConnection(connStr))
-            using (var cmd = new SqlCommand(sqlList, conn))
-            {
-                if (!string.IsNullOrEmpty(search)) cmd.Parameters.AddWithValue("@search", "%" + search.ToLowerInvariant() + "%");
-                if (!string.IsNullOrEmpty(category)) cmd.Parameters.AddWithValue("@category", category);
-                if (!string.IsNullOrEmpty(status)) cmd.Parameters.AddWithValue("@status", status.ToUpperInvariant());
-                cmd.Parameters.AddWithValue("@offset", offset);
-                cmd.Parameters.AddWithValue("@pageSize", pageSize);
-
-                conn.Open();
-                using (var reader = cmd.ExecuteReader())
+                string whereClause = "WHERE a.DELETION_AT IS NULL ";
+                if (!string.IsNullOrEmpty(search))
                 {
-                    while (reader.Read())
+                    whereClause += "AND (a.CODE LIKE @search OR a.NOM LIKE @search OR a.DESCRIPTION LIKE @search) ";
+                }
+                if (!string.IsNullOrEmpty(category))
+                {
+                    whereClause += "AND a.CATEGORIE_ID = @category ";
+                }
+
+                // Comptage total
+                string countSql = "SELECT COUNT(*) FROM MARTICLE a " + whereClause;
+                int total = 0;
+                using (SqlCommand cmd = new SqlCommand(countSql, conn))
+                {
+                    if (!string.IsNullOrEmpty(search)) cmd.Parameters.AddWithValue("@search", "%" + search + "%");
+                    if (!string.IsNullOrEmpty(category)) cmd.Parameters.AddWithValue("@category", category);
+                    total = Convert.ToInt32(cmd.ExecuteScalar());
+                }
+
+                // Requête de liste
+                string sql = @"
+                    SELECT a.ID, a.CODE, a.NOM, a.DESCRIPTION,
+                           a.CATEGORIE_ID, c.NOM AS CATEGORIE_NOM,
+                           a.FOURNISSEUR_PREFERE_ID, f.NOM AS FOURNISSEUR_NOM,
+                           a.UNITE_MESURE_ID, u.CODE AS UNITE_CODE, u.NOM AS UNITE_NOM,
+                           a.EMPLACEMENT_ID, e.NOM AS EMPLACEMENT_NOM,
+                           a.SEUIL_ALERTE, a.SEUIL_MIN,
+                           a.ACTIVE, a.EST_SERVICE,
+                           ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) AS STOCK_TOTAL,
+                           CASE
+                               WHEN ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) = 0 THEN 'rupture'
+                               WHEN ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) <= a.SEUIL_ALERTE THEN 'alerte'
+                               ELSE 'normal'
+                           END AS STATUT_STOCK
+                    FROM MARTICLE a
+                    LEFT JOIN SCATEGORIE c ON a.CATEGORIE_ID = c.ID
+                    LEFT JOIN SFOURNISSEUR f ON a.FOURNISSEUR_PREFERE_ID = f.ID
+                    LEFT JOIN SUNITE u ON a.UNITE_MESURE_ID = u.ID
+                    LEFT JOIN SEMPLACEMENT e ON a.EMPLACEMENT_ID = e.ID
+                    " + whereClause + @"
+                    ORDER BY " + sort + " " + order + @"
+                    OFFSET @offset ROWS FETCH NEXT @pageSize ROWS ONLY";
+
+                var articles = new List<object>();
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    if (!string.IsNullOrEmpty(search)) cmd.Parameters.AddWithValue("@search", "%" + search + "%");
+                    if (!string.IsNullOrEmpty(category)) cmd.Parameters.AddWithValue("@category", category);
+                    cmd.Parameters.AddWithValue("@offset", (page - 1) * pageSize);
+                    cmd.Parameters.AddWithValue("@pageSize", pageSize);
+                    using (SqlDataReader rdr = cmd.ExecuteReader())
                     {
-                        pageArticles.Add(new
+                        while (rdr.Read())
                         {
-                            ID = reader["ID"].ToString(),
-                            CODE = reader["CODE"].ToString(),
-                            CODE_BARRE = reader["CODE_BARRE"] == DBNull.Value ? "" : reader["CODE_BARRE"].ToString(),
-                            NOM = reader["NOM"].ToString(),
-                            DESCRIPTION = reader["DESCRIPTION"] == DBNull.Value ? "" : reader["DESCRIPTION"].ToString(),
-                            CATEGORIE_ID = reader["CATEGORIE_ID"] == DBNull.Value ? null : reader["CATEGORIE_ID"].ToString(),
-                            CATEGORIE = reader["CATEGORIE"] == DBNull.Value ? "" : reader["CATEGORIE"].ToString(),
-                            UNITE_MESURE_ID = reader["UNITE_MESURE_ID"] == DBNull.Value ? null : reader["UNITE_MESURE_ID"].ToString(),
-                            UNITE = reader["UNITE"] == DBNull.Value ? "" : reader["UNITE"].ToString(),
-                            FOURNISSEUR_PREFERE_ID = reader["FOURNISSEUR_PREFERE_ID"] == DBNull.Value ? null : reader["FOURNISSEUR_PREFERE_ID"].ToString(),
-                            FOURNISSEUR = reader["FOURNISSEUR"] == DBNull.Value ? "" : reader["FOURNISSEUR"].ToString(),
-                            EMPLACEMENT_ID = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString(),
-                            SEUIL_MIN = Convert.ToDecimal(reader["SEUIL_MIN"]),
-                            SEUIL_ALERTE = Convert.ToDecimal(reader["SEUIL_ALERTE"]),
-                            POIDS = reader["POIDS"] == DBNull.Value ? (decimal?)null : Convert.ToDecimal(reader["POIDS"]),
-                            VOLUME = reader["VOLUME"] == DBNull.Value ? (decimal?)null : Convert.ToDecimal(reader["VOLUME"]),
-                            ACTIVE = Convert.ToBoolean(reader["ACTIVE"]),
-                            EST_SERVICE = Convert.ToBoolean(reader["EST_SERVICE"]),
-                            EST_PERISSABLE = Convert.ToBoolean(reader["EST_PERISSABLE"]),
-                            STOCK_DISPONIBLE = Convert.ToDecimal(reader["STOCK_DISPONIBLE"]),
-                            STATUT_STOCK = reader["STATUT_STOCK"].ToString()
-                        });
+                            articles.Add(new
+                            {
+                                ID = rdr["ID"] == DBNull.Value ? null : rdr["ID"].ToString(),
+                                CODE = Convert.ToString(rdr["CODE"]),
+                                NOM = Convert.ToString(rdr["NOM"]),
+                                DESCRIPTION = Convert.ToString(rdr["DESCRIPTION"]),
+                                CATEGORIE_ID = Convert.ToString(rdr["CATEGORIE_ID"]),
+                                CATEGORIE_NOM = Convert.ToString(rdr["CATEGORIE_NOM"]),
+                                FOURNISSEUR_PREFERE_ID = Convert.ToString(rdr["FOURNISSEUR_PREFERE_ID"]),
+                                FOURNISSEUR_NOM = Convert.ToString(rdr["FOURNISSEUR_NOM"]),
+                                UNITE_MESURE_ID = Convert.ToString(rdr["UNITE_MESURE_ID"]),
+                                UNITE = Convert.ToString(rdr["UNITE_NOM"]),
+                                UNITE_SYMBOLE = Convert.ToString(rdr["UNITE_CODE"]),
+                                EMPLACEMENT_ID = Convert.ToString(rdr["EMPLACEMENT_ID"]),
+                                EMPLACEMENT_NOM = Convert.ToString(rdr["EMPLACEMENT_NOM"]),
+                                SEUIL_ALERTE = Convert.ToDecimal(rdr["SEUIL_ALERTE"]),
+                                SEUIL_MIN = Convert.ToDecimal(rdr["SEUIL_MIN"]),
+                                ACTIVE = Convert.ToBoolean(rdr["ACTIVE"]),
+                                EST_SERVICE = Convert.ToBoolean(rdr["EST_SERVICE"]),
+                                STOCK_TOTAL = Convert.ToDecimal(rdr["STOCK_TOTAL"]),
+                                STATUT_STOCK = Convert.ToString(rdr["STATUT_STOCK"])
+                            });
+                        }
                     }
                 }
-            }
 
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
-            {
-                success = true,
-                Articles = pageArticles,
-                total = total,
-                page = page,
-                totalPages = totalPages
-            }));
+                int totalPages = (int)Math.Ceiling((double)total / pageSize);
+                var response = new { success = true, Articles = articles, total = total, totalPages = totalPages };
+                ctx.Response.Write(new JavaScriptSerializer().Serialize(response));
+            }
         }
         catch (Exception ex)
         {
@@ -175,8 +132,5 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable
-    {
-        get { return false; }
-    }
+    public bool IsReusable { get { return false; } }
 }

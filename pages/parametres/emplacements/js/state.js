@@ -1,6 +1,6 @@
 // state.js
 const AppState = {
-    stock: [],
+    emplacements: [],
     total: 0,
     page: 1,
     pageSize: DEFAULTS.PAGE_SIZE,
@@ -9,12 +9,12 @@ const AppState = {
     sortOrder: DEFAULTS.SORT_ORDER,
     filters: {
         search: '',
-        article: '',
-        emplacement: ''
+        type: '',
+        parent: ''
     },
     editingId: null,
-    articles: [],
-    emplacements: []
+    types: [],
+    parents: []
 };
 
 window.AppState = AppState;
@@ -22,3 +22,4 @@ window.updateState = function (newState) {
     Object.assign(AppState, newState || {});
     if (typeof $ !== 'undefined') $(document).trigger('stateChanged');
 };
+window.updateStats = window.updateState;

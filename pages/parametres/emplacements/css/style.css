@@ -1,0 +1,294 @@
+/* ============================================================================
+   Module Articles — styles spécifiques
+   S'appuie sur les variables/classes déjà définies dans ../../_assets/css/global.css
+   (dash-card, btn-*, modal, etc.) ; ce fichier ne fait qu'ajouter ce qui manque.
+   ============================================================================ */
+
+/* ── Cartes de synthèse ─────────────────────────────────────────────────── */
+.articles-stats {
+    margin: 0 0 16px 0;
+}
+
+.stat-card {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: #fff;
+    border-radius: 10px;
+    padding: 16px 18px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    border-left: 4px solid #dee2e6;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+}
+
+.stat-card .stat-icon {
+    font-size: 22px;
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.stat-card .stat-body {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.2;
+}
+
+.stat-card .stat-value {
+    font-size: 22px;
+    font-weight: 700;
+}
+
+.stat-card .stat-label {
+    font-size: 12px;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.stat-card-total { border-left-color: #007bff; }
+.stat-card-total .stat-icon { background: rgba(0,123,255,0.12); color: #007bff; }
+
+.stat-card-normal { border-left-color: #28a745; }
+.stat-card-normal .stat-icon { background: rgba(40,167,69,0.12); color: #28a745; }
+
+.stat-card-alerte { border-left-color: #ffc107; }
+.stat-card-alerte .stat-icon { background: rgba(255,193,7,0.15); color: #b58a00; }
+
+.stat-card-rupture { border-left-color: #dc3545; }
+.stat-card-rupture .stat-icon { background: rgba(220,53,69,0.12); color: #dc3545; }
+
+/* ── Barre d'outils / filtres ──────────────────────────────────────────── */
+.dash-card-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 20px;
+    border-top: 1px solid #eef0f2;
+    border-bottom: 1px solid #eef0f2;
+    background: #fafbfc;
+}
+
+.toolbar-search {
+    position: relative;
+    flex: 1 1 260px;
+    min-width: 220px;
+}
+
+.toolbar-search i {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+    font-size: 13px;
+}
+
+.toolbar-search input {
+    padding-left: 32px;
+}
+
+.toolbar-select {
+    flex: 0 0 auto;
+    width: auto;
+    min-width: 150px;
+}
+
+.toolbar-counter {
+    margin-left: auto;
+    font-size: 13px;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+/* ── Badges ─────────────────────────────────────────────────────────────── */
+.badge-pill {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.badge-custom {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+}
+.badge-active {
+    background-color: #28a745;
+}
+.badge-inactive {
+    background-color: #dc3545;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 96px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    border: 1px solid transparent;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.status-active {
+    background: linear-gradient(135deg, #e8f9ee, #d1f2df);
+    color: #1b7a46;
+    border-color: rgba(27, 122, 70, 0.18);
+}
+
+.status-inactive {
+    background: linear-gradient(135deg, #ffe9ec, #ffdfe4);
+    color: #b42318;
+    border-color: rgba(180, 35, 24, 0.12);
+}
+
+/* ── Statut Actif/Inactif (colonne Statut) ────────────────────────────── */
+.status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.status-active {
+    background: rgba(40, 167, 69, 0.12);
+    color: #28a745;
+}
+
+.status-inactive {
+    background: rgba(220, 53, 69, 0.12);
+    color: #dc3545;
+}
+
+/* ── Validation de formulaire ──────────────────────────────────────────── */
+.field-error {
+    display: block;
+    color: #dc3545;
+    font-size: 12px;
+    min-height: 16px;
+    margin-top: 2px;
+}
+
+.form-control.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.12);
+}
+
+/* ── Pagination ─────────────────────────────────────────────────────────── */
+.pagination-wrapper {
+    display: flex;
+    justify-content: center;
+    gap: 4px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+}
+
+.pagination-wrapper button {
+    min-width: 34px;
+    height: 34px;
+    border: 1px solid #dee2e6;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #495057;
+}
+
+.pagination-wrapper button:hover:not(:disabled) {
+    background: #f1f3f5;
+}
+
+.pagination-wrapper button.active {
+    background: #007bff;
+    border-color: #007bff;
+    color: #fff;
+    font-weight: 600;
+}
+
+.pagination-wrapper button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* ── État vide ──────────────────────────────────────────────────────────── */
+.empty-state {
+    text-align: center;
+    padding: 50px 20px;
+    color: #868e96;
+}
+
+.empty-state i {
+    font-size: 40px;
+    color: #ced4da;
+    display: block;
+    margin-bottom: 12px;
+}
+
+/* ── Toasts ─────────────────────────────────────────────────────────────── */
+#toastContainer {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.toast-item {
+    min-width: 260px;
+    max-width: 360px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: toast-in 0.2s ease;
+}
+
+.toast-item.success { background: #28a745; }
+.toast-item.error { background: #dc3545; }
+.toast-item.info { background: #17a2b8; }
+
+@keyframes toast-in {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+    .dash-card-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .toolbar-select, .toolbar-counter {
+        width: 100%;
+        margin-left: 0;
+    }
+}

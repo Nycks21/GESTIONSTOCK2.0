@@ -1,4 +1,4 @@
-<%@ WebHandler Language="C#" Class="GetCategories" %>
+<%@ WebHandler Language="C#" Class="GetEmplacements" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -6,7 +6,7 @@ using System.Web;
 using System.Web.Script.Serialization;
 using System.Web.SessionState;
 
-public class GetCategories : IHttpHandler, IRequiresSessionState
+public class GetEmplacements : IHttpHandler, IRequiresSessionState
 {
     public void ProcessRequest(HttpContext ctx)
     {
@@ -21,21 +21,25 @@ public class GetCategories : IHttpHandler, IRequiresSessionState
         try
         {
             string connStr = AuthHelper.ConnectionString;
-            var categories = new List<object>();
+            var emplacements = new List<object>();
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                string sql = "SELECT ID, NOM FROM SCATEGORIE WHERE DELETION_AT IS NULL AND ACTIVE = 1 ORDER BY NOM";
+                // Récupère tous les emplacements actifs, triés par nom
+                string sql = "SELECT ID, NOM FROM SEMPLACEMENT WHERE DELETION_AT IS NULL AND ACTIVE = 1 ORDER BY NOM";
                 using (SqlCommand cmd = new SqlCommand(sql, conn))
                 using (SqlDataReader rdr = cmd.ExecuteReader())
                 {
                     while (rdr.Read())
                     {
-                        categories.Add(new { ID = Convert.ToString(rdr["ID"]), NOM = Convert.ToString(rdr["NOM"]) });
+                        emplacements.Add(new {
+                            ID = Convert.ToString(rdr["ID"]),
+                            NOM = Convert.ToString(rdr["NOM"])
+                        });
                     }
                 }
             }
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, Categories = categories }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, Emplacements = emplacements }));
         }
         catch (Exception ex)
         {

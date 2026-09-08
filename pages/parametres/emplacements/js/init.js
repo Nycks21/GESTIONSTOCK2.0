@@ -1,6 +1,6 @@
 $(document).ready(function () {
     loadDropdowns().then(function() {
-        loadStock();
+        loadEmplacements();
         loadStats();
         initUIControls();
     });
@@ -26,7 +26,7 @@ $(document).ready(function () {
             AppState.sortField = field;
             AppState.sortOrder = 'ASC';
         }
-        loadStock();
+        loadEmplacements();
     };
 });
 
@@ -43,9 +43,9 @@ function debounce(fn, delay) {
 
 function resetFilters() {
     document.getElementById('search-filter').value = '';
-    document.getElementById('article-filter').value = '';
-    document.getElementById('emplacement-filter').value = '';
-    AppState.filters = { search: '', article: '', emplacement: '' };
+    document.getElementById('type-filter').value = '';
+    document.getElementById('parent-filter').value = '';
+    AppState.filters = { search: '', type: '', parent: '' };
     AppState.page = 1;
-    loadStock({ silent: true });
+    loadEmplacements({ silent: true });
 }

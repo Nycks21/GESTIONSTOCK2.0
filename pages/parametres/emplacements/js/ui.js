@@ -1,9 +1,6 @@
 'use strict';
 
-// ============================================================
-// SPINNER
-// ============================================================
-
+// Spinner
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -22,51 +19,31 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// ============================================================
-// MODALES
-// ============================================================
-
+// Modales
 function showModal(id) {
-    var m = document.getElementById(id || 'adjustModal');
+    var m = document.getElementById(id || 'emplacementModal');
     if (m) {
         m.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
 }
-
-function closeAdjustModal() {
-    var m = document.getElementById('adjustModal');
+function closeEmplacementModal() {
+    var m = document.getElementById('emplacementModal');
     if (m) {
         m.style.display = 'none';
         document.body.style.overflow = '';
     }
     AppState.editingId = null;
-    clearFieldErrors(['adjustArticle', 'adjustEmplacement', 'adjustQuantite']);
+    clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
 }
-
-function closeHistoryModal() {
-    var m = document.getElementById('historyModal');
-    if (m) {
-        m.style.display = 'none';
-        document.body.style.overflow = '';
-    }
-    historyArticleId = null;
-    historyEmplacementId = null;
-    historyPage = 1;
-}
-
 function clearFieldErrors(ids) {
-    if (!ids) ids = ['adjustArticle', 'adjustEmplacement', 'adjustQuantite'];
     ids.forEach(function(id) {
         var err = document.getElementById('err-' + id);
         if (err) { err.textContent = ''; err.style.display = 'none'; }
     });
 }
 
-// ============================================================
-// PAGINATION
-// ============================================================
-
+// Pagination
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -106,11 +83,11 @@ function createPaginationControls(totalPages) {
     }
 
     container.appendChild(createBtn('«', function() {
-        if (AppState.page !== 1) { AppState.page = 1; loadStock(); }
+        if (AppState.page !== 1) { AppState.page = 1; loadEmplacements(); }
     }, AppState.page === 1));
 
     container.appendChild(createBtn('‹', function() {
-        if (AppState.page > 1) { AppState.page--; loadStock(); }
+        if (AppState.page > 1) { AppState.page--; loadEmplacements(); }
     }, AppState.page === 1));
 
     var maxVisible = 5;
@@ -118,62 +95,56 @@ function createPaginationControls(totalPages) {
     var end = Math.min(totalPages, start + maxVisible - 1);
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
     if (start > 1) {
-        container.appendChild(createBtn('1', function() { AppState.page = 1; loadStock(); }));
+        container.appendChild(createBtn('1', function() { AppState.page = 1; loadEmplacements(); }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
     for (var i = start; i <= end; i++) {
         (function(page) {
             container.appendChild(createBtn(String(page), function() {
-                if (page !== AppState.page) { AppState.page = page; loadStock(); }
+                if (page !== AppState.page) { AppState.page = page; loadEmplacements(); }
             }));
         })(i);
     }
     if (end < totalPages) {
         if (end < totalPages - 1) container.appendChild(createBtn('...', null, true, true));
         (function(tp) {
-            container.appendChild(createBtn(String(tp), function() { AppState.page = tp; loadStock(); }));
+            container.appendChild(createBtn(String(tp), function() { AppState.page = tp; loadEmplacements(); }));
         })(totalPages);
     }
 
     container.appendChild(createBtn('›', function() {
-        if (AppState.page < totalPages) { AppState.page++; loadStock(); }
+        if (AppState.page < totalPages) { AppState.page++; loadEmplacements(); }
     }, AppState.page === totalPages));
 
     container.appendChild(createBtn('»', function() {
-        if (AppState.page !== totalPages) { AppState.page = totalPages; loadStock(); }
+        if (AppState.page !== totalPages) { AppState.page = totalPages; loadEmplacements(); }
     }, AppState.page === totalPages));
 
     wrapper.innerHTML = '';
     wrapper.appendChild(container);
 }
 
-// ============================================================
-// FILTRES
-// ============================================================
-
+// Filtres
 function applyFilters() {
     var search = document.getElementById('search-filter')?.value || '';
-    var article = document.getElementById('article-filter')?.value || '';
-    var emplacement = document.getElementById('emplacement-filter')?.value || '';
+    var type = document.getElementById('type-filter')?.value || '';
+    var parent = document.getElementById('parent-filter')?.value || '';
     AppState.filters.search = search;
-    AppState.filters.article = article;
-    AppState.filters.emplacement = emplacement;
+    AppState.filters.type = type;
+    AppState.filters.parent = parent;
     AppState.page = 1;
-    loadStock({ silent: true });
+    loadEmplacements({ silent: true });
 }
 function resetFilters() {
     document.getElementById('search-filter').value = '';
-    document.getElementById('article-filter').value = '';
-    document.getElementById('emplacement-filter').value = '';
-    AppState.filters = { search: '', article: '', emplacement: '' };
+    document.getElementById('type-filter').value = '';
+    document.getElementById('parent-filter').value = '';
+    AppState.filters = { search: '', type: '', parent: '' };
     AppState.page = 1;
-    loadStock({ silent: true });
+    loadEmplacements({ silent: true });
 }
 
-// ============================================================
-// GESTION DU NOMBRE DE LIGNES PAR PAGE
-// ============================================================
-
+// Gestion du nombre de lignes
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
@@ -201,18 +172,14 @@ function initRowsPerPage() {
             if (!isNaN(newSize) && newSize > 0) AppState.pageSize = newSize;
         }
         AppState.page = 1;
-        loadStock();
+        loadEmplacements();
     });
 }
 
-// ============================================================
-// ECOUTEURS DE FILTRES
-// ============================================================
-
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
-    var articleSelect = document.getElementById('article-filter');
-    var emplacementSelect = document.getElementById('emplacement-filter');
+    var typeSelect = document.getElementById('type-filter');
+    var parentSelect = document.getElementById('parent-filter');
     var timeoutId = null;
     if (searchInput) {
         searchInput.addEventListener('input', function () {
@@ -220,25 +187,20 @@ function initFilterListeners() {
             timeoutId = setTimeout(function() { applyFilters(); }, 300);
         });
     }
-    if (articleSelect) articleSelect.addEventListener('change', applyFilters);
-    if (emplacementSelect) emplacementSelect.addEventListener('change', applyFilters);
+    if (typeSelect) typeSelect.addEventListener('change', applyFilters);
+    if (parentSelect) parentSelect.addEventListener('change', applyFilters);
 }
-
-// ============================================================
-// INITIALISATION UI
-// ============================================================
 
 function initUIControls() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            closeAdjustModal();
-            closeHistoryModal();
+            closeEmplacementModal();
         }
     });
     initFilterListeners();
     initRowsPerPage();
-
-    var form = document.getElementById('stockForm');
+    // Empêcher la soumission du formulaire
+    var form = document.getElementById('emplacementForm');
     if (form) {
         form.setAttribute('novalidate', 'novalidate');
         form.addEventListener('submit', function(e) { e.preventDefault(); });
@@ -246,36 +208,15 @@ function initUIControls() {
     document.querySelectorAll('button').forEach(function(btn) {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
-
-    // Fermeture des modales par la croix (délégation)
-    document.addEventListener('click', function(e) {
-        if (e.target && e.target.classList.contains('close')) {
-            var modal = e.target.closest('.modal');
-            if (modal) {
-                if (modal.id === 'historyModal') {
-                    closeHistoryModal();
-                } else if (modal.id === 'adjustModal') {
-                    closeAdjustModal();
-                } else {
-                    modal.style.display = 'none';
-                }
-            }
-        }
-    });
 }
 
-// ============================================================
-// EXPOSITIONS GLOBALES
-// ============================================================
-
+// Expositions globales
 window.applyFilters = applyFilters;
 window.resetFilters = resetFilters;
 window.showModal = showModal;
-window.closeAdjustModal = closeAdjustModal;
-window.closeHistoryModal = closeHistoryModal;
+window.closeEmplacementModal = closeEmplacementModal;
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.createPaginationControls = createPaginationControls;
 window.initUIControls = initUIControls;
 window.clearFieldErrors = clearFieldErrors;
-window.forceHideSpinner = forceHideSpinner;

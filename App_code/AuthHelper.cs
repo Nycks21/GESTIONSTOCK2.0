@@ -186,30 +186,32 @@ public static class AuthHelper
         new MenuItem { Code = "unites", Text = "Unité", Url = "/pages/parametres/unites/unites.aspx", Icon = "fas fa-ruler", Section = "Paramètres", Order = 2 },
         new MenuItem { Code = "categories", Text = "Catégories", Url = "/pages/parametres/categories/categories.aspx", Icon = "fas fa-tags", Section = "Paramètres", Order = 3 },
         new MenuItem { Code = "fournisseurs", Text = "Fournisseurs", Url = "/pages/parametres/fournisseurs/fournisseurs.aspx", Icon = "fas fa-truck", Section = "Paramètres", Order = 4 },
+        new MenuItem { Code = "emplacements", Text = "Emplacements", Url = "/pages/parametres/emplacements/emplacements.aspx", Icon = "fas fa-map-marker-alt", Section = "Paramètres", Order = 5 },
+
 
         // Mouvements
-        new MenuItem { Code = "articles", Text = "Articles", Url = "/pages/modules/articles/articles.aspx", Icon = "fas fa-boxes", Section = "Mouvements", Order = 5 },
-        new MenuItem { Code = "entrees", Text = "Entrées", Url = "/pages/modules/entrees/entrees.aspx", Icon = "fas fa-arrow-down", Section = "Mouvements", Order = 6 },
-        new MenuItem { Code = "demandes", Text = "Demandes", Url = "/pages/modules/demandes/demandes.aspx", Icon = "fas fa-file-alt", Section = "Mouvements", Order = 6 },
-        new MenuItem { Code = "sorties", Text = "Sorties", Url = "/pages/modules/sorties/sorties.aspx", Icon = "fas fa-arrow-up", Section = "Mouvements", Order = 7 },
-        new MenuItem { Code = "stock", Text = "Stock", Url = "/pages/modules/stock/stock.aspx", Icon = "fas fa-warehouse", Section = "Mouvements", Order = 8 },
+        new MenuItem { Code = "articles", Text = "Articles", Url = "/pages/modules/articles/articles.aspx", Icon = "fas fa-boxes", Section = "Mouvements", Order = 6 },
+        new MenuItem { Code = "entrees", Text = "Entrées", Url = "/pages/modules/entrees/entrees.aspx", Icon = "fas fa-arrow-down", Section = "Mouvements", Order = 7 },
+        new MenuItem { Code = "demandes", Text = "Demandes", Url = "/pages/modules/demandes/demandes.aspx", Icon = "fas fa-file-alt", Section = "Mouvements", Order = 8 },
+        new MenuItem { Code = "sorties", Text = "Sorties", Url = "/pages/modules/sorties/sorties.aspx", Icon = "fas fa-arrow-up", Section = "Mouvements", Order = 9 },
+        new MenuItem { Code = "stock", Text = "Stock", Url = "/pages/modules/stock/stock.aspx", Icon = "fas fa-warehouse", Section = "Mouvements", Order = 10 },
 
 
         // Demandes
-        new MenuItem { Code = "saisie", Text = "Saisies", Url = "/pages/modules/saisie/saisie.aspx", Icon = "fas fa-file-alt", Section = "Demandes", Order = 9 },
-        new MenuItem { Code = "validation", Text = "Validation", Url = "/pages/modules/validation/validation.aspx", Icon = "fas fa-check-circle", Section = "Demandes", Order = 10 },
-        new MenuItem { Code = "generation", Text = "Génération", Url = "/pages/modules/generation/generation.aspx", Icon = "fas fa-cogs", Section = "Demandes", Order = 11 },
+        new MenuItem { Code = "saisie", Text = "Saisies", Url = "/pages/modules/saisie/saisie.aspx", Icon = "fas fa-file-alt", Section = "Demandes", Order = 11 },
+        new MenuItem { Code = "validation", Text = "Validation", Url = "/pages/modules/validation/validation.aspx", Icon = "fas fa-check-circle", Section = "Demandes", Order = 12 },
+        new MenuItem { Code = "generation", Text = "Génération", Url = "/pages/modules/generation/generation.aspx", Icon = "fas fa-cogs", Section = "Demandes", Order = 13 },
 
 
         // Rapports
-        new MenuItem { Code = "inventaire", Text = "Inventaire", Url = "/pages/modules/inventaire/inventaire.aspx", Icon = "fas fa-clipboard-list", Section = "Rapports", Order = 12 },
-        new MenuItem { Code = "mouvements", Text = "Historique", Url = "/pages/modules/mouvements/mouvements.aspx", Icon = "fas fa-history", Section = "Rapports", Order = 13 },
-        new MenuItem { Code = "rapports-stock", Text = "Exploitations", Url = "/pages/rapports/stock-disponible.aspx", Icon = "fas fa-chart-bar", Section = "Rapports", Order = 14 },
+        new MenuItem { Code = "inventaire", Text = "Inventaire", Url = "/pages/modules/inventaire/inventaire.aspx", Icon = "fas fa-clipboard-list", Section = "Rapports", Order = 14 },
+        new MenuItem { Code = "mouvements", Text = "Historique", Url = "/pages/modules/mouvements/mouvements.aspx", Icon = "fas fa-history", Section = "Rapports", Order = 15 },
+        new MenuItem { Code = "rapports-stock", Text = "Exploitations", Url = "/pages/rapports/stock-disponible.aspx", Icon = "fas fa-chart-bar", Section = "Rapports", Order = 16 },
 
         // Administration
-        new MenuItem { Code = "annee", Text = "Année", Url = "/pages/administrations/annee/annee.aspx", Icon = "fas fa-calendar-alt", Section = "Administration", Order = 15 },
-        new MenuItem { Code = "parametres-users", Text = "Utilisateurs", Url = "/pages/administrations/utilisateur/utilisateur.aspx", Icon = "fas fa-user-cog", Section = "Administration", Order = 15 },
-        new MenuItem { Code = "parametres-requetes", Text = "Requêtes SQL", Url = "/pages/administrations/requete/requetes.aspx", Icon = "fas fa-terminal", Section = "Administration", Order = 16 },
+        new MenuItem { Code = "annee", Text = "Année", Url = "/pages/administrations/annee/annee.aspx", Icon = "fas fa-calendar-alt", Section = "Administration", Order = 17 },
+        new MenuItem { Code = "parametres-users", Text = "Utilisateurs", Url = "/pages/administrations/utilisateur/utilisateur.aspx", Icon = "fas fa-user-cog", Section = "Administration", Order = 18 },
+        new MenuItem { Code = "parametres-requetes", Text = "Requêtes SQL", Url = "/pages/administrations/requete/requetes.aspx", Icon = "fas fa-terminal", Section = "Administration", Order = 19 },
     };
 
   // ============================================================
