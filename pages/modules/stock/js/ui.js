@@ -26,22 +26,13 @@ function hideSpinner() { forceHideSpinner(); }
 // MODALES
 // ============================================================
 
+// fonction générique pour afficher une modale (utilisée pour l'historique)
 function showModal(id) {
-    var m = document.getElementById(id || 'adjustModal');
+    var m = document.getElementById(id || 'historyModal');
     if (m) {
         m.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
-}
-
-function closeAdjustModal() {
-    var m = document.getElementById('adjustModal');
-    if (m) {
-        m.style.display = 'none';
-        document.body.style.overflow = '';
-    }
-    AppState.editingId = null;
-    clearFieldErrors(['adjustArticle', 'adjustEmplacement', 'adjustQuantite']);
 }
 
 function closeHistoryModal() {
@@ -50,17 +41,10 @@ function closeHistoryModal() {
         m.style.display = 'none';
         document.body.style.overflow = '';
     }
-    historyArticleId = null;
-    historyEmplacementId = null;
-    historyPage = 1;
-}
-
-function clearFieldErrors(ids) {
-    if (!ids) ids = ['adjustArticle', 'adjustEmplacement', 'adjustQuantite'];
-    ids.forEach(function(id) {
-        var err = document.getElementById('err-' + id);
-        if (err) { err.textContent = ''; err.style.display = 'none'; }
-    });
+    // réinitialiser les variables d'historique si elles existent globalement
+    if (typeof historyArticleId !== 'undefined') historyArticleId = null;
+    if (typeof historyEmplacementId !== 'undefined') historyEmplacementId = null;
+    if (typeof historyPage !== 'undefined') historyPage = 1;
 }
 
 // ============================================================
@@ -231,8 +215,7 @@ function initFilterListeners() {
 function initUIControls() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            closeAdjustModal();
-            closeHistoryModal();
+            closeHistoryModal(); // uniquement l'historique
         }
     });
     initFilterListeners();
@@ -247,18 +230,14 @@ function initUIControls() {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
 
-    // Fermeture des modales par la croix (délégation)
+    // Fermeture des modales par la croix (uniquement l'historique)
     document.addEventListener('click', function(e) {
         if (e.target && e.target.classList.contains('close')) {
             var modal = e.target.closest('.modal');
-            if (modal) {
-                if (modal.id === 'historyModal') {
-                    closeHistoryModal();
-                } else if (modal.id === 'adjustModal') {
-                    closeAdjustModal();
-                } else {
-                    modal.style.display = 'none';
-                }
+            if (modal && modal.id === 'historyModal') {
+                closeHistoryModal();
+            } else if (modal) {
+                modal.style.display = 'none';
             }
         }
     });
@@ -271,11 +250,9 @@ function initUIControls() {
 window.applyFilters = applyFilters;
 window.resetFilters = resetFilters;
 window.showModal = showModal;
-window.closeAdjustModal = closeAdjustModal;
 window.closeHistoryModal = closeHistoryModal;
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.createPaginationControls = createPaginationControls;
 window.initUIControls = initUIControls;
-window.clearFieldErrors = clearFieldErrors;
 window.forceHideSpinner = forceHideSpinner;

@@ -23,14 +23,14 @@ function hideSpinner() { forceHideSpinner(); }
 // MODALES
 // ============================================================
 function showModal(id) {
-    var m = document.getElementById(id || 'sortieModal');
+    var m = document.getElementById(id || 'saisieModal');
     if (m) {
         m.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
 }
 function closeModal(id) {
-    var m = document.getElementById(id || 'sortieModal');
+    var m = document.getElementById(id || 'saisieModal');
     if (m) {
         m.style.display = 'none';
         document.body.style.overflow = '';
@@ -80,14 +80,14 @@ function createPaginationControls(totalPages) {
     container.appendChild(createBtn('«', function () {
         if (AppState.page !== 1) {
             AppState.page = 1;
-            loadSorties();
+            loadDemandes();
         }
     }, AppState.page === 1));
 
     container.appendChild(createBtn('‹', function () {
         if (AppState.page > 1) {
             AppState.page--;
-            loadSorties();
+            loadDemandes();
         }
     }, AppState.page === 1));
 
@@ -99,7 +99,7 @@ function createPaginationControls(totalPages) {
     if (start > 1) {
         container.appendChild(createBtn('1', function () {
             AppState.page = 1;
-            loadSorties();
+            loadDemandes();
         }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
@@ -109,7 +109,7 @@ function createPaginationControls(totalPages) {
             container.appendChild(createBtn(String(page), function () {
                 if (page !== AppState.page) {
                     AppState.page = page;
-                    loadSorties();
+                    loadDemandes();
                 }
             }));
         })(i);
@@ -120,7 +120,7 @@ function createPaginationControls(totalPages) {
         (function (tp) {
             container.appendChild(createBtn(String(tp), function () {
                 AppState.page = tp;
-                loadSorties();
+                loadDemandes();
             }));
         })(totalPages);
     }
@@ -128,14 +128,14 @@ function createPaginationControls(totalPages) {
     container.appendChild(createBtn('›', function () {
         if (AppState.page < totalPages) {
             AppState.page++;
-            loadSorties();
+            loadDemandes();
         }
     }, AppState.page === totalPages));
 
     container.appendChild(createBtn('»', function () {
         if (AppState.page !== totalPages) {
             AppState.page = totalPages;
-            loadSorties();
+            loadDemandes();
         }
     }, AppState.page === totalPages));
 
@@ -145,7 +145,7 @@ function createPaginationControls(totalPages) {
 // ============================================================
 // GESTION DES LIGNES (SORTIE)
 // ============================================================
-function ajouterLigne(articleId, qteD, qteR, obs) {
+function ajouterLigne(articleId, qteD, obs) {
     var tbody = document.getElementById('lignesBody');
     if (!tbody) return;
     var rowCount = tbody.children.length;
@@ -160,12 +160,13 @@ function ajouterLigne(articleId, qteD, qteR, obs) {
             </select>
         </td>
         <td><input type="number" class="form-control form-control-sm ligne-qted" step="0.01" min="0" value="${qteD || ''}" required /></td>
-        <td><input type="number" class="form-control form-control-sm ligne-qter" step="0.01" min="0" value="${qteR || ''}" /></td>
         <td><input type="text" class="form-control form-control-sm ligne-obs" value="${obs || ''}" /></td>
         <td><button type="button" class="btn btn-sm btn-danger" onclick="supprimerLigne(this)"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(tr);
-    enhanceArticleSelect(tr.querySelector('.ligne-article'));
+    if (typeof enhanceArticleSelect === 'function') {
+        enhanceArticleSelect(tr.querySelector('.ligne-article'));
+    }
 }
 
 function supprimerLigne(btn) {
@@ -188,10 +189,9 @@ function getLignesFromModal() {
         var articleSelect = tr.querySelector('.ligne-article');
         var articleId = articleSelect ? articleSelect.value : '';
         var qteD = parseFloat(tr.querySelector('.ligne-qted').value) || 0;
-        var qteR = parseFloat(tr.querySelector('.ligne-qter').value) || 0;
         var obs = tr.querySelector('.ligne-obs') ? tr.querySelector('.ligne-obs').value : '';
         if (articleId && qteD > 0) {
-            lignes.push({ articleId: articleId, quantiteD: qteD, quantiteR: qteR, observations: obs });
+            lignes.push({ articleId: articleId, quantiteD: qteD, observations: obs });
         }
     });
     return lignes;
@@ -203,11 +203,10 @@ function getLignesFromModal() {
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            closeModal('sortieModal');
-            closeModal('modalImport');
+            closeModalSaisie();
         }
     });
-    var form = document.getElementById('sortieForm');
+    var form = document.getElementById('saisieForm');
     if (form) {
         form.setAttribute('novalidate', 'novalidate');
         form.addEventListener('submit', function (e) { e.preventDefault(); });
@@ -221,7 +220,7 @@ function initUIControls() {
             var val = this.value;
             AppState.pageSize = (val === 'all') ? 999999 : parseInt(val, 10);
             AppState.page = 1;
-            loadSorties();
+            loadDemandes();
         });
     }
 }

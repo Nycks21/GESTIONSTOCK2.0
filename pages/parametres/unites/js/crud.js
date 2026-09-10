@@ -1,12 +1,31 @@
-// crud.js
+// crud.js – Version avec visualisation
 var currentUniteId = null;
+var currentMode = 'add'; // 'add', 'edit', 'view'
+
+// Fonction utilitaire pour activer/désactiver les champs
+function setFieldsEnabled(enabled) {
+    var inputs = document.querySelectorAll('#uniteModal input, #uniteModal select, #uniteModal textarea');
+    for (var i = 0; i < inputs.length; i++) {
+        inputs[i].disabled = !enabled;
+        if (!enabled) {
+            inputs[i].style.backgroundColor = '#e9ecef';
+            inputs[i].style.cursor = 'not-allowed';
+        } else {
+            inputs[i].style.backgroundColor = '';
+            inputs[i].style.cursor = '';
+        }
+    }
+}
 
 function openAddUniteModal(e) {
     if (e) e.preventDefault();
     currentUniteId = null;
-    document.getElementById('modalTitle').textContent = 'Ajouter une unité';
+    currentMode = 'add';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-ruler"></i> Ajouter une unité';
     document.getElementById('uniteForm').reset();
     document.getElementById('uniteActif').value = '1';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveUnite').style.display = '';
     clearErrors();
     document.getElementById('uniteModal').style.display = 'flex';
 }
@@ -15,16 +34,38 @@ function editUnite(id) {
     var unite = AppState.unites.find(function (u) { return u.ID === id; });
     if (!unite) return;
     currentUniteId = id;
-    document.getElementById('modalTitle').textContent = 'Modifier une unité';
+    currentMode = 'edit';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier une unité';
     document.getElementById('uniteCode').value = unite.CODE || '';
     document.getElementById('uniteNom').value = unite.NOM || '';
     document.getElementById('uniteActif').value = unite.ACTIVE ? '1' : '0';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveUnite').style.display = '';
+    clearErrors();
+    document.getElementById('uniteModal').style.display = 'flex';
+}
+
+function viewUnite(id) {
+    var unite = AppState.unites.find(function (u) { return u.ID === id; });
+    if (!unite) return;
+    currentUniteId = id;
+    currentMode = 'view';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails de l\'unité';
+    document.getElementById('uniteCode').value = unite.CODE || '';
+    document.getElementById('uniteNom').value = unite.NOM || '';
+    document.getElementById('uniteActif').value = unite.ACTIVE ? '1' : '0';
+    setFieldsEnabled(false);
+    document.getElementById('btnSaveUnite').style.display = 'none';
     clearErrors();
     document.getElementById('uniteModal').style.display = 'flex';
 }
 
 async function saveUnite(e) {
     e.preventDefault();
+    if (currentMode === 'view') {
+        showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
+        return;
+    }
     var id = currentUniteId;
     var data = {
         code: document.getElementById('uniteCode').value.trim(),
@@ -92,10 +133,10 @@ async function deleteUnite(id) {
             loadUnites();
             loadStats();
         } else {
-            showToast('Attention', result.message || 'Échec de la suppression', 'error');
+            showToast('Erreur', result.message || 'Échec de la suppression', 'error');
         }
     } catch (e) {
-        showToast('Attention', e.message, 'error');
+        showToast('Erreur', e.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -103,7 +144,12 @@ async function deleteUnite(id) {
 
 function closeUniteModal() {
     document.getElementById('uniteModal').style.display = 'none';
+    // Réinitialiser l'état pour le prochain usage
     currentUniteId = null;
+    currentMode = 'add';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-ruler"></i> Ajouter une unité';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveUnite').style.display = '';
     clearErrors();
 }
 
@@ -123,8 +169,9 @@ function clearErrors() {
 // Expositions
 window.openAddUniteModal = openAddUniteModal;
 window.editUnite = editUnite;
+window.viewUnite = viewUnite;
 window.saveUnite = saveUnite;
 window.deleteUnite = deleteUnite;
 window.closeUniteModal = closeUniteModal;
 window.clearErrors = clearErrors;
-window.currentUniteId = currentUniteId;
+window.setFieldsEnabled = setFieldsEnabled;

@@ -1,6 +1,9 @@
 'use strict';
 
-// Spinner
+// ============================================================
+// SPINNER
+// ============================================================
+
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -19,38 +22,26 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// Modales
+// ============================================================
+// MODALES (ouverture/fermeture génériques)
+// ============================================================
+
 function showModal(id) {
     var m = document.getElementById(id || 'categorieModal');
     if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
 }
-function closeCategorieModal() {
-    var m = document.getElementById('categorieModal');
-    if (m) { m.style.display = 'none'; document.body.style.overflow = ''; }
-    currentCategorieId = null;
-    clearFieldErrors(['categorieCode', 'categorieNom']);
-}
-function openAddCategorieModal(event) {
-    if (event) event.preventDefault();
-    currentCategorieId = null;
-    document.getElementById('modalTitle').textContent = 'Ajouter une catégorie';
-    document.getElementById('categorieForm').reset();
-    document.getElementById('categorieActif').value = '1';
-    document.getElementById('categorieParent').value = '';
-    clearErrors();
-    loadParentDropdown();
-    showModal('categorieModal');
-}
+// La fermeture est gérée par closeCategorieModal() dans crud.js
 
-// Pagination (identique à celle des articles, avec loadCategories)
+// ============================================================
+// PAGINATION
+// ============================================================
+
 function createPaginationControls(totalPages) {
-    var oldPagination = document.getElementById('pagination-container');
-    if (oldPagination) oldPagination.remove();
-    if (totalPages <= 1) {
-        var wrapper = document.getElementById('paginationWrapper');
-        if (wrapper) wrapper.innerHTML = '';
-        return;
-    }
+    var wrapper = document.getElementById('paginationWrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '';
+    if (totalPages <= 1) return;
+
     var container = document.createElement('div');
     container.id = 'pagination-container';
     container.style.cssText = 'margin:5px 0;display:flex;justify-content:center;gap:5px;flex-wrap:wrap;';
@@ -111,15 +102,13 @@ function createPaginationControls(totalPages) {
     container.appendChild(createBtn('›', function () { if (AppState.page < totalPages) { AppState.page++; loadCategories(); } }, AppState.page === totalPages));
     container.appendChild(createBtn('»', function () { if (AppState.page !== totalPages) { AppState.page = totalPages; loadCategories(); } }, AppState.page === totalPages));
 
-    var wrapper = document.getElementById('paginationWrapper');
-    if (wrapper) { wrapper.innerHTML = ''; wrapper.appendChild(container); return; }
-    var table = document.querySelector('.dash-table');
-    if (table && table.parentNode) {
-        table.parentNode.insertBefore(container, table.nextSibling);
-    }
+    wrapper.appendChild(container);
 }
 
-// Filtres
+// ============================================================
+// FILTRES
+// ============================================================
+
 function applyFilters() {
     const search = document.getElementById('search-filter')?.value || '';
     const status = document.getElementById('status-filter')?.value || '';
@@ -136,20 +125,23 @@ function resetFilters() {
     loadCategories({ silent: true });
 }
 
-// Nombre de lignes par page
+// ============================================================
+// GESTION DU NOMBRE DE LIGNES PAR PAGE
+// ============================================================
+
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
     var currentSize = AppState.pageSize || DEFAULTS.PAGE_SIZE;
-    var optionExists = false;
+    var exists = false;
     for (var i = 0; i < select.options.length; i++) {
         if (select.options[i].value == currentSize) {
             select.selectedIndex = i;
-            optionExists = true;
+            exists = true;
             break;
         }
     }
-    if (!optionExists) {
+    if (!exists) {
         var opt = document.createElement('option');
         opt.value = currentSize;
         opt.textContent = currentSize + ' par page';
@@ -165,20 +157,10 @@ function initRowsPerPage() {
     });
 }
 
-// Sécurité formulaire – FONCTIONS MANQUANTES AJOUTÉES
-function preventFormAutoSubmit() {
-    var form = document.getElementById('categorieForm');
-    if (!form) return;
-    form.setAttribute('novalidate', 'novalidate');
-    form.addEventListener('submit', function (e) { e.preventDefault(); });
-}
-function ensureButtonsHaveTypeButton() {
-    document.querySelectorAll('button').forEach(function (btn) {
-        if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
-    });
-}
+// ============================================================
+// ÉCOUTEURS DE FILTRES
+// ============================================================
 
-// Écouteurs de filtres
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
     var statusSelect = document.getElementById('status-filter');
@@ -194,36 +176,55 @@ function initFilterListeners() {
     }
 }
 
-// Efface les erreurs
-function clearFieldErrors(fields) {
-    fields.forEach(function (id) {
-        var errEl = document.getElementById('err-' + id);
-        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-    });
-}
+// ============================================================
+// INITIALISATION DES CONTRÔLES UI
+// ============================================================
 
-// Initialisation UI
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { closeCategorieModal(); }
+        if (e.key === 'Escape') {
+            // Utiliser closeCategorieModal défini dans crud.js
+            if (typeof closeCategorieModal === 'function') {
+                closeCategorieModal();
+            }
+        }
     });
     initFilterListeners();
     initRowsPerPage();
-    preventFormAutoSubmit();
-    ensureButtonsHaveTypeButton();
+
+    var form = document.getElementById('categorieForm');
+    if (form) {
+        form.setAttribute('novalidate', 'novalidate');
+        form.addEventListener('submit', function (e) { e.preventDefault(); });
+    }
+    document.querySelectorAll('button').forEach(function (btn) {
+        if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
+    });
+
+    // Délégation pour la fermeture des modales par la croix
+    document.addEventListener('click', function (e) {
+        if (e.target && e.target.classList.contains('close')) {
+            var modal = e.target.closest('.modal');
+            if (modal && modal.id === 'categorieModal') {
+                if (typeof closeCategorieModal === 'function') {
+                    closeCategorieModal();
+                } else {
+                    modal.style.display = 'none';
+                }
+            }
+        }
+    });
 }
 
-// Expositions globales
-window.applyFilters = applyFilters;
-window.resetFilters = resetFilters;
-window.showModal = showModal;
-window.closeCategorieModal = closeCategorieModal;
-window.openAddCategorieModal = openAddCategorieModal;
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
+
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
-window.createPaginationControls = createPaginationControls;
-window.initUIControls = initUIControls;
-window.clearFieldErrors = clearFieldErrors;
 window.forceHideSpinner = forceHideSpinner;
-window.preventFormAutoSubmit = preventFormAutoSubmit;
-window.ensureButtonsHaveTypeButton = ensureButtonsHaveTypeButton;
+window.showModal = showModal;
+window.createPaginationControls = createPaginationControls;
+window.applyFilters = applyFilters;
+window.resetFilters = resetFilters;
+window.initUIControls = initUIControls;

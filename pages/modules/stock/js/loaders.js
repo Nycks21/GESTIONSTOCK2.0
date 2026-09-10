@@ -61,7 +61,6 @@ async function loadDropdowns() {
         var data = await resp.json();
         if (data.success) {
             AppState.articles = data.Articles || [];
-            populateSelect('adjustArticle', AppState.articles, 'ID', 'NOM', true, '-- Sélectionner --');
             populateSelect('article-filter', AppState.articles, 'ID', 'NOM', true, 'Tous articles');
         }
     } catch (e) { /* ignore */ }
@@ -73,7 +72,6 @@ async function loadDropdowns() {
         var data = await resp.json();
         if (data.success) {
             AppState.emplacements = data.Emplacements || [];
-            populateSelect('adjustEmplacement', AppState.emplacements, 'ID', 'NOM', true, '-- Sélectionner --');
             populateSelect('emplacement-filter', AppState.emplacements, 'ID', 'NOM', true, 'Tous emplacements');
         }
     } catch (e) { /* ignore */ }
@@ -108,6 +106,8 @@ function populateSelect(selectId, data, valueKey, textKey, addEmpty, emptyText) 
     }
 }
 
+// loaders.js (extrait modifié de renderTable)
+
 function renderTable(stock) {
     var tbody = document.getElementById('stockTableBody');
     if (!tbody) return;
@@ -119,7 +119,6 @@ function renderTable(stock) {
 
     var html = '';
     stock.forEach(function(s) {
-        // Utiliser des noms de champs flexibles
         var disponible = Number(s.DISPONIBLE ?? s.quantite ?? s.stock ?? 0);
         var seuil = Number(s.SEUIL_ALERTE ?? s.seuil ?? 0);
         var nomArticle = s.ARTICLE_NOM || s.nomArticle || '';
@@ -129,18 +128,23 @@ function renderTable(stock) {
         var articleId = s.ARTICLE_ID || s.articleId || '';
         var emplacementId = s.EMPLACEMENT_ID || s.emplacementId || '';
 
-        // Calcul du statut
+        // ✅ Utiliser le statut renvoyé par le handler (provenant de SSTOCK.STATUT)
+        var statut = String(s.STATUT || 'NORMALE');
         var statutLabel = '';
         var badgeClass = '';
-        if (disponible <= 0) {
-            statutLabel = 'Rupture';
-            badgeClass = 'badge-danger';
-        } else if (disponible <= seuil) {
-            statutLabel = 'Stock faible';
-            badgeClass = 'badge-warning';
-        } else {
-            statutLabel = 'Normal';
-            badgeClass = 'badge-success';
+        switch (statut.toUpperCase()) {
+            case 'RUPTURE':
+                statutLabel = 'Rupture';
+                badgeClass = 'badge-danger';
+                break;
+            case 'ALERTE':
+                statutLabel = 'Stock faible';
+                badgeClass = 'badge-warning';
+                break;
+            default: // 'NORMALE'
+                statutLabel = 'Normal';
+                badgeClass = 'badge-success';
+                break;
         }
         var statusHtml = '<span class="badge ' + badgeClass + '" style="padding:4px 10px;border-radius:20px;color:white;">' + statutLabel + '</span>';
 
@@ -153,15 +157,13 @@ function renderTable(stock) {
             '<td><strong>' + disponible + '</strong></td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' +
-            '<button type="button" class="btn btn-sm btn-info" onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" title="Historique"><i class="fas fa-history"></i></button> ' +
-            '<button type="button" class="btn btn-sm btn-warning" onclick="openAdjustModalFromStock(event, \'' + articleId + '\', \'' + emplacementId + '\')" title="Ajuster"><i class="fas fa-exchange-alt"></i></button>' +
+            '<button type="button" class="btn btn-sm btn-info" onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" title="Historique"><i class="fas fa-history"></i></button>' +
             '</td>' +
             '</tr>';
     });
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = AppState.total + ' ligne(s)';
 }
-
 
 // Expositions
 window.loadStock = loadStock;

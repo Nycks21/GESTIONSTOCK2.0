@@ -26,17 +26,21 @@ function attachRoleChangeListener() {
 }
 
 function onRoleChangeHandler(event) {
+    // ✅ FIX : la valeur du <select> est maintenant numérique ("0" à "4")
     var selectedRole = event.target.value;
     var currentPermissions = getSelectedPermissions();
-    var defaultPermissions = DEFAULT_ROLE_PERMISSIONS[selectedRole] || DEFAULT_ROLE_PERMISSIONS['Administrateur'];
+
+    // ✅ FIX : fallback sur '1' (Admin) — clé numérique cohérente avec DEFAULT_ROLE_PERMISSIONS
+    var defaultPermissions = DEFAULT_ROLE_PERMISSIONS[selectedRole] || DEFAULT_ROLE_PERMISSIONS['1'] || [];
 
     var hasCustomPermissions = currentPermissions.length > 0 &&
-        JSON.stringify(currentPermissions.sort()) !== JSON.stringify(defaultPermissions.sort());
+        JSON.stringify(currentPermissions.slice().sort()) !== JSON.stringify(defaultPermissions.slice().sort());
 
     if (hasCustomPermissions && currentMode === 'modification') {
         Swal.fire({
             title: 'Changer les permissions ?',
-            text: 'Cet utilisateur a des permissions personnalisées. Voulez-vous les remplacer par les permissions par défaut du rôle "' + selectedRole + '" ?',
+            // ✅ Affichage lisible : conversion ROLEID → nom
+            text: 'Cet utilisateur a des permissions personnalisées. Voulez-vous les remplacer par les permissions par défaut du rôle "' + getUserRoleName(selectedRole) + '" ?',
             icon: 'question',
             showCancelButton: true,
             confirmButtonText: 'Oui, remplacer',
@@ -48,7 +52,7 @@ function onRoleChangeHandler(event) {
                 Swal.fire({
                     icon: 'success',
                     title: 'Permissions mises à jour',
-                    text: 'Les permissions par défaut pour ' + selectedRole + ' ont été appliquées',
+                    text: 'Les permissions par défaut pour ' + getUserRoleName(selectedRole) + ' ont été appliquées',
                     timer: 1500,
                     showConfirmButton: false
                 });
@@ -63,10 +67,8 @@ window.addEventListener('load', function() {
     setTimeout(hidePreloader, 500);
 });
 
-// Exposer globalement
 window.init = init;
 window.attachRoleChangeListener = attachRoleChangeListener;
 window.onRoleChangeHandler = onRoleChangeHandler;
 
-// Démarrer
 $(document).ready(init);

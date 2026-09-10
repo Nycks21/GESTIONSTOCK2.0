@@ -98,9 +98,6 @@
                   <div class="dash-card-head">
                     <span class="dash-card-title"><i class="fas fa-cubes"></i> État du stock</span>
                     <div class="action-buttons">
-                      <button class="btn btn-success btn-sm" onclick="openAdjustModal(event)" type="button">
-                        <i class="fas fa-exchange-alt"></i> Ajuster
-                      </button>
                       <button class="btn btn-primary btn-sm" onclick="exportStockPDF()" type="button">
                         <i class="fas fa-file-pdf"></i> PDF
                       </button>

@@ -1,9 +1,7 @@
-// loaders.js - Module Catégories
+// loaders.js - Module Catégories avec bouton Visualiser
 async function loadCategories(options = {}) {
     const silent = !!(options && options.silent);
-    if (!silent) {
-        showSpinner();
-    }
+    if (!silent) showSpinner();
     try {
         const params = new URLSearchParams({
             page: AppState.page,
@@ -34,9 +32,7 @@ async function loadCategories(options = {}) {
     } catch (e) {
         showToast('Erreur', e.message, 'error');
     } finally {
-        if (!silent) {
-            hideSpinner();
-        }
+        if (!silent) hideSpinner();
     }
 }
 
@@ -59,7 +55,7 @@ async function loadStats() {
     }
 }
 
-async function loadParentDropdown() {
+async function loadParentDropdown(callback) {
     try {
         const url = `${API.BASE}${API.HANDLERS_PATH}GetAllCategoriesForDropdown.ashx`;
         const resp = await fetch(url);
@@ -77,9 +73,11 @@ async function loadParentDropdown() {
                     select.appendChild(opt);
                 }
             });
+            if (typeof callback === 'function') callback();
         }
     } catch (e) {
         console.warn('Impossible de charger les catégories parents', e);
+        if (typeof callback === 'function') callback();
     }
 }
 
@@ -110,7 +108,6 @@ function renderTable(categories) {
     }
     let html = '';
     categories.forEach(c => {
-        // Badge de statut avec style personnalisé
         const statusHtml = c.ACTIVE
             ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
             : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
@@ -128,6 +125,7 @@ function renderTable(categories) {
                 <td>${parentNom}</td>
                 <td>${statusHtml}</td>
                 <td>
+                    <button type="button" class="btn btn-sm btn-info" onclick="viewCategorie('${c.ID}')" title="Voir détails"><i class="fas fa-eye"></i></button>
                     <button type="button" class="btn btn-sm btn-primary" onclick="editCategorie('${c.ID}')"><i class="fas fa-edit"></i></button>
                     <button type="button" class="btn btn-sm btn-danger" onclick="deleteCategorie('${c.ID}')"><i class="fas fa-trash"></i></button>
                 </td>
@@ -137,3 +135,10 @@ function renderTable(categories) {
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = `${AppState.total} catégorie(s)`;
 }
+
+// Expositions
+window.loadCategories = loadCategories;
+window.loadStats = loadStats;
+window.loadParentDropdown = loadParentDropdown;
+window.populateSelect = populateSelect;
+window.renderTable = renderTable;

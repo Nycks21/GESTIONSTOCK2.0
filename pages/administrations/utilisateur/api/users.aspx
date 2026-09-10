@@ -3,6 +3,7 @@
 <%@ Import Namespace="System.Web.Script.Serialization" %>
 <%@ Import Namespace="System.Configuration" %>
 <%@ Import Namespace="System.Collections.Generic" %>
+<%@ Import Namespace="System.Linq" %>
 
 <script runat="server">
 private string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
@@ -16,8 +17,8 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        // ✅ Vérification d'authentification - Admin ou SuperAdmin
-        if (!AuthHelper.RequireApiAuth(Context, 1)) // 1 = Admin
+        // ✅ Authentification : Admin (1) ou SuperAdmin (0)
+        if (!AuthHelper.RequireApiAuth(Context, 1))
         {
             WriteResponse(false, "Accès non autorisé");
             return;
@@ -56,7 +57,7 @@ protected void Page_Load(object sender, EventArgs e)
         {
             data = serializer.Deserialize<Dictionary<string, object>>(jsonString);
         }
-        catch (Exception ex)
+        catch
         {
             WriteResponse(false, "Format JSON invalide");
             return;
@@ -76,12 +77,21 @@ protected void Page_Load(object sender, EventArgs e)
         int roleId = GetIntValue(data, "ROLEID", 1);
         int active = GetIntValue(data, "ACTIVE", 1);
 
-        // ✅ Validation des entrées
+        // Validation des entrées
         if (!ValidateUserData(username, nom, password, email, roleId))
         {
             return;
         }
 
+        // ✅ AJOUT : contrôle SuperAdmin APRÈS avoir lu roleId
+        int currentRole = AuthHelper.GetUserRole(Context);
+        if (roleId == 0 && currentRole != 0)
+        {
+            WriteResponse(false, "Seul un SuperAdmin peut créer un SuperAdmin");
+            return;
+        }
+
+        // ✅ AJOUT : validation des permissions contre AllMenus
         List<string> permissions = new List<string>();
         if (data.ContainsKey("PERMISSIONS") && data["PERMISSIONS"] != null)
         {
@@ -90,19 +100,21 @@ protected void Page_Load(object sender, EventArgs e)
             {
                 foreach (var p in (ArrayList)permsObj)
                 {
-                    permissions.Add(p.ToString());
+                    string perm = p.ToString();
+                    if (AuthHelper.AllMenus.Any(m => m.Code == perm))
+                    {
+                        permissions.Add(perm);
+                    }
                 }
             }
         }
 
-        // 🔹 Récupération de l'ID de l'utilisateur connecté (celui qui crée)
         int currentUserId = AuthHelper.GetUserId(Context);
 
         using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
 
-            // ✅ Vérifier si l'utilisateur existe déjà
             using (SqlCommand checkCmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE USERNAME = @USERNAME", conn))
             {
                 checkCmd.Parameters.AddWithValue("@USERNAME", username);
@@ -114,10 +126,8 @@ protected void Page_Load(object sender, EventArgs e)
                 }
             }
 
-            // Sérialiser les permissions en JSON
             string permissionsJson = serializer.Serialize(permissions);
 
-            // 🔹 Requête modifiée : CREATED_BY utilise @CREATED_BY
             using (SqlCommand cmd = new SqlCommand(
                 @"INSERT INTO USERS (USERNAME, NOM, PWD, EMAIL, ROLEID, TELEPHONE, ACTIVE, MENU_PERMISSIONS, CREATED_AT, CREATED_BY)
                   OUTPUT INSERTED.IDUSER
@@ -131,13 +141,12 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.Parameters.AddWithValue("@TELEPHONE", string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone);
                 cmd.Parameters.AddWithValue("@ACTIVE", active);
                 cmd.Parameters.AddWithValue("@MENU_PERMISSIONS", permissionsJson);
-                // 🔹 Ajout du paramètre pour l'ID du créateur
                 cmd.Parameters.AddWithValue("@CREATED_BY", currentUserId);
 
                 int newUserId = (int)cmd.ExecuteScalar();
 
-                // ✅ Journalisation de l'action
-                LogSecurityAction(conn, currentUserId, "USER_CREATE", "Création de l'utilisateur " + username);
+                LogSecurityAction(conn, currentUserId, "USER_CREATE",
+                    "Création de l'utilisateur " + username + " (roleId=" + roleId + ")");
 
                 WriteResponse(true, "Utilisateur ajouté avec succès", newUserId);
             }
@@ -146,13 +155,9 @@ protected void Page_Load(object sender, EventArgs e)
     catch (SqlException ex)
     {
         if (ex.Number == 2627)
-        {
             WriteResponse(false, "Ce nom d'utilisateur existe déjà");
-        }
         else if (ex.Number == 547)
-        {
             WriteResponse(false, "Violation de contrainte de clé étrangère");
-        }
         else
         {
             LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message);
@@ -167,7 +172,6 @@ protected void Page_Load(object sender, EventArgs e)
     }
 }
 
-// ✅ Validation des données (inchangé)
 private bool ValidateUserData(string username, string nom, string password, string email, int roleId)
 {
     if (string.IsNullOrEmpty(username))
@@ -185,7 +189,6 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Le nom d'utilisateur contient des caractères invalides");
         return false;
     }
-
     if (string.IsNullOrEmpty(nom))
     {
         WriteResponse(false, "Le nom complet est requis");
@@ -196,7 +199,6 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Le nom complet est trop long");
         return false;
     }
-
     if (string.IsNullOrEmpty(password))
     {
         WriteResponse(false, "Le mot de passe est requis");
@@ -207,7 +209,6 @@ private bool ValidateUserData(string username, string nom, string password, stri
         WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
         return false;
     }
-
     if (string.IsNullOrEmpty(email))
     {
         WriteResponse(false, "L'email est requis");
@@ -219,8 +220,8 @@ private bool ValidateUserData(string username, string nom, string password, stri
         return false;
     }
 
-    // ✅ Rôles autorisés
-    int[] allowedRoles = { 0, 1, 2, 3, 4 };
+    // Rôles autorisés à la création (SuperAdmin = 0 réservé au SuperAdmin)
+    int[] allowedRoles = { 1, 2, 3, 4 };
     if (!Array.Exists(allowedRoles, r => r == roleId))
     {
         WriteResponse(false, "Rôle invalide");
@@ -241,14 +242,8 @@ private int GetIntValue(Dictionary<string, object> data, string key, int default
 {
     if (data.ContainsKey(key) && data[key] != null)
     {
-        try
-        {
-            return Convert.ToInt32(data[key]);
-        }
-        catch
-        {
-            return defaultValue;
-        }
+        try { return Convert.ToInt32(data[key]); }
+        catch { return defaultValue; }
     }
     return defaultValue;
 }
@@ -260,10 +255,7 @@ private bool IsValidEmail(string email)
         var addr = new System.Net.Mail.MailAddress(email);
         return addr.Address == email;
     }
-    catch
-    {
-        return false;
-    }
+    catch { return false; }
 }
 
 private void WriteResponse(bool success, string message, int userId = 0)
@@ -272,14 +264,10 @@ private void WriteResponse(bool success, string message, int userId = 0)
     var response = new Dictionary<string, object>();
     response["success"] = success;
     response["message"] = message;
-    if (userId > 0)
-    {
-        response["userId"] = userId;
-    }
+    if (userId > 0) response["userId"] = userId;
     Response.Write(serializer.Serialize(response));
 }
 
-// ✅ Journalisation de sécurité (modifiée pour accepter l'ID)
 private void LogSecurityAction(SqlConnection conn, int userId, string action, string details)
 {
     try
@@ -302,9 +290,8 @@ private void LogSecurityAction(SqlConnection conn, int userId, string action, st
             cmd.ExecuteNonQuery();
         }
 
-        if (closeConn)
-            conn.Close();
+        if (closeConn) conn.Close();
     }
-    catch { /* Ne pas échouer si le log échoue */ }
+    catch { }
 }
 </script>

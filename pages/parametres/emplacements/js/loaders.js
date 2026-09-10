@@ -1,5 +1,4 @@
 // loaders.js
-
 async function loadEmplacements(options) {
     var silent = !!(options && options.silent);
     if (!silent) showSpinner();
@@ -25,6 +24,7 @@ async function loadEmplacements(options) {
                 AppState.page = AppState.totalPages;
             renderTable(AppState.emplacements);
             createPaginationControls(AppState.totalPages);
+            loadStats();
         } else {
             showToast('Erreur', data.message || 'Impossible de charger les emplacements', 'error');
         }
@@ -118,6 +118,7 @@ function renderTable(emplacements) {
             '<td>' + (e.PARENT_NOM || '') + '</td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' +
+            '<button type="button" class="btn btn-sm btn-info" onclick="viewEmplacement(\'' + e.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button> ' +
             '<button type="button" class="btn btn-sm btn-primary" onclick="editEmplacement(\'' + e.ID + '\')"><i class="fas fa-edit"></i></button> ' +
             '<button type="button" class="btn btn-sm btn-danger" onclick="deleteEmplacement(\'' + e.ID + '\')"><i class="fas fa-trash"></i></button>' +
             '</td>' +
@@ -127,7 +128,7 @@ function renderTable(emplacements) {
     document.getElementById('resultsCounter').textContent = AppState.total + ' emplacement(s)';
 }
 
-// Exports pour les appels
+// Exports
 window.loadEmplacements = loadEmplacements;
 window.loadStats = loadStats;
 window.loadDropdowns = loadDropdowns;

@@ -1,11 +1,31 @@
 // crud.js
 var currentFournisseurId = null;
+var currentMode = 'add'; // 'add', 'edit', 'view'
+
+// Fonction utilitaire pour activer/désactiver les champs
+function setFieldsEnabled(enabled) {
+    var inputs = document.querySelectorAll('#fournisseurModal input, #fournisseurModal select, #fournisseurModal textarea');
+    for (var i = 0; i < inputs.length; i++) {
+        inputs[i].disabled = !enabled;
+        if (!enabled) {
+            inputs[i].style.backgroundColor = '#e9ecef';
+            inputs[i].style.cursor = 'not-allowed';
+        } else {
+            inputs[i].style.backgroundColor = '';
+            inputs[i].style.cursor = '';
+        }
+    }
+}
 
 function openAddFournisseurModal(e) {
     if (e) e.preventDefault();
     currentFournisseurId = null;
-    document.getElementById('modalTitle').textContent = 'Ajouter un fournisseur';
+    currentMode = 'add';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-truck"></i> Ajouter un fournisseur';
     document.getElementById('fournisseurForm').reset();
+    document.getElementById('fournisseurActif').value = '1';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveFournisseur').style.display = '';
     clearFieldErrors(['fournisseurCode', 'fournisseurNom']);
     document.getElementById('fournisseurModal').style.display = 'flex';
 }
@@ -14,7 +34,8 @@ function editFournisseur(id) {
     var fournisseur = AppState.fournisseurs.find(function (f) { return f.ID === id; });
     if (!fournisseur) return;
     currentFournisseurId = id;
-    document.getElementById('modalTitle').textContent = 'Modifier un fournisseur';
+    currentMode = 'edit';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier un fournisseur';
     document.getElementById('fournisseurCode').value = fournisseur.CODE || '';
     document.getElementById('fournisseurNom').value = fournisseur.NOM || '';
     document.getElementById('fournisseurAdresse').value = fournisseur.ADRESSE || '';
@@ -24,12 +45,39 @@ function editFournisseur(id) {
     document.getElementById('fournisseurContactTelephone').value = fournisseur.CONTACT_TELEPHONE || '';
     document.getElementById('fournisseurSiret').value = fournisseur.SIRET || '';
     document.getElementById('fournisseurActif').value = fournisseur.ACTIVE ? '1' : '0';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveFournisseur').style.display = '';
+    clearFieldErrors(['fournisseurCode', 'fournisseurNom']);
+    document.getElementById('fournisseurModal').style.display = 'flex';
+}
+
+function viewFournisseur(id) {
+    var fournisseur = AppState.fournisseurs.find(function (f) { return f.ID === id; });
+    if (!fournisseur) return;
+    currentFournisseurId = id;
+    currentMode = 'view';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails du fournisseur';
+    document.getElementById('fournisseurCode').value = fournisseur.CODE || '';
+    document.getElementById('fournisseurNom').value = fournisseur.NOM || '';
+    document.getElementById('fournisseurAdresse').value = fournisseur.ADRESSE || '';
+    document.getElementById('fournisseurTelephone').value = fournisseur.TELEPHONE || '';
+    document.getElementById('fournisseurEmail').value = fournisseur.EMAIL || '';
+    document.getElementById('fournisseurContactNom').value = fournisseur.CONTACT_NOM || '';
+    document.getElementById('fournisseurContactTelephone').value = fournisseur.CONTACT_TELEPHONE || '';
+    document.getElementById('fournisseurSiret').value = fournisseur.SIRET || '';
+    document.getElementById('fournisseurActif').value = fournisseur.ACTIVE ? '1' : '0';
+    setFieldsEnabled(false);
+    document.getElementById('btnSaveFournisseur').style.display = 'none';
     clearFieldErrors(['fournisseurCode', 'fournisseurNom']);
     document.getElementById('fournisseurModal').style.display = 'flex';
 }
 
 async function saveFournisseur(e) {
     e.preventDefault();
+    if (currentMode === 'view') {
+        showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
+        return;
+    }
     var id = currentFournisseurId;
     var data = {
         code: document.getElementById('fournisseurCode').value.trim(),
@@ -115,6 +163,10 @@ async function deleteFournisseur(id) {
 function closeFournisseurModal() {
     document.getElementById('fournisseurModal').style.display = 'none';
     currentFournisseurId = null;
+    currentMode = 'add';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-truck"></i> Ajouter un fournisseur';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveFournisseur').style.display = '';
     clearFieldErrors(['fournisseurCode', 'fournisseurNom']);
 }
 
@@ -133,6 +185,9 @@ function clearFieldErrors(fieldIds) {
 // Expositions globales
 window.openAddFournisseurModal = openAddFournisseurModal;
 window.editFournisseur = editFournisseur;
+window.viewFournisseur = viewFournisseur;
 window.saveFournisseur = saveFournisseur;
 window.deleteFournisseur = deleteFournisseur;
 window.closeFournisseurModal = closeFournisseurModal;
+window.setFieldsEnabled = setFieldsEnabled;
+window.clearFieldErrors = clearFieldErrors;

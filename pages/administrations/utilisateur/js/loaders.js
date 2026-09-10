@@ -22,9 +22,7 @@ async function checkLicenceLimit() {
             }
 
             var userCountInfo = document.getElementById('userCountInfo');
-            if (userCountInfo) {
-                userCountInfo.textContent = currentUsers + ' / ' + maxUsersAllowed;
-            }
+            if (userCountInfo) userCountInfo.textContent = currentUsers + ' / ' + maxUsersAllowed;
 
             return { reached: isLicenceLimitReached, current: currentUsers, max: maxUsersAllowed };
         }
@@ -88,6 +86,9 @@ function renderSimpleTable() {
         return;
     }
 
+    // ✅ FIX : rôle de l'utilisateur connecté (récupéré une seule fois, hors boucle)
+    var currentUserRole = parseInt(document.getElementById('hfUserRole')?.value || '-1', 10);
+
     pageUsers.forEach(function(user) {
         var row = tbody.insertRow();
         var nameBadge = user.USERNAME ? '<span class="badge-name">' + escapeHtml(user.USERNAME) + '</span>' : '';
@@ -101,26 +102,26 @@ function renderSimpleTable() {
             ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
             : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
 
-        // --- Modification ici ---
-        var isAdmin = (user.ROLEID === 0); // true si ROLEID = 0
+        // ✅ FIX : protection SuperAdmin (ROLEID = 0)
+        var isProtected = (user.ROLEID === 0 && currentUserRole !== 0);
 
-        // Bouton Modifier : désactivé et grisé si admin
-        var editBtn = `<button type="button" class="btn btn-sm ${isAdmin ? 'btn-secondary' : 'btn-primary'}"
-                                ${isAdmin ? 'disabled' : ''}
+        var editBtn = `<button type="button"
+                                class="btn btn-sm ${isProtected ? 'btn-secondary' : 'btn-primary'}"
+                                ${isProtected ? 'disabled title="Seul un SuperAdmin peut modifier un SuperAdmin"' : ''}
                                 onclick="openEditUserModal(${user.IDUSER}, event)">
                             <i class="fas fa-edit"></i>
                         </button>`;
 
-        // Bouton Supprimer : désactivé et grisé si admin
-        var deleteBtn = `<button type="button" class="btn btn-sm ${isAdmin ? 'btn-secondary' : 'btn-danger'}"
-                                  ${isAdmin ? 'disabled' : ''}
+        var deleteBtn = `<button type="button"
+                                  class="btn btn-sm ${isProtected ? 'btn-secondary' : 'btn-danger'}"
+                                  ${isProtected ? 'disabled title="Seul un SuperAdmin peut supprimer un SuperAdmin"' : ''}
                                   onclick="supprimerContact(${user.IDUSER}, event)">
                               <i class="fas fa-trash"></i>
                           </button>`;
 
         row.insertCell(7).innerHTML = editBtn + ' ' + deleteBtn;
-        // --- Fin modification ---
     });
+
     updateCounter();
     createPaginationControls(totalPages);
 }

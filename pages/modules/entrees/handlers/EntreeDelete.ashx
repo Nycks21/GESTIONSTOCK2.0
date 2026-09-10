@@ -45,18 +45,19 @@ public class EntreeDelete : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
                 string referenceSql = @"
-                    SELECT COUNT(*)
+                    SELECT STATUT
                     FROM SENTREE
-                    WHERE STATUT = 'VALIDÉ' AND VALIDE_BY IS NOT NULL AND VALIDE_AT IS NOT NULL AND ID = @id";
+                    WHERE ID = @id AND DELETION_AT IS NULL";
                 using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
                 {
                     referenceCmd.Parameters.AddWithValue("@id", id);
-                    if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
+                    object statut = referenceCmd.ExecuteScalar();
+                    if (statut != null && statut.ToString() == "VALIDE")
                     {
                         ctx.Response.Write(serializer.Serialize(new
                         {
                             success = false,
-                            message = "Impossible de supprimer, le bon est déjà validé."
+                            message = "Attention : Impossible de supprimer un bon d'entrée validé."
                         }));
                         return;
                     }

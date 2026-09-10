@@ -165,7 +165,9 @@ function ajouterLigne(articleId, qteD, qteR, obs) {
         <td><button type="button" class="btn btn-sm btn-danger" onclick="supprimerLigne(this)"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(tr);
-    enhanceArticleSelect(tr.querySelector('.ligne-article'));
+    if (typeof enhanceArticleSelect === 'function') {
+        enhanceArticleSelect(tr.querySelector('.ligne-article'));
+    }
 }
 
 function supprimerLigne(btn) {

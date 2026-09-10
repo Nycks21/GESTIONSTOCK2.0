@@ -1,3 +1,4 @@
+// loaders.js
 async function loadEntrees(options) {
     options = options || {};
     var silent = !!options.silent;
@@ -78,7 +79,9 @@ async function loadDropdownsEntree() {
                         return '<option value="' + a.ID + '">' + a.CODE + ' - ' + a.NOM + '</option>';
                     }).join('');
                 sel.value = currentVal;
+                if (typeof refreshArticleSelect === 'function') {
                     refreshArticleSelect(sel);
+                }
             });
         }
     } catch (e) { /* ignore */ }
@@ -140,6 +143,11 @@ function formatDateValue(value, includeTime) {
     return date.toLocaleString('fr-FR', options);
 }
 
+function formatNumber(value, decimals) {
+    if (value === undefined || value === null || isNaN(value)) return '0';
+    return Number(value).toFixed(decimals || 0);
+}
+
 function renderEntreesTable(entrees) {
     var tbody = document.getElementById('entreesTableBody');
     if (!tbody) return;
@@ -169,6 +177,21 @@ function renderEntreesTable(entrees) {
                 return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE, 2) + '</div>';
             }).join('')
             : '<span class="text-muted">-</span>';
+
+        // Construction des actions selon le statut
+        var actionsHtml = '';
+        // Bouton Visualiser toujours présent
+        actionsHtml += '<button type="button" class="btn btn-sm btn-info" onclick="viewEntree(\'' + e.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button> ';
+
+        // Si le bon est validé, on n'affiche que le Visualiser
+        if (e.STATUT !== 'VALIDE') {
+            actionsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="editEntree(\'' + e.ID + '\')"><i class="fas fa-edit"></i></button> ' +
+                           '<button type="button" class="btn btn-sm btn-danger" onclick="deleteEntree(\'' + e.ID + '\')"><i class="fas fa-trash"></i></button> ';
+            if (e.STATUT === 'BROUILLON') {
+                actionsHtml += '<button type="button" class="btn btn-sm btn-success" onclick="validerEntree(\'' + e.ID + '\')"><i class="fas fa-check"></i></button>';
+            }
+        }
+
         html += '<tr>' +
             '<td><strong>' + e.NUMERO + '</strong></td>' +
             '<td>' + formatDateValue(e.DATE_ENTREE, true) + '</td>' +
@@ -176,11 +199,8 @@ function renderEntreesTable(entrees) {
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
             '<td>' + statutBadge + '</td>' +
             '<td style="text-align:right;"><strong>' + formatNumber(e.TOTAL_TTC, 2) + '</strong></td>' +
-            '<td>' +
-            '<button type="button" class="btn btn-sm btn-primary" onclick="editEntree(\'' + e.ID + '\')"><i class="fas fa-edit"></i></button> ' +
-            '<button type="button" class="btn btn-sm btn-danger" onclick="deleteEntree(\'' + e.ID + '\')"><i class="fas fa-trash"></i></button> ' +
-            (e.STATUT === 'BROUILLON' ? '<button type="button" class="btn btn-sm btn-success" onclick="validerEntree(\'' + e.ID + '\')"><i class="fas fa-check"></i></button>' : '') +
-            '</td></tr>';
+            '<td>' + actionsHtml + '</td>' +
+            '</tr>';
     });
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = AppState.total + ' bon(s)';
@@ -188,6 +208,7 @@ function renderEntreesTable(entrees) {
 
 // Expositions globales
 window.formatDateValue = formatDateValue;
+window.formatNumber = formatNumber;
 window.loadEntrees = loadEntrees;
 window.loadEntreeStats = loadEntreeStats;
 window.loadDropdownsEntree = loadDropdownsEntree;

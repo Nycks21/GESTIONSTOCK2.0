@@ -20,27 +20,40 @@ var API_USERS = {
     checkUpdates: 'api/CheckUpdates.aspx'
 };
 
+// Liste des permissions (doit être strictement identique aux clés de CHECKBOX_ID_MAP
+// et aux codes définis dans AuthHelper.AllMenus côté serveur).
 var PERMISSIONS_LIST = [
-    'accueil', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'inventaire', 'mouvements', 'rapports-stock', 'parametres-stock', 'parametres-users', 'requetes'
+    'accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs',
+    'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire',
+    'exploitation', 'utilisateurs', 'requetes'
 ];
 
+// Mapping permission → ID de la checkbox HTML
 var CHECKBOX_ID_MAP = {
     'accueil': 'permDashboard',
+    'unites': 'permUnites',
+    'emplacements': 'permEmplacements',
     'articles': 'permArticles',
     'categories': 'permCategories',
     'fournisseurs': 'permFournisseurs',
     'entrees': 'permEntrees',
     'sorties': 'permSorties',
+    'stock': 'permStock',
+    'saisies': 'permSaisies',
+    'accuses': 'permAccuses',
     'inventaire': 'permInventaire',
-    'mouvements': 'permMouvements',
-    'parametres-stock': 'permRapports-stock',
-    'parametres-users': 'permParametres-users',
-    'requetes': 'requetes'
+    'exploitation': 'permExploitation',
+    'utilisateurs': 'permUser',
+    'requetes': 'permRequetes'
 };
 
+// ✅ Permissions par défaut par ROLEID (0 = SuperAdmin, 1 = Admin, 2 = User, 3 = Logisticien, 4 = Comptable)
 var DEFAULT_ROLE_PERMISSIONS = {
-    'Administrateur': ['accueil', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'inventaire', 'mouvements', 'parametres-stock', 'parametres-users'],
-    'SuperAdmin': ['accueil', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'inventaire', 'mouvements', 'parametres-stock', 'parametres-users', 'requetes'],
+    0: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'utilisateurs', 'requetes'], // SuperAdmin
+    1: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'utilisateurs'],          // Admin
+    2: ['accueil','saisies', 'accuses'],                                                                                                                                                                       // User
+    3: ['accueil','unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'inventaire', 'exploitation'],                                                           // Logisticien
+    4: ['accueil','entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation']                                                                                                          // Comptable
 };
 
 var CURRENT_VERSION = document.querySelector('[data-version]')?.getAttribute('data-version') || '2.1.17';

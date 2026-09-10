@@ -1,80 +1,4 @@
-// crud.js - Gestion du stock et historique
-
-// ============================================================
-// AJUSTEMENT
-// ============================================================
-
-function openAdjustModal(e) {
-    if (e) e.preventDefault();
-    AppState.editingId = null;
-    document.getElementById('modalTitle').textContent = 'Ajuster le stock';
-    document.getElementById('adjustArticle').value = '';
-    document.getElementById('adjustEmplacement').value = '';
-    document.getElementById('adjustType').value = 'ENTREE';
-    document.getElementById('adjustQuantite').value = '';
-    document.getElementById('adjustMotif').value = '';
-    clearFieldErrors(['adjustArticle', 'adjustEmplacement', 'adjustQuantite']);
-    document.getElementById('adjustModal').style.display = 'flex';
-}
-
-function openAdjustModalFromStock(e, articleId, emplacementId) {
-    if (e) e.preventDefault();
-    AppState.editingId = null;
-    document.getElementById('modalTitle').textContent = 'Ajuster le stock';
-    document.getElementById('adjustArticle').value = articleId || '';
-    document.getElementById('adjustEmplacement').value = emplacementId || '';
-    document.getElementById('adjustType').value = 'ENTREE';
-    document.getElementById('adjustQuantite').value = '';
-    document.getElementById('adjustMotif').value = '';
-    clearFieldErrors(['adjustArticle', 'adjustEmplacement', 'adjustQuantite']);
-    document.getElementById('adjustModal').style.display = 'flex';
-}
-
-async function saveAdjust(e) {
-    e.preventDefault();
-    var data = {
-        articleId: document.getElementById('adjustArticle').value,
-        emplacementId: document.getElementById('adjustEmplacement').value,
-        type: document.getElementById('adjustType').value,
-        quantite: parseFloat(document.getElementById('adjustQuantite').value) || 0,
-        motif: document.getElementById('adjustMotif').value.trim()
-    };
-
-    var valid = true;
-    clearFieldErrors(['adjustArticle', 'adjustEmplacement', 'adjustQuantite']);
-    if (!data.articleId) { showFieldError('adjustArticle', 'L\'article est requis'); valid = false; }
-    if (!data.emplacementId) { showFieldError('adjustEmplacement', 'L\'emplacement est requis'); valid = false; }
-    if (data.quantite <= 0) { showFieldError('adjustQuantite', 'La quantité doit être > 0'); valid = false; }
-    if (!valid) return;
-
-    try {
-        showSpinner();
-        var url = API.BASE + API.HANDLERS_PATH + API.ADJUST;
-        var resp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        var result = await resp.json();
-        if (result.success) {
-            showToast('Succès', result.message || 'Ajustement effectué', 'success');
-            closeAdjustModal();
-            loadStock();
-            loadStats();
-        } else {
-            showToast('Erreur', result.message || 'Échec de l\'ajustement', 'error');
-        }
-    } catch (err) {
-        showToast('Erreur', err.message, 'error');
-    } finally {
-        hideSpinner();
-    }
-}
-
-function showFieldError(fieldId, msg) {
-    var err = document.getElementById('err-' + fieldId);
-    if (err) { err.textContent = msg; err.style.display = 'block'; }
-}
+// crud.js - Gestion de l'historique du stock (suppression des ajustements)
 
 // ============================================================
 // HISTORIQUE
@@ -188,9 +112,6 @@ function closeHistoryModal() {
 // EXPOSITIONS GLOBALES
 // ============================================================
 
-window.openAdjustModal = openAdjustModal;
-window.openAdjustModalFromStock = openAdjustModalFromStock;
-window.saveAdjust = saveAdjust;
 window.viewHistory = viewHistory;
 window.loadHistory = loadHistory;
 window.closeHistoryModal = closeHistoryModal;

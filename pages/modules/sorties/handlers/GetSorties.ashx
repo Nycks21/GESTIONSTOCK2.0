@@ -40,13 +40,20 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
+                string statutCalculeSql = @"CASE WHEN EXISTS (
+                    SELECT 1
+                    FROM MLSORTIE l
+                    WHERE l.BON_SORTIE_ID = s.ID
+                      AND l.DELETION_AT IS NULL
+                      AND ISNULL(l.QUANTITE_R, 0) <= 0
+                ) THEN 'VIDE' ELSE s.STATUT END";
                 string where = "WHERE s.DELETION_AT IS NULL";
                 if (!string.IsNullOrEmpty(search))
                     where += " AND (s.NUMERO LIKE @search OR s.DESTINATION LIKE @search OR s.NOM LIKE @search)";
                 if (!string.IsNullOrEmpty(destination))
                     where += " AND s.DESTINATION LIKE @destination";
                 if (!string.IsNullOrEmpty(statut))
-                    where += " AND s.STATUT = @statut";
+                    where += " AND " + statutCalculeSql + " = @statut";
 
                 string orderBy = "ORDER BY " + sort + " " + order;
 
@@ -61,7 +68,7 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
                 }
 
                 string dataSql = @"
-                    SELECT s.ID, s.NUMERO, s.DATE_SORTIE, s.STATUT, s.DESTINATION, s.NOM, s.FONCTION, s.NOTES, s.CREATED_AT
+                    SELECT s.ID, s.NUMERO, s.DATE_SORTIE, " + statutCalculeSql + @" AS STATUT, s.DESTINATION, s.NOM, s.FONCTION, s.NOTES, s.CREATED_AT
                     FROM SSORTIE s
                     " + where + @"
                     " + orderBy + @"

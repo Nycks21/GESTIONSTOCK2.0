@@ -95,6 +95,7 @@ function createFilterControls() {
         border: 1px solid #dee2e6;
     `;
 
+    // ✅ FIX : options du filtre rôle = ROLEID numérique (0-4)
     filterContainer.innerHTML = `
         <div style="flex: 2; min-width: 200px;">
             <label style="display: block; margin-bottom: 8px; font-weight: 600;"><i class="fas fa-search"></i> Recherche :</label>
@@ -104,7 +105,11 @@ function createFilterControls() {
             <label style="display: block; margin-bottom: 8px; font-weight: 600;"><i class="fas fa-filter"></i> Rôle :</label>
             <select id="role-filter" style="width:100%; padding:10px 12px; border:1px solid #ced4da; border-radius:6px;">
                 <option value="">Tous les rôles</option>
-                <option value="Administrateur">Administrateur</option>
+                <option value="0">SuperAdmin</option>
+                <option value="1">Admin</option>
+                <option value="2">User</option>
+                <option value="3">Logisticien</option>
+                <option value="4">Comptable</option>
             </select>
         </div>
         <div style="min-width: 140px;">
@@ -180,10 +185,13 @@ function applyFilters() {
                 (user.EMAIL && user.EMAIL.toLowerCase().includes(searchTerm)) ||
                 (user.TELEPHONE && user.TELEPHONE.toLowerCase().includes(searchTerm));
         }
+
+        // ✅ FIX : comparaison par ROLEID numérique (String pour gérer "0" !== "")
         var matchRole = true;
-        if (roleFilter) {
-            matchRole = getUserRoleName(user.ROLEID) === roleFilter;
+        if (roleFilter !== '') {
+            matchRole = String(user.ROLEID) === roleFilter;
         }
+
         var matchStatus = true;
         if (statusFilter) {
             var isActive = (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true');
@@ -288,9 +296,7 @@ function updateCounter() {
 function openSidebar() {
     var sidebar = document.getElementById('controlSidebar');
     var overlay = document.getElementById('sidebarOverlay');
-    if (sidebar) {
-        sidebar.style.right = '0';
-    }
+    if (sidebar) sidebar.style.right = '0';
     if (overlay) {
         overlay.style.display = 'block';
         document.body.style.overflow = 'hidden';
@@ -300,9 +306,7 @@ function openSidebar() {
 function closeSidebar() {
     var sidebar = document.getElementById('controlSidebar');
     var overlay = document.getElementById('sidebarOverlay');
-    if (sidebar) {
-        sidebar.style.right = '-300px';
-    }
+    if (sidebar) sidebar.style.right = '-300px';
     if (overlay) {
         overlay.style.display = 'none';
         document.body.style.overflow = '';
@@ -314,20 +318,12 @@ function initSidebar() {
     var closeBtn = document.getElementById('closeSidebarBtn');
     var overlay = document.getElementById('sidebarOverlay');
 
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', openSidebar);
-    }
-    if (closeBtn) {
-        closeBtn.addEventListener('click', closeSidebar);
-    }
-    if (overlay) {
-        overlay.addEventListener('click', closeSidebar);
-    }
+    if (toggleBtn) toggleBtn.addEventListener('click', openSidebar);
+    if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+    if (overlay) overlay.addEventListener('click', closeSidebar);
 
     document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-            closeSidebar();
-        }
+        if (e.key === 'Escape') closeSidebar();
     });
 }
 

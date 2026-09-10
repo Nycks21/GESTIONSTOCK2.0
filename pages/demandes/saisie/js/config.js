@@ -1,10 +1,12 @@
 window.API = {
     BASE: window.BASE_PATH || '/',
-    HANDLERS_PATH: 'pages/modules/sorties/handlers/',  // nos handlers
-    LIST: 'GetDemandes.ashx',
-    STATS: 'GetDemandesStats.ashx',   // optionnel
-    ADD: 'SortieAdd.ashx',            // réutilisé depuis sorties
-    ARTICLES: 'GetArticles.ashx'      // réutilisé depuis articles
+    HANDLERS_PATH: '',  // vide car les chemins sont complets
+    LIST: 'pages/demandes/saisie/handlers/GetDemandes.ashx',
+    STATS: 'pages/demandes/saisie/handlers/GetDemandesStats.ashx',
+    ADD: 'pages/modules/sorties/handlers/SortieAdd.ashx',
+    EDIT: 'pages/modules/sorties/handlers/SortieEdit.ashx',
+    DELETE: 'pages/modules/sorties/handlers/SortieDelete.ashx',
+    ARTICLES: '../../../modules/sorties/handlers/GetArticles.ashx'
 };
 
 window.DEFAULTS = {
@@ -12,3 +14,4 @@ window.DEFAULTS = {
     SORT_FIELD: 'DATE_SORTIE',
     SORT_ORDER: 'DESC'
 };
+

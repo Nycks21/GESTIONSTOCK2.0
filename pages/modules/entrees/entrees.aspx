@@ -246,7 +246,7 @@
                     <button class="btn btn-primary" id="btnSaveEntree" onclick="saveEntree(event)" type="button">
                         <i class="fas fa-save"></i> Enregistrer
                     </button>
-                    <button class="btn btn-danger" onclick="closeEntreeModal()" type="button">
+                    <button class="btn btn-danger" id="btnAnnulerButton" onclick="closeEntreeModal()" type="button">
                         <i class="fas fa-times"></i> Annuler
                     </button>
                 </div>

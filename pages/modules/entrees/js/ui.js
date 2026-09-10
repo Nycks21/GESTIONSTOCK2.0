@@ -1,4 +1,8 @@
-// Spinner
+'use strict';
+
+// ============================================================
+// SPINNER
+// ============================================================
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -17,7 +21,9 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// Modales
+// ============================================================
+// MODALES
+// ============================================================
 function showModal(id) {
     var m = document.getElementById(id || 'entreeModal');
     if (m) {
@@ -33,7 +39,9 @@ function closeModal(id) {
     }
 }
 
-// Pagination
+// ============================================================
+// PAGINATION
+// ============================================================
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -136,7 +144,9 @@ function createPaginationControls(totalPages) {
     wrapper.appendChild(container);
 }
 
-// Gestion des lignes dans la modale
+// ============================================================
+// GESTION DES LIGNES DANS LE FORMULAIRE
+// ============================================================
 function ajouterLigne(articleId, quantite, prixHT, tva) {
     var tbody = document.getElementById('lignesBody');
     if (!tbody) return;
@@ -159,7 +169,9 @@ function ajouterLigne(articleId, quantite, prixHT, tva) {
         <td><button type="button" class="btn btn-sm btn-danger" onclick="supprimerLigne(this)"><i class="fas fa-trash"></i></button></td>
     `;
     tbody.appendChild(tr);
-    enhanceArticleSelect(tr.querySelector('.ligne-article'));
+    if (typeof enhanceArticleSelect === 'function') {
+        enhanceArticleSelect(tr.querySelector('.ligne-article'));
+    }
     var inputs = tr.querySelectorAll('input');
     inputs.forEach(function (inp) { inp.addEventListener('input', function () { calculerTotauxLigne(tr); }); });
     calculerTotauxLigne(tr);
@@ -204,26 +216,49 @@ function getLignesFromModal() {
     return lignes;
 }
 
-// Initialisation des contrôles UI
+// ============================================================
+// FILTRES ET RÉINITIALISATION
+// ============================================================
+function applyFilters() {
+    var search = document.getElementById('search-filter')?.value || '';
+    var fournisseur = document.getElementById('fournisseur-filter')?.value || '';
+    var statut = document.getElementById('statut-filter')?.value || '';
+    AppState.filters.search = search;
+    AppState.filters.fournisseur = fournisseur;
+    AppState.filters.statut = statut;
+    AppState.page = 1;
+    loadEntrees({ silent: true });
+}
+
+function resetFilters() {
+    document.getElementById('search-filter').value = '';
+    document.getElementById('fournisseur-filter').value = '';
+    document.getElementById('statut-filter').value = '';
+    AppState.filters = { search: '', fournisseur: '', statut: '' };
+    AppState.page = 1;
+    loadEntrees({ silent: true });
+}
+
+// ============================================================
+// INITIALISATION DES CONTRÔLES UI
+// ============================================================
 function initUIControls() {
-    // Fermeture des modales avec Échap
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             closeModal('entreeModal');
             closeModal('modalImport');
         }
     });
-    // Empêcher la soumission automatique du formulaire
     var form = document.getElementById('entreeForm');
     if (form) {
         form.setAttribute('novalidate', 'novalidate');
         form.addEventListener('submit', function (e) { e.preventDefault(); });
     }
-    // S'assurer que tous les boutons ont type="button"
     document.querySelectorAll('button').forEach(function (btn) {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
-    // Initialiser le select de pagination
+
+    // Pagination
     var rowsSelect = document.getElementById('rows-per-page-top');
     if (rowsSelect) {
         rowsSelect.addEventListener('change', function () {
@@ -233,9 +268,58 @@ function initUIControls() {
             loadEntrees();
         });
     }
+
+    // Filtres
+    var searchInput = document.getElementById('search-filter');
+    if (searchInput) {
+        var timeoutId = null;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(timeoutId);
+            timeoutId = setTimeout(function () {
+                AppState.filters.search = this.value.trim();
+                AppState.page = 1;
+                loadEntrees({ silent: true });
+            }, 300);
+        });
+    }
+    var fournisseurFilter = document.getElementById('fournisseur-filter');
+    if (fournisseurFilter) {
+        fournisseurFilter.addEventListener('change', function () {
+            AppState.filters.fournisseur = this.value;
+            AppState.page = 1;
+            loadEntrees({ silent: true });
+        });
+    }
+    var statutFilter = document.getElementById('statut-filter');
+    if (statutFilter) {
+        statutFilter.addEventListener('change', function () {
+            AppState.filters.statut = this.value;
+            AppState.page = 1;
+            loadEntrees({ silent: true });
+        });
+    }
+    var resetBtn = document.getElementById('btnResetFilters');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () {
+            resetFilters();
+        });
+    }
+
+    // Tri (si défini globalement)
+    window.sortData = function (field) {
+        if (AppState.sortField === field) {
+            AppState.sortOrder = AppState.sortOrder === 'ASC' ? 'DESC' : 'ASC';
+        } else {
+            AppState.sortField = field;
+            AppState.sortOrder = 'ASC';
+        }
+        loadEntrees();
+    };
 }
 
-// Expositions globales
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.showModal = showModal;
@@ -244,4 +328,7 @@ window.createPaginationControls = createPaginationControls;
 window.ajouterLigne = ajouterLigne;
 window.supprimerLigne = supprimerLigne;
 window.getLignesFromModal = getLignesFromModal;
+window.calculerTotauxLigne = calculerTotauxLigne;
 window.initUIControls = initUIControls;
+window.applyFilters = applyFilters;
+window.resetFilters = resetFilters;

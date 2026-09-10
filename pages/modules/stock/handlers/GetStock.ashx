@@ -99,7 +99,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                         GROUP BY ls.ARTICLE_ID
                     ) sor ON sor.ARTICLE_ID = a.ID
                     OUTER APPLY (
-                        SELECT TOP 1 s.EMPLACEMENT_ID, e.NOM AS EMPLACEMENT_NOM
+                        SELECT TOP 1 s.EMPLACEMENT_ID, e.NOM AS EMPLACEMENT_NOM, s.STATUT
                         FROM SSTOCK s
                         INNER JOIN SEMPLACEMENT e ON e.ID = s.EMPLACEMENT_ID
                         WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL
@@ -116,11 +116,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                     ISNULL(ent.ENTREE, 0) AS ENTREE,
                     ISNULL(sor.SORTIE, 0) AS SORTIE,
                     ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) AS DISPONIBLE,
-                    CASE
-                        WHEN ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) <= 0 THEN 'Rupture de stock'
-                        WHEN ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) <= a.SEUIL_ALERTE THEN 'Stock faible'
-                        ELSE 'Normal'
-                    END AS STATUT";
+                    emp.STATUT AS STATUT";
 
                 string countSql = "SELECT COUNT(*) " + fromSql + " " + whereClause;
 
@@ -148,7 +144,8 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                             {
                                 var d = new Dictionary<string, object>();
                                 d["ARTICLE_ID"] = reader["ARTICLE_ID"].ToString();
-                                d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"].ToString();
+                                // ✅ Correction : remplacer ?. par vérification DBNull
+                                d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString();
                                 d["ARTICLE_CODE"] = reader["ARTICLE_CODE"];
                                 d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
                                 d["SEUIL_ALERTE"] = reader["SEUIL_ALERTE"];
@@ -156,7 +153,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                                 d["ENTREE"] = reader["ENTREE"];
                                 d["SORTIE"] = reader["SORTIE"];
                                 d["DISPONIBLE"] = reader["DISPONIBLE"];
-                                d["STATUT"] = reader["STATUT"];
+                                d["STATUT"] = reader["STATUT"] == DBNull.Value ? "NORMALE" : reader["STATUT"].ToString();
                                 list.Add(d);
                             }
                         }
@@ -174,7 +171,8 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                             {
                                 var d = new Dictionary<string, object>();
                                 d["ARTICLE_ID"] = reader["ARTICLE_ID"].ToString();
-                                d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"].ToString();
+                                // ✅ Correction : remplacer ?. par vérification DBNull
+                                d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString();
                                 d["ARTICLE_CODE"] = reader["ARTICLE_CODE"];
                                 d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
                                 d["SEUIL_ALERTE"] = reader["SEUIL_ALERTE"];
@@ -182,7 +180,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                                 d["ENTREE"] = reader["ENTREE"];
                                 d["SORTIE"] = reader["SORTIE"];
                                 d["DISPONIBLE"] = reader["DISPONIBLE"];
-                                d["STATUT"] = reader["STATUT"];
+                                d["STATUT"] = reader["STATUT"] == DBNull.Value ? "NORMALE" : reader["STATUT"].ToString();
                                 list.Add(d);
                             }
                         }

@@ -64,7 +64,7 @@
                                 <div class="stat-icon"><i class="fas fa-pencil-alt"></i></div>
                                 <div class="stat-body">
                                     <span class="stat-value" id="statBrouillon">0</span>
-                                    <span class="stat-label">Brouillons</span>
+                                    <span class="stat-label">En cours</span>
                                 </div>
                             </div>
                         </div>
@@ -96,12 +96,10 @@
                                 <i class="fas fa-search"></i>
                                 <input type="text" id="search-filter" class="form-control" placeholder="Rechercher par numéro, nom, destination…" autocomplete="off" />
                             </div>
-                            <select id="destination-filter" class="form-control toolbar-select">
-                                <option value="">Toutes destinations</option>
-                            </select>
                             <select id="statut-filter" class="form-control toolbar-select">
                                 <option value="">Tous statuts</option>
-                                <option value="BROUILLON">Brouillon</option>
+                                <option value="VIDE">QR vide</option>
+                                <option value="BROUILLON">En cours</option>
                                 <option value="VALIDE">Validé</option>
                                 <option value="ANNULE">Annulé</option>
                             </select>
@@ -124,7 +122,7 @@
                                             <th onclick="sortData('NUMERO')" style="cursor:pointer; width:100px;">N° <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:130px;">Date <i class="fas fa-sort ml-1"></i></th>
                                             <th style="width:280px;">Articles</th>
-                                            <th style="width:110px;">Quantité reçu</th>
+                                            <th style="width:110px; text-align:right;">Quantité reçu</th>
                                             <th onclick="sortData('NOM')" style="cursor:pointer; width:120px;">Bénéficiaire <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px;">Statut <i class="fas fa-sort ml-1"></i></th>
                                             <th style="width:160px;">Actions</th>
@@ -216,7 +214,7 @@
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-primary" id="btnSaveSortie" onclick="saveSortie(event)" type="button"><i class="fas fa-save"></i> Enregistrer</button>
-                    <button class="btn btn-danger" onclick="closeSortieModal()" type="button"><i class="fas fa-times"></i> Annuler</button>
+                    <button class="btn btn-danger" id="btnAnnulerSortie" onclick="closeSortieModal()" type="button"><i class="fas fa-times"></i> Annuler</button>
                 </div>
             </div>
         </div>

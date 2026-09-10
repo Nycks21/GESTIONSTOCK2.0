@@ -81,6 +81,7 @@ function renderFournisseursTable(fournisseurs) {
                 <td>${f.SIRET || ''}</td>
                 <td>${statusHtml}</td>
                 <td>
+                    <button type="button" class="btn btn-sm btn-info" onclick="viewFournisseur('${f.ID}')" title="Voir détails"><i class="fas fa-eye"></i></button>
                     <button type="button" class="btn btn-sm btn-primary" onclick="editFournisseur('${f.ID}')"><i class="fas fa-edit"></i></button>
                     <button type="button" class="btn btn-sm btn-danger" onclick="deleteFournisseur('${f.ID}')"><i class="fas fa-trash"></i></button>
                 </td>

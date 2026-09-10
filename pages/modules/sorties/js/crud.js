@@ -2,14 +2,47 @@
 // CRUD - SORTIES
 // ============================================================
 
+var currentMode = 'add'; // 'add', 'edit', 'view'
+
+// Fonction pour activer/désactiver les champs du modal
+function setFieldsEnabled(enabled) {
+    var inputs = document.querySelectorAll('#sortieModal input, #sortieModal select, #sortieModal textarea');
+    for (var i = 0; i < inputs.length; i++) {
+        inputs[i].disabled = !enabled;
+        if (!enabled) {
+            inputs[i].style.backgroundColor = '#e9ecef';
+            inputs[i].style.cursor = 'not-allowed';
+        } else {
+            inputs[i].style.backgroundColor = '';
+            inputs[i].style.cursor = '';
+        }
+    }
+    var ligneBtns = document.querySelectorAll('#sortieModal .btn-success, #sortieModal .btn-danger');
+    for (var j = 0; j < ligneBtns.length; j++) {
+        ligneBtns[j].disabled = !enabled;
+    }
+}
+
+// Fonction pour masquer/afficher le bouton Annuler (ID: btnAnnulerSortie)
+function setAnnulerButtonVisible(visible) {
+    var btnAnnuler = document.getElementById('btnAnnulerSortie');
+    if (btnAnnuler) {
+        btnAnnuler.style.display = visible ? '' : 'none';
+    }
+}
+
 function openAddSortieModal(e) {
     if (e) e.preventDefault();
     AppState.editingId = null;
-    document.getElementById('modalTitle').textContent = 'Nouveau bon de sortie';
+    currentMode = 'add';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-truck"></i> Nouveau bon de sortie';
     document.getElementById('sortieForm').reset();
     var now = new Date().toISOString().slice(0, 16);
     document.getElementById('sortieDate').value = now;
     document.getElementById('lignesBody').innerHTML = '';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveSortie').style.display = '';
+    setAnnulerButtonVisible(true);
     ajouterLigne();
     clearErrors();
     showModal('sortieModal');
@@ -19,13 +52,43 @@ function editSortie(id) {
     var sortie = AppState.sorties.find(function (s) { return s.ID === id; });
     if (!sortie) return;
     AppState.editingId = id;
-    document.getElementById('modalTitle').textContent = 'Modifier le bon de sortie';
+    currentMode = 'edit';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier le bon de sortie';
+    chargerSortieDansModal(sortie);
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveSortie').style.display = '';
+    setAnnulerButtonVisible(true);
+    clearErrors();
+    showModal('sortieModal');
+}
+
+function viewSortie(id) {
+    var sortie = AppState.sorties.find(function (s) { return s.ID === id; });
+    if (!sortie) return;
+    AppState.editingId = id;
+    currentMode = 'view';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails du bon de sortie';
+    chargerSortieDansModal(sortie);
+    setFieldsEnabled(false);
+    document.getElementById('btnSaveSortie').style.display = 'none';
+    setAnnulerButtonVisible(false);
+    clearErrors();
+    showModal('sortieModal');
+}
+
+function chargerSortieDansModal(sortie) {
     document.getElementById('sortieNumero').value = sortie.NUMERO || '';
     var dateStr = '';
     if (sortie.DATE_SORTIE) {
         try {
-            var d = new Date(sortie.DATE_SORTIE);
-            if (!isNaN(d.getTime())) dateStr = d.toISOString().slice(0, 16);
+            var dateValue = String(sortie.DATE_SORTIE);
+            var dotNetDate = dateValue.match(/^\/Date\((-?\d+)\)\/$/);
+            var d = dotNetDate ? new Date(Number(dotNetDate[1])) : new Date(dateValue);
+            if (!isNaN(d.getTime())) {
+                var pad = function (value) { return String(value).padStart(2, '0'); };
+                dateStr = d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) +
+                    'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+            }
         } catch (e) { /* ignore */ }
     }
     document.getElementById('sortieDate').value = dateStr;
@@ -43,12 +106,14 @@ function editSortie(id) {
     } else {
         ajouterLigne();
     }
-    clearErrors();
-    showModal('sortieModal');
 }
 
 async function saveSortie(e) {
     e.preventDefault();
+    if (currentMode === 'view') {
+        showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
+        return;
+    }
     var id = AppState.editingId;
     var data = {
         numero: document.getElementById('sortieNumero').value.trim(),
@@ -82,9 +147,11 @@ async function saveSortie(e) {
         var result = await resp.json();
         if (result.success) {
             showToast('Succès', result.message || (id ? 'Bon modifié' : 'Bon créé'), 'success');
-            closeModal('sortieModal');
+            closeSortieModal();
             loadSorties();
             loadSortieStats();
+            // ✅ Mise à jour du badge
+            if (typeof updateSortieBadge === 'function') updateSortieBadge();
         } else {
             showToast('Erreur', result.message || 'Une erreur est survenue', 'error');
         }
@@ -96,6 +163,13 @@ async function saveSortie(e) {
 }
 
 async function deleteSortie(id) {
+    // Vérifier si le bon est validé (on ne supprime pas un bon validé)
+    var sortie = AppState.sorties.find(function (s) { return s.ID === id; });
+    if (sortie && sortie.STATUT === 'VALIDE') {
+        showToast('Attention', 'Impossible de supprimer un bon de sortie validé.', 'warning');
+        return;
+    }
+
     var confirm = await Swal.fire({
         title: 'Confirmer la suppression',
         text: 'Voulez-vous vraiment supprimer ce bon de sortie ?',
@@ -121,6 +195,7 @@ async function deleteSortie(id) {
             showToast('Succès', 'Bon supprimé', 'success');
             loadSorties();
             loadSortieStats();
+            if (typeof updateSortieBadge === 'function') updateSortieBadge();
         } else {
             showToast('Erreur', result.message || 'Échec de la suppression', 'error');
         }
@@ -132,6 +207,13 @@ async function deleteSortie(id) {
 }
 
 async function validerSortie(id) {
+    // Vérifier si déjà validé
+    var sortie = AppState.sorties.find(function (s) { return s.ID === id; });
+    if (sortie && sortie.STATUT === 'VALIDE') {
+        showToast('Info', 'Ce bon est déjà validé.', 'info');
+        return;
+    }
+
     var confirm = await Swal.fire({
         title: 'Valider le bon de sortie',
         text: 'Valider ce bon va déduire les quantités (Qté Reçue) du stock. Continuer ?',
@@ -157,6 +239,7 @@ async function validerSortie(id) {
             showToast('Succès', 'Bon validé et stock mis à jour', 'success');
             loadSorties();
             loadSortieStats();
+            if (typeof updateSortieBadge === 'function') updateSortieBadge();
         } else {
             showToast('Erreur', result.message || 'Échec de la validation', 'error');
         }
@@ -170,6 +253,11 @@ async function validerSortie(id) {
 function closeSortieModal() {
     closeModal('sortieModal');
     AppState.editingId = null;
+    currentMode = 'add';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-truck"></i> Nouveau bon de sortie';
+    setFieldsEnabled(true);
+    document.getElementById('btnSaveSortie').style.display = '';
+    setAnnulerButtonVisible(true);
     clearErrors();
 }
 
@@ -188,9 +276,13 @@ function clearErrors() {
 // Expositions globales
 window.openAddSortieModal = openAddSortieModal;
 window.editSortie = editSortie;
+window.viewSortie = viewSortie;
 window.saveSortie = saveSortie;
 window.deleteSortie = deleteSortie;
 window.validerSortie = validerSortie;
 window.closeSortieModal = closeSortieModal;
 window.showError = showError;
 window.clearErrors = clearErrors;
+window.setFieldsEnabled = setFieldsEnabled;
+window.setAnnulerButtonVisible = setAnnulerButtonVisible;
+window.chargerSortieDansModal = chargerSortieDansModal;

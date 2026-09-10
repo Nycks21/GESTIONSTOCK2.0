@@ -1,7 +1,10 @@
-// ui.js
+// ui.js – Interface utilisateur (spinner, pagination, filtres, initialisation)
 'use strict';
 
-// Spinner
+// ============================================================
+// SPINNER
+// ============================================================
+
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -10,6 +13,7 @@ function forceHideSpinner() {
     s.style.opacity = '0';
     s.setAttribute('aria-hidden', 'true');
 }
+
 function showSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -18,38 +22,36 @@ function showSpinner() {
     s.style.opacity = '1';
     s.removeAttribute('aria-hidden');
 }
-function hideSpinner() { forceHideSpinner(); }
 
-// Modales
+function hideSpinner() {
+    forceHideSpinner();
+}
+
+// ============================================================
+// MODALES (ouverture/fermeture génériques)
+// ============================================================
+
 function showModal(id) {
     var m = document.getElementById(id || 'uniteModal');
-    if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
-}
-function closeUniteModal() {
-    var m = document.getElementById('uniteModal');
-    if (m) { m.style.display = 'none'; document.body.style.overflow = ''; }
-    currentUniteId = null;
-    clearFieldErrors(['uniteCode', 'uniteNom']);
-}
-function openAddUniteModal(event) {
-    if (event) event.preventDefault();
-    currentUniteId = null;
-    document.getElementById('modalTitle').textContent = 'Ajouter une unité';
-    document.getElementById('uniteForm').reset();
-    document.getElementById('uniteActif').value = '1';
-    clearErrors();
-    showModal('uniteModal');
+    if (m) {
+        m.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
 }
 
-// Pagination
+// La fermeture est gérée par closeUniteModal() dans crud.js
+// On garde une fonction générique si besoin, mais on utilise closeUniteModal depuis le HTML.
+
+// ============================================================
+// PAGINATION
+// ============================================================
+
 function createPaginationControls(totalPages) {
-    var oldPagination = document.getElementById('pagination-container');
-    if (oldPagination) oldPagination.remove();
-    if (totalPages <= 1) {
-        var wrapper = document.getElementById('paginationWrapper');
-        if (wrapper) wrapper.innerHTML = '';
-        return;
-    }
+    var wrapper = document.getElementById('paginationWrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '';
+    if (totalPages <= 1) return;
+
     var container = document.createElement('div');
     container.id = 'pagination-container';
     container.style.cssText = 'margin:5px 0;display:flex;justify-content:center;gap:5px;flex-wrap:wrap;';
@@ -81,8 +83,19 @@ function createPaginationControls(totalPages) {
         return btn;
     };
 
-    container.appendChild(createBtn('«', function () { if (AppState.page !== 1) { AppState.page = 1; loadUnites(); } }, AppState.page === 1));
-    container.appendChild(createBtn('‹', function () { if (AppState.page > 1) { AppState.page--; loadUnites(); } }, AppState.page === 1));
+    container.appendChild(createBtn('«', function () {
+        if (AppState.page !== 1) {
+            AppState.page = 1;
+            loadUnites();
+        }
+    }, AppState.page === 1));
+
+    container.appendChild(createBtn('‹', function () {
+        if (AppState.page > 1) {
+            AppState.page--;
+            loadUnites();
+        }
+    }, AppState.page === 1));
 
     var maxVisible = 5;
     var start = Math.max(1, AppState.page - Math.floor(maxVisible / 2));
@@ -90,38 +103,58 @@ function createPaginationControls(totalPages) {
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
 
     if (start > 1) {
-        container.appendChild(createBtn('1', function () { AppState.page = 1; loadUnites(); }));
+        container.appendChild(createBtn('1', function () {
+            AppState.page = 1;
+            loadUnites();
+        }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
+
     for (var i = start; i <= end; i++) {
         (function (page) {
             container.appendChild(createBtn(String(page), function () {
-                if (page !== AppState.page) { AppState.page = page; loadUnites(); }
+                if (page !== AppState.page) {
+                    AppState.page = page;
+                    loadUnites();
+                }
             }));
         })(i);
     }
+
     if (end < totalPages) {
         if (end < totalPages - 1) container.appendChild(createBtn('...', null, true, true));
         (function (tp) {
-            container.appendChild(createBtn(String(tp), function () { AppState.page = tp; loadUnites(); }));
+            container.appendChild(createBtn(String(tp), function () {
+                AppState.page = tp;
+                loadUnites();
+            }));
         })(totalPages);
     }
 
-    container.appendChild(createBtn('›', function () { if (AppState.page < totalPages) { AppState.page++; loadUnites(); } }, AppState.page === totalPages));
-    container.appendChild(createBtn('»', function () { if (AppState.page !== totalPages) { AppState.page = totalPages; loadUnites(); } }, AppState.page === totalPages));
+    container.appendChild(createBtn('›', function () {
+        if (AppState.page < totalPages) {
+            AppState.page++;
+            loadUnites();
+        }
+    }, AppState.page === totalPages));
 
-    var wrapper = document.getElementById('paginationWrapper');
-    if (wrapper) { wrapper.innerHTML = ''; wrapper.appendChild(container); return; }
-    var table = document.querySelector('.dash-table');
-    if (table && table.parentNode) {
-        table.parentNode.insertBefore(container, table.nextSibling);
-    }
+    container.appendChild(createBtn('»', function () {
+        if (AppState.page !== totalPages) {
+            AppState.page = totalPages;
+            loadUnites();
+        }
+    }, AppState.page === totalPages));
+
+    wrapper.appendChild(container);
 }
 
-// Filtres
+// ============================================================
+// FILTRES
+// ============================================================
+
 function applyFilters() {
-    const search = document.getElementById('search-filter')?.value || '';
-    const status = document.getElementById('status-filter')?.value || '';
+    var search = document.getElementById('search-filter')?.value || '';
+    var status = document.getElementById('status-filter')?.value || '';
     AppState.filters.search = search;
     AppState.filters.status = status;
     AppState.page = 1;
@@ -136,20 +169,23 @@ function resetFilters() {
     loadUnites({ silent: true });
 }
 
-// Nombre de lignes par page
+// ============================================================
+// GESTION DU NOMBRE DE LIGNES PAR PAGE
+// ============================================================
+
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
     var currentSize = AppState.pageSize || DEFAULTS.PAGE_SIZE;
-    var optionExists = false;
+    var exists = false;
     for (var i = 0; i < select.options.length; i++) {
         if (select.options[i].value == currentSize) {
             select.selectedIndex = i;
-            optionExists = true;
+            exists = true;
             break;
         }
     }
-    if (!optionExists) {
+    if (!exists) {
         var opt = document.createElement('option');
         opt.value = currentSize;
         opt.textContent = currentSize + ' par page';
@@ -158,35 +194,32 @@ function initRowsPerPage() {
     }
     select.addEventListener('change', function () {
         var val = this.value;
-        if (val === 'all') { AppState.pageSize = 999999; }
-        else { var newSize = parseInt(val, 10); if (!isNaN(newSize) && newSize > 0) AppState.pageSize = newSize; }
+        if (val === 'all') {
+            AppState.pageSize = 999999;
+        } else {
+            var newSize = parseInt(val, 10);
+            if (!isNaN(newSize) && newSize > 0) AppState.pageSize = newSize;
+        }
         AppState.page = 1;
         loadUnites();
     });
 }
 
-// Sécurité formulaire
-function preventFormAutoSubmit() {
-    var form = document.getElementById('uniteForm');
-    if (!form) return;
-    form.setAttribute('novalidate', 'novalidate');
-    form.addEventListener('submit', function (e) { e.preventDefault(); });
-}
-function ensureButtonsHaveTypeButton() {
-    document.querySelectorAll('button').forEach(function (btn) {
-        if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
-    });
-}
+// ============================================================
+// ÉCOUTEURS DE FILTRES
+// ============================================================
 
-// Écouteurs de filtres
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
     var statusSelect = document.getElementById('status-filter');
+    var timeoutId = null;
+
     if (searchInput) {
-        var timeoutId = null;
         searchInput.addEventListener('input', function () {
             clearTimeout(timeoutId);
-            timeoutId = setTimeout(function () { applyFilters(); }, 300);
+            timeoutId = setTimeout(function () {
+                applyFilters();
+            }, 300);
         });
     }
     if (statusSelect) {
@@ -194,36 +227,61 @@ function initFilterListeners() {
     }
 }
 
-// Efface les erreurs
-function clearFieldErrors(fields) {
-    fields.forEach(function (id) {
-        var errEl = document.getElementById('err-' + id);
-        if (errEl) { errEl.textContent = ''; errEl.style.display = 'none'; }
-    });
-}
+// ============================================================
+// INITIALISATION DES CONTRÔLES UI
+// ============================================================
 
-// Initialisation UI
 function initUIControls() {
+    // Fermeture du modal avec la touche Échap
     document.addEventListener('keydown', function (e) {
-        if (e.key === 'Escape') { closeUniteModal(); }
+        if (e.key === 'Escape') {
+            // Utiliser closeUniteModal défini dans crud.js
+            if (typeof closeUniteModal === 'function') {
+                closeUniteModal();
+            }
+        }
     });
+
+    // Appliquer les écouteurs de filtres
     initFilterListeners();
     initRowsPerPage();
-    preventFormAutoSubmit();
-    ensureButtonsHaveTypeButton();
+
+    // Sécuriser les formulaires et les boutons
+    var form = document.getElementById('uniteForm');
+    if (form) {
+        form.setAttribute('novalidate', 'novalidate');
+        form.addEventListener('submit', function (e) { e.preventDefault(); });
+    }
+
+    document.querySelectorAll('button').forEach(function (btn) {
+        if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
+    });
+
+    // Gestion de la fermeture des modales par la croix (délégation d'événements)
+    document.addEventListener('click', function (e) {
+        var target = e.target;
+        if (target && target.classList.contains('close')) {
+            var modal = target.closest('.modal');
+            if (modal && modal.id === 'uniteModal') {
+                if (typeof closeUniteModal === 'function') {
+                    closeUniteModal();
+                } else {
+                    modal.style.display = 'none';
+                }
+            }
+        }
+    });
 }
 
-// Expositions globales
-window.applyFilters = applyFilters;
-window.resetFilters = resetFilters;
-window.showModal = showModal;
-window.closeUniteModal = closeUniteModal;
-window.openAddUniteModal = openAddUniteModal;
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
+
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
-window.createPaginationControls = createPaginationControls;
-window.initUIControls = initUIControls;
-window.clearFieldErrors = clearFieldErrors;
 window.forceHideSpinner = forceHideSpinner;
-window.preventFormAutoSubmit = preventFormAutoSubmit;
-window.ensureButtonsHaveTypeButton = ensureButtonsHaveTypeButton;
+window.showModal = showModal;
+window.createPaginationControls = createPaginationControls;
+window.applyFilters = applyFilters;
+window.resetFilters = resetFilters;
+window.initUIControls = initUIControls;

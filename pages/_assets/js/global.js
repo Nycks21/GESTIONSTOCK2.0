@@ -440,6 +440,37 @@ function ajax(url, payload) {
   });
 }
 
+function updateSortieBadge(pending) {
+  var badge = document.getElementById('sortiePendingCount');
+  if (!badge) return;
+
+  function render(value) {
+    var count = Number(value || 0);
+    badge.textContent = count > 0 ? String(count) : '';
+    badge.style.display = count > 0 ? 'inline-flex' : 'none';
+  }
+
+  if (pending !== undefined && pending !== null) {
+    render(pending);
+    return;
+  }
+
+  fetch(apiUrl('/pages/modules/sorties/handlers/GetSortieStats.ashx'))
+    .then(function (response) {
+      if (!response.ok) throw new Error('Erreur HTTP ' + response.status);
+      return response.json();
+    })
+    .then(function (data) {
+      if (data.success) render(data.pending);
+    })
+    .catch(function () { });
+}
+window.updateSortieBadge = updateSortieBadge;
+
+document.addEventListener('DOMContentLoaded', function () {
+  updateSortieBadge();
+});
+
 // ============================================================================
 // CONSTRUCTION D'URL SÉCURISÉE (ANTI MIXED-CONTENT)
 // ============================================================================

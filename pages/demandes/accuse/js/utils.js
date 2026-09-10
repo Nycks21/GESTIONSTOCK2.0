@@ -1,16 +1,20 @@
-// utils.js
 function showToast(title, message, icon, timer) {
     icon = icon || 'success';
     timer = timer || 3000;
     if (typeof Swal === 'undefined') {
-        console.warn('SweetAlert2 non chargé, fallback alert');
+        console.warn('SweetAlert2 non chargé, fallback vers alert');
         alert((title || '') + (message ? '\n' + message : ''));
         return;
     }
     var finalTitle = (title || '').toString();
     var finalMessage = (message || '').toString();
-    if (!finalTitle && !finalMessage) { finalTitle = 'Notification'; }
-    if (!finalTitle && finalMessage) { finalTitle = finalMessage; finalMessage = ''; }
+    if (!finalTitle && !finalMessage) {
+        finalTitle = 'Notification';
+    }
+    if (!finalTitle && finalMessage) {
+        finalTitle = finalMessage;
+        finalMessage = '';
+    }
     var Toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -22,13 +26,23 @@ function showToast(title, message, icon, timer) {
             toast.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
-    Toast.fire({ icon: icon, title: finalTitle, text: finalMessage || undefined });
+    Toast.fire({
+        icon: icon,
+        title: finalTitle,
+        text: finalMessage || undefined
+    });
 }
 
-function showErrorToast(message) {
-    showToast('Erreur', message, 'error');
+function debounce(fn, delay) {
+    var timer;
+    return function () {
+        var args = arguments;
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            fn.apply(this, args);
+        }.bind(this), delay);
+    };
 }
 
-function showSuccessToast(message) {
-    showToast('Succès', message, 'success');
-}
+window.showToast = showToast;
+window.debounce = debounce;

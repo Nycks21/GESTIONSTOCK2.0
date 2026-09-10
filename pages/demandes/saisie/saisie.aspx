@@ -121,11 +121,11 @@
                                         <tr style="background-color:#f8f9fa; text-align:left;">
                                             <th onclick="sortData('NUMERO')" style="cursor:pointer; width:100px;">N° <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:130px;">Date <i class="fas fa-sort ml-1"></i></th>
-                                            <th style="width:280px;">Articles</th>
-                                            <th style="width:110px;">Qté demandée</th>
+                                            <th onclick="sortData('ARTICLES')" style="cursor:pointer; width:180px;">Articles</th>
+                                            <th style="width:110px; text-align:right;">Qté demandée</th>
                                             <th onclick="sortData('DESTINATION')" style="cursor:pointer; width:140px;">Destination <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px;">Statut <i class="fas fa-sort ml-1"></i></th>
-                                            <th style="width:80px;">Actions</th>
+                                            <th style="width:110px;">Actions</th>
                                         </tr>
                                     </thead>
                                     <tbody id="saisieTableBody">
@@ -195,17 +195,16 @@
                         </div>
                     </div>
 
-                    <hr />
-                    <h5><i class="fas fa-list"></i> Articles demandés</h5>
+                    <hr class="mb-1" />
+                    <h5><i class="fas fa-list mb-1"></i> Articles demandés</h5>
                     <div class="table-responsive lignes-table-container" style="max-height:300px; overflow-y:auto; border:1px solid #ddd; border-radius:6px;">
                         <table class="table table-bordered table-sm" id="lignesTable" style="margin-bottom:0;">
                             <thead style="background:#f1f1f1; position:sticky; top:0; z-index:1;">
                                 <tr>
                                     <th style="width:40px;">#</th>
                                     <th style="min-width:180px;">Article</th>
-                                    <th style="width:120px;">Qté Demandée</th>
-                                    <th style="width:120px;">Qté Reçue</th>
-                                    <th style="min-width:200px;">Observations</th>
+                                    <th style="width:120px; text-align:right;">Qté Demandée</th>
+                                    <th style="min-width:300px;">Observations</th>
                                     <th style="width:50px;">
                                         <button type="button" class="btn btn-sm btn-success" onclick="ajouterLigne()">
                                             <i class="fas fa-plus"></i>
@@ -219,14 +218,14 @@
                     <small class="text-muted">Cliquez sur <i class="fas fa-plus"></i> pour ajouter une ligne.</small>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-primary" onclick="saveSaisie(event)" type="button">
+                    <button class="btn btn-primary" id="btnSaveSaisie" onclick="saveSaisie(event)" type="button">
                         <i class="fas fa-save"></i> Envoyer la demande
                     </button>
-                    <button class="btn btn-secondary" onclick="resetFormSaisie()" type="button">
+                    <button class="btn btn-secondary" id="btnResetSaisie" onclick="resetFormSaisie()" type="button">
                         <i class="fas fa-undo"></i> Réinitialiser
                     </button>
-                    <button class="btn btn-danger" onclick="closeModalSaisie()" type="button">
-                        <i class="fas fa-times"></i> Fermer
+                    <button class="btn btn-danger" id="btnAnnulerSaisie" onclick="closeModalSaisie()" type="button">
+                        <i class="fas fa-times"></i> Annuler
                     </button>
                 </div>
             </div>

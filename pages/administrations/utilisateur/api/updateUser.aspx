@@ -1,8 +1,9 @@
-﻿<%@ Page Language="C#" ResponseEncoding="utf-8" EnableSessionState="True" %>
+﻿﻿<%@ Page Language="C#" ResponseEncoding="utf-8" EnableSessionState="True" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.Web.Script.Serialization" %>
 <%@ Import Namespace="System.Configuration" %>
 <%@ Import Namespace="System.Collections.Generic" %>
+<%@ Import Namespace="System.Linq" %>
 
 <script runat="server">
 private string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
@@ -16,8 +17,8 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        // ✅ Vérification d'authentification - Admin ou SuperAdmin
-        if (!AuthHelper.RequireApiAuth(Context, 1)) // 1 = Admin
+        // ✅ Vérification d'authentification - Admin (1) ou SuperAdmin (0)
+        if (!AuthHelper.RequireApiAuth(Context, 1))
         {
             WriteResponse(false, "Accès non autorisé");
             return;
@@ -92,23 +93,79 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
+        // ✅ Validation des permissions contre AuthHelper.AllMenus
+        List<string> validatedPermissions = new List<string>();
+        if (!string.IsNullOrEmpty(permissionsJson))
+        {
+            try
+            {
+                var serializer = new JavaScriptSerializer();
+                var permsList = serializer.Deserialize<List<string>>(permissionsJson);
+                if (permsList != null)
+                {
+                    foreach (string p in permsList)
+                    {
+                        if (AuthHelper.AllMenus.Any(m => m.Code == p))
+                        {
+                            validatedPermissions.Add(p);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                WriteResponse(false, "Format de permissions invalide");
+                return;
+            }
+        }
+
         // ID de l'utilisateur qui effectue la mise à jour
         int currentUserId = AuthHelper.GetUserId(Context);
+        int callerRole = AuthHelper.GetUserRole(Context);
 
         using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
 
-            // Vérifier que l'utilisateur existe
-            using (SqlCommand checkCmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE IDUSER = @ID", conn))
+            // 🔹 Récupérer le ROLEID actuel de la cible
+            int targetCurrentRole = -1;
+            using (SqlCommand getRoleCmd = new SqlCommand("SELECT ROLEID FROM USERS WHERE IDUSER = @ID", conn))
             {
-                checkCmd.Parameters.AddWithValue("@ID", userId);
-                int exists = (int)checkCmd.ExecuteScalar();
-                if (exists == 0)
+                getRoleCmd.Parameters.AddWithValue("@ID", userId);
+                object result = getRoleCmd.ExecuteScalar();
+                if (result == null || result == DBNull.Value)
                 {
                     WriteResponse(false, "Utilisateur non trouvé");
                     return;
                 }
+                targetCurrentRole = Convert.ToInt32(result);
+            }
+
+            // ✅ Règle 1 : Seul SuperAdmin peut modifier un SuperAdmin
+            if (targetCurrentRole == 0 && callerRole != 0)
+            {
+                LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED",
+                    "Tentative de modification d'un SuperAdmin (ID " + userId + ") par un rôle " + callerRole);
+                WriteResponse(false, "Seul un SuperAdmin peut modifier un SuperAdmin");
+                return;
+            }
+
+            // ✅ Règle 2 : Seul SuperAdmin peut attribuer le rôle SuperAdmin
+            if (roleId == 0 && callerRole != 0)
+            {
+                LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED",
+                    "Tentative d'attribution du rôle SuperAdmin à l'utilisateur ID " + userId + " par un rôle " + callerRole);
+                WriteResponse(false, "Seul un SuperAdmin peut attribuer le rôle SuperAdmin");
+                return;
+            }
+
+            // ✅ Règle 3 : Anti-escalade sur soi-même
+            if (userId == currentUserId && callerRole != 0 && roleId == 0)
+            {
+                LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED",
+                    "Tentative d'auto-promotion SuperAdmin");
+                WriteResponse(false, "Auto-promotion interdite");
+                return;
             }
 
             // Construction de la requête de mise à jour
@@ -122,15 +179,17 @@ protected void Page_Load(object sender, EventArgs e)
                     UPDATED_AT = GETDATE(),
                     UPDATED_BY = @UPDATED_BY";
 
-            // Si un mot de passe est fourni, on l'ajoute
             if (!string.IsNullOrEmpty(password))
             {
                 query += ", PWD = @PWD";
             }
 
-            // Mise à jour des permissions si fournies
+            // ✅ On utilise la liste validée, re-sérialisée
+            string validatedPermissionsJson = null;
             if (!string.IsNullOrEmpty(permissionsJson))
             {
+                var serializer = new JavaScriptSerializer();
+                validatedPermissionsJson = serializer.Serialize(validatedPermissions);
                 query += ", MENU_PERMISSIONS = @PERMISSIONS";
             }
 
@@ -151,9 +210,9 @@ protected void Page_Load(object sender, EventArgs e)
                     cmd.Parameters.AddWithValue("@PWD", PasswordHelper.HashPassword(password));
                 }
 
-                if (!string.IsNullOrEmpty(permissionsJson))
+                if (validatedPermissionsJson != null)
                 {
-                    cmd.Parameters.AddWithValue("@PERMISSIONS", permissionsJson);
+                    cmd.Parameters.AddWithValue("@PERMISSIONS", validatedPermissionsJson);
                 }
 
                 int rowsAffected = cmd.ExecuteNonQuery();
@@ -164,8 +223,10 @@ protected void Page_Load(object sender, EventArgs e)
                 }
             }
 
-            // Journalisation
-            LogSecurityAction(conn, currentUserId, "USER_UPDATE", "Mise à jour de l'utilisateur ID " + userId);
+            // Journalisation enrichie
+            LogSecurityAction(conn, currentUserId, "USER_UPDATE",
+                "Mise à jour de l'utilisateur ID " + userId +
+                " (rôle cible: " + targetCurrentRole + " -> " + roleId + ")");
 
             WriteResponse(true, "Utilisateur mis à jour avec succès", userId);
         }

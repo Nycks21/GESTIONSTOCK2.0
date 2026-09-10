@@ -1,6 +1,8 @@
 'use strict';
 
-// Spinner
+// ============================================================
+// SPINNER
+// ============================================================
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -19,7 +21,9 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// Modales
+// ============================================================
+// MODALES (générique)
+// ============================================================
 function showModal(id) {
     var m = document.getElementById(id || 'fournisseurModal');
     if (m) {
@@ -27,32 +31,15 @@ function showModal(id) {
         document.body.style.overflow = 'hidden';
     }
 }
-function closeFournisseurModal() {
-    var m = document.getElementById('fournisseurModal');
-    if (m) {
-        m.style.display = 'none';
-        document.body.style.overflow = '';
-    }
-    // réinitialiser les champs d'erreur
-    clearFieldErrors(['fournisseurCode', 'fournisseurNom']);
-}
 
-function clearFieldErrors(fieldIds) {
-    fieldIds.forEach(function(id) {
-        var err = document.getElementById('err-' + id);
-        if (err) { err.textContent = ''; err.style.display = 'none'; }
-    });
-}
-
-// Pagination
+// ============================================================
+// PAGINATION
+// ============================================================
 function createPaginationControls(totalPages) {
-    var oldPagination = document.getElementById('pagination-container');
-    if (oldPagination) oldPagination.remove();
-    if (totalPages <= 1) {
-        var wrapper = document.getElementById('paginationWrapper');
-        if (wrapper) wrapper.innerHTML = '';
-        return;
-    }
+    var wrapper = document.getElementById('paginationWrapper');
+    if (!wrapper) return;
+    wrapper.innerHTML = '';
+    if (totalPages <= 1) return;
 
     var container = document.createElement('div');
     container.id = 'pagination-container';
@@ -150,20 +137,12 @@ function createPaginationControls(totalPages) {
         }
     }, AppState.page === totalPages));
 
-    var wrapper = document.getElementById('paginationWrapper');
-    if (wrapper) {
-        wrapper.innerHTML = '';
-        wrapper.appendChild(container);
-        return;
-    }
-
-    var table = document.querySelector('.dash-table');
-    if (table && table.parentNode) {
-        table.parentNode.insertBefore(container, table.nextSibling);
-    }
+    wrapper.appendChild(container);
 }
 
-// Filtres
+// ============================================================
+// FILTRES
+// ============================================================
 function applyFilters() {
     const search = document.getElementById('search-filter')?.value || '';
     const actif = document.getElementById('actif-filter')?.value || '';
@@ -181,7 +160,9 @@ function resetFilters() {
     loadFournisseurs({ silent: true });
 }
 
-// Gestion du nombre de lignes par page
+// ============================================================
+// GESTION DU NOMBRE DE LIGNES PAR PAGE
+// ============================================================
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
@@ -216,18 +197,9 @@ function initRowsPerPage() {
     });
 }
 
-function preventFormAutoSubmit() {
-    var form = document.getElementById('fournisseurForm');
-    if (!form) return;
-    form.setAttribute('novalidate', 'novalidate');
-    form.addEventListener('submit', function (e) { e.preventDefault(); });
-}
-function ensureButtonsHaveTypeButton() {
-    document.querySelectorAll('button').forEach(function (btn) {
-        if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
-    });
-}
-
+// ============================================================
+// ÉCOUTEURS DE FILTRES
+// ============================================================
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
     var actifSelect = document.getElementById('actif-filter');
@@ -245,23 +217,37 @@ function initFilterListeners() {
     }
 }
 
+// ============================================================
+// INITIALISATION UI
+// ============================================================
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            closeFournisseurModal();
+            // Utiliser closeFournisseurModal défini dans crud.js
+            if (typeof closeFournisseurModal === 'function') {
+                closeFournisseurModal();
+            }
         }
     });
     initFilterListeners();
     initRowsPerPage();
-    preventFormAutoSubmit();
-    ensureButtonsHaveTypeButton();
+    // Sécuriser le formulaire
+    var form = document.getElementById('fournisseurForm');
+    if (form) {
+        form.setAttribute('novalidate', 'novalidate');
+        form.addEventListener('submit', function (e) { e.preventDefault(); });
+    }
+    document.querySelectorAll('button').forEach(function (btn) {
+        if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
+    });
 }
 
-// Expositions globales
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.applyFilters = applyFilters;
 window.resetFilters = resetFilters;
 window.showModal = showModal;
-window.closeFournisseurModal = closeFournisseurModal;
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.createPaginationControls = createPaginationControls;

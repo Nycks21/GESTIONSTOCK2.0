@@ -8,8 +8,10 @@
 // PERMISSIONS
 // ============================================================================
 
-function applyDefaultPermissionsByRole(role) {
-    var defaultPermissions = DEFAULT_ROLE_PERMISSIONS[role] || DEFAULT_ROLE_PERMISSIONS['Administrateur'];
+function applyDefaultPermissionsByRole(roleId) {
+    // ✅ FIX : rôle traité comme ROLEID numérique
+    var key = String(roleId);
+    var defaultPermissions = DEFAULT_ROLE_PERMISSIONS[key] || DEFAULT_ROLE_PERMISSIONS['1'] || [];
     for (var i = 0; i < PERMISSIONS_LIST.length; i++) {
         var perm = PERMISSIONS_LIST[i];
         var checkboxId = CHECKBOX_ID_MAP[perm];
@@ -87,9 +89,9 @@ async function openAddUserModal(event) {
         passwordField.placeholder = "Mot de passe (min. 8 caractères)";
     }
 
-    var defaultRole = document.getElementById('userRole')?.value || 'Administrateur';
+    // ✅ FIX : value du <select> = ROLEID numérique, fallback '1' (Admin)
+    var defaultRole = document.getElementById('userRole')?.value || '1';
     applyDefaultPermissionsByRole(defaultRole);
-    setPermissionsCheckboxesEnabled(true);
 
     document.querySelector('#userModalTitle').innerHTML = '<i class="fas fa-user-plus"></i> Ajouter un utilisateur';
     showModal();
@@ -110,10 +112,19 @@ function openEditUserModal(userId, event) {
     document.getElementById('username').value = user.USERNAME || '';
     document.getElementById('Nom').value = user.NOM || '';
     document.getElementById('userEmail').value = user.EMAIL || '';
-    document.getElementById('userRole').value = getUserRoleName(user.ROLEID);
     document.getElementById('userTelephone').value = user.TELEPHONE || '';
     document.getElementById('userPassword').value = '';
     document.getElementById('userStatut').value = (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true') ? 'Actif' : 'Inactif';
+
+    // ✅ FIX : la value du <select> = ROLEID numérique
+    var roleSelect = document.getElementById('userRole');
+    if (roleSelect) {
+        roleSelect.value = String(user.ROLEID);
+        if (roleSelect.value !== String(user.ROLEID)) {
+            console.error('❌ Option manquante dans #userRole pour ROLEID=' + user.ROLEID);
+            Swal.fire({ icon: 'error', title: 'Erreur de rôle', text: 'Le rôle ROLEID=' + user.ROLEID + ' n\'existe pas dans la liste.' });
+        }
+    }
 
     var passwordField = document.getElementById('userPassword');
     if (passwordField) {
@@ -132,8 +143,8 @@ function openEditUserModal(userId, event) {
     if (userPermissions.length > 0) {
         setPermissionsCheckboxes(userPermissions);
     } else {
-        var userRole = getUserRoleName(user.ROLEID);
-        applyDefaultPermissionsByRole(userRole);
+        // ✅ FIX CRITIQUE : passer user.ROLEID (numérique) et non le nom
+        applyDefaultPermissionsByRole(user.ROLEID);
     }
     setPermissionsCheckboxesEnabled(true);
 
@@ -149,7 +160,8 @@ function resetModalForm() {
         if (el) el.value = '';
     });
     var roleSelect = document.getElementById('userRole');
-    if (roleSelect) roleSelect.value = 'Administrateur';
+    // ✅ FIX : value = ROLEID '1' (Admin) par défaut
+    if (roleSelect) roleSelect.value = '1';
     var statutSelect = document.getElementById('userStatut');
     if (statutSelect) statutSelect.value = 'Actif';
     setPermissionsCheckboxes([]);
@@ -170,7 +182,7 @@ async function createUserFromModal() {
     var username = document.getElementById('username')?.value.trim() || '';
     var nom = document.getElementById('Nom')?.value.trim() || '';
     var email = document.getElementById('userEmail')?.value.trim() || '';
-    var role = document.getElementById('userRole')?.value || 'Administrateur';
+    var role = document.getElementById('userRole')?.value || '';
     var telephone = document.getElementById('userTelephone')?.value.trim() || '';
     var password = document.getElementById('userPassword')?.value.trim() || '';
     var statut = document.getElementById('userStatut')?.value || 'Actif';
@@ -190,6 +202,13 @@ async function createUserFromModal() {
         return;
     }
 
+    // ✅ FIX : validation stricte du rôle (ROLEID numérique)
+    var roleId = getRoleId(role);
+    if (roleId === null || roleId === undefined) {
+        Swal.fire({ icon: 'error', title: "Rôle invalide", text: "Le rôle sélectionné est introuvable. Valeur reçue : \"" + role + "\"" });
+        return;
+    }
+
     showSpinner();
     var body = {
         USERNAME: username,
@@ -197,7 +216,7 @@ async function createUserFromModal() {
         PWD: password,
         EMAIL: email,
         TELEPHONE: telephone,
-        ROLEID: getRoleId(role),
+        ROLEID: roleId,
         ACTIVE: statut === "Actif" ? 1 : 0,
         PERMISSIONS: permissions
     };
@@ -228,7 +247,7 @@ async function createUserFromModal() {
 async function updateUserFromModal() {
     var nom = document.getElementById('Nom')?.value.trim() || '';
     var email = document.getElementById('userEmail')?.value.trim() || '';
-    var role = document.getElementById('userRole')?.value || 'Administrateur';
+    var role = document.getElementById('userRole')?.value || '';
     var telephone = document.getElementById('userTelephone')?.value.trim() || '';
     var password = document.getElementById('userPassword')?.value.trim() || '';
     var statut = document.getElementById('userStatut')?.value || 'Actif';
@@ -245,6 +264,13 @@ async function updateUserFromModal() {
     }
     if (password && password.length < 8) {
         Swal.fire({ icon: 'error', title: "Mot de passe trop court", text: "Le mot de passe doit contenir au moins 8 caractères." });
+        return;
+    }
+
+    // ✅ FIX CRITIQUE : validation stricte du ROLEID AVANT envoi
+    var roleId = getRoleId(role);
+    if (roleId === null || roleId === undefined) {
+        Swal.fire({ icon: 'error', title: "Rôle invalide", text: "Le rôle sélectionné est introuvable. Valeur reçue : \"" + role + "\"" });
         return;
     }
 
@@ -265,7 +291,7 @@ async function updateUserFromModal() {
     params.append('id', currentUserId);
     params.append('nom', nom);
     params.append('email', email);
-    params.append('roleId', getRoleId(role));
+    params.append('roleId', roleId);
     params.append('telephone', telephone);
     params.append('active', statut === "Actif" ? 1 : 0);
     params.append('permissions', JSON.stringify(permissions));
@@ -358,13 +384,11 @@ async function backupDatabase() {
         Swal.fire({
             icon: 'error',
             title: 'Accès refusé',
-            text: 'Seul un Super Administrateur peut effectuer une sauvegarde.',
+            text: 'Seul un Super Admin peut effectuer une sauvegarde.',
             confirmButtonColor: '#dc3545'
         });
         return;
     }
-
-    var countdownSeconds = 5;
 
     var result = await Swal.fire({
         title: '🔄 Planifier la sauvegarde',
@@ -416,12 +440,8 @@ async function backupDatabase() {
             var seconds = 5;
             var interval = setInterval(function() {
                 seconds--;
-                if (countdownDisplay) {
-                    countdownDisplay.textContent = seconds;
-                }
-                if (confirmBtn) {
-                    confirmBtn.textContent = '📀 Planifier (' + seconds + 's)';
-                }
+                if (countdownDisplay) countdownDisplay.textContent = seconds;
+                if (confirmBtn) confirmBtn.textContent = '📀 Planifier (' + seconds + 's)';
                 if (seconds <= 0) {
                     clearInterval(interval);
                     if (confirmBtn) {
@@ -440,9 +460,7 @@ async function backupDatabase() {
             window._backupCountdownInterval = interval;
         },
         willClose: function() {
-            if (window._backupCountdownInterval) {
-                clearInterval(window._backupCountdownInterval);
-            }
+            if (window._backupCountdownInterval) clearInterval(window._backupCountdownInterval);
         },
         preConfirm: function() {
             var time = document.getElementById('backupTime').value;
@@ -509,9 +527,7 @@ async function backupDatabase() {
         await Swal.fire({ icon: 'error', title: 'Erreur', text: err.message, confirmButtonText: 'OK' });
     } finally {
         hideSpinner();
-        if (window._backupCountdownInterval) {
-            clearInterval(window._backupCountdownInterval);
-        }
+        if (window._backupCountdownInterval) clearInterval(window._backupCountdownInterval);
     }
 }
 
@@ -522,9 +538,7 @@ function startAdminCountdown(targetTime) {
     var parts = targetTime.split(':');
     target.setHours(parseInt(parts[0]), parseInt(parts[1]), 0, 0);
 
-    if (target < new Date()) {
-        target.setDate(target.getDate() + 1);
-    }
+    if (target < new Date()) target.setDate(target.getDate() + 1);
 
     var maxDuration = 24 * 60 * 60 * 1000;
 
@@ -547,13 +561,9 @@ function startAdminCountdown(targetTime) {
 
             if (countdownEl) {
                 countdownEl.textContent = String(hoursLeft).padStart(2, '0') + ':' + String(minutesLeft).padStart(2, '0') + ':' + String(secondsLeft).padStart(2, '0');
-                if (diff < 300000) {
-                    countdownEl.style.color = '#ff6b6b';
-                }
+                if (diff < 300000) countdownEl.style.color = '#ff6b6b';
             }
-            if (progressEl) {
-                progressEl.style.width = percent + '%';
-            }
+            if (progressEl) progressEl.style.width = percent + '%';
         }
     }, 1000);
 }
@@ -633,9 +643,7 @@ async function executeScheduledBackup() {
         await Swal.fire({ icon: 'error', title: 'Erreur', text: err.message, confirmButtonText: 'OK' });
     } finally {
         if (spinner) spinner.style.display = 'none';
-        if (window.backupCountdownTimer) {
-            clearInterval(window.backupCountdownTimer);
-        }
+        if (window.backupCountdownTimer) clearInterval(window.backupCountdownTimer);
     }
 }
 
@@ -649,7 +657,7 @@ function openRestoreModal() {
         Swal.fire({
             icon: 'error',
             title: 'Accès refusé',
-            text: 'Seul un Super Administrateur peut restaurer la base de données.',
+            text: 'Seul un Super Admin peut restaurer la base de données.',
             confirmButtonColor: '#dc3545'
         });
         return;
@@ -704,7 +712,7 @@ function loadBackupList() {
 
             if (data.success && data.backups && data.backups.length > 0) {
                 var html = '';
-                data.backups.forEach(function(backup, index) {
+                data.backups.forEach(function(backup) {
                     var isSelected = selectedRestoreFile && selectedRestoreFile.path === backup.path ? 'selected' : '';
                     var sizeMB = (backup.size / 1024 / 1024).toFixed(2);
 
@@ -764,9 +772,7 @@ function selectBackupFile(path, name, size, date) {
     document.querySelectorAll('.backup-item').forEach(function(el) { el.style.background = ''; });
     var items = document.querySelectorAll('.backup-item');
     items.forEach(function(el) {
-        if (el.textContent.indexOf(name) !== -1) {
-            el.style.background = '#e8f4fd';
-        }
+        if (el.textContent.indexOf(name) !== -1) el.style.background = '#e8f4fd';
     });
 
     showRestoreInfo(name, size, date);
@@ -824,18 +830,8 @@ function showRestoreInfo(name, size, date) {
 
 function addLog(message, type) {
     type = type || 'info';
-    var colors = {
-        info: '#4ec9b0',
-        warning: '#dcdcaa',
-        error: '#f44747',
-        success: '#4ec9b0'
-    };
-    var icons = {
-        info: 'ℹ️',
-        warning: '⚠️',
-        error: '❌',
-        success: '✅'
-    };
+    var colors = { info: '#4ec9b0', warning: '#dcdcaa', error: '#f44747', success: '#4ec9b0' };
+    var icons = { info: 'ℹ️', warning: '⚠️', error: '❌', success: '✅' };
 
     restoreLogs.push({ message: message, type: type, time: new Date().toLocaleTimeString() });
 
@@ -943,9 +939,7 @@ async function executeRestore() {
             addLog('Utilisation de la sauvegarde: ' + filePath, 'info');
         }
 
-        if (filePath) {
-            filePath = filePath.replace(/\\/g, '/');
-        }
+        if (filePath) filePath = filePath.replace(/\\/g, '/');
 
         if (!filePath) {
             addLog('Erreur: Aucun chemin de fichier disponible', 'error');
@@ -1106,7 +1100,7 @@ async function checkForUpdates() {
         Swal.fire({
             icon: 'warning',
             title: 'Accès limité',
-            text: 'Seul un Super Administrateur peut vérifier les mises à jour.',
+            text: 'Seul un Super Admin peut vérifier les mises à jour.',
             confirmButtonColor: '#ffc107'
         });
         return;
@@ -1200,26 +1194,11 @@ function showUpdateAvailableModal(data) {
         showCloseButton: true,
         showConfirmButton: false,
         showCancelButton: false,
-        confirmButtonText: '📥 Télécharger la mise à jour',
-        cancelButtonText: 'Fermer',
-        confirmButtonColor: '#28a745',
-        cancelButtonColor: '#6c757d',
         showDenyButton: true,
         denyButtonText: '📋 Voir les détails',
         denyButtonColor: '#17a2b8'
     }).then(function(result) {
-        if (result.isConfirmed) {
-            window.open(downloadUrl, '_blank');
-            Swal.fire({
-                icon: 'success',
-                title: 'Téléchargement démarré',
-                text: 'Le téléchargement de la mise à jour a commencé.',
-                timer: 3000,
-                showConfirmButton: false
-            });
-        } else if (result.isDenied) {
-            showFullChangelog(data);
-        }
+        if (result.isDenied) showFullChangelog(data);
     });
 }
 

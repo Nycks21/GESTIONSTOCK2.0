@@ -1,32 +1,18 @@
 'use strict';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXPORT — Module Utilisateurs (corrigé)
+// EXPORT — Module Utilisateurs
 // ─────────────────────────────────────────────────────────────────────────────
-
-// Fonction d'échappement HTML (définie localement)
-function escapeHtml(text) {
-    if (!text) return '';
-    var map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return String(text).replace(/[&<>"']/g, function(m) { return map[m]; });
-}
 
 function exportUsersToExcelOnly(event) {
     if (event) event.preventDefault();
 
-    // Vérifier que filteredUsers est défini et non vide
     if (typeof filteredUsers === 'undefined' || !filteredUsers || !filteredUsers.length) {
         Swal.fire({ icon: 'warning', title: 'Aucune donnée', text: 'Aucun utilisateur à exporter' });
         return false;
     }
 
-    // Définir un fallback pour getUserRoleName si non défini
+    // ✅ FIX : mapping ROLEID numérique
     var roleMap = {
         0: 'SuperAdmin',
         1: 'Admin',
@@ -38,12 +24,11 @@ function exportUsersToExcelOnly(event) {
         return roleMap[roleId] || 'Rôle ' + roleId;
     };
 
-    // En-têtes incluant la colonne "Dernière connexion"
     var headers = ['Nom d\'utilisateur', 'Nom', 'Email', 'Téléphone', 'Rôle', 'Statut', 'Date de création', 'Dernière connexion'];
 
     var rows = filteredUsers.map(function(user) {
         var lastLogin = user.LAST_LOGIN || user.LASTLOGIN || null;
-        var lastLoginFormatted = lastLogin ? formatDate(lastLogin) : 'Jamais'; // formatDate doit exister
+        var lastLoginFormatted = lastLogin ? formatDate(lastLogin) : 'Jamais';
 
         return [
             user.USERNAME || '',
@@ -62,7 +47,6 @@ function exportUsersToExcelOnly(event) {
         return '<tr>' + row.map(function(cell) { return '<td>' + escapeHtml(String(cell || '-')) + '</td>'; }).join('') + '</tr>';
     }).join('') + '</tbody></table></body></html>';
 
-    // Télécharger avec le bon MIME et BOM UTF-8
     downloadFile(html, 'utilisateurs.xls', 'application/vnd.ms-excel');
 
     Swal.fire({

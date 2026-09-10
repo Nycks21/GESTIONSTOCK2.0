@@ -38,7 +38,7 @@ public class GetDemandes : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                string where = "WHERE s.CREATED_BY = @userId AND s.DELETION_AT IS NULL";
+                string where = "WHERE s.CREATED_BY = @userId AND s.DELETION_AT IS NULL AND s.STATUT <> 'VALIDE'";
                 if (!string.IsNullOrEmpty(search))
                     where += " AND (s.NUMERO LIKE @search OR s.DESTINATION LIKE @search OR s.NOM LIKE @search)";
                 if (!string.IsNullOrEmpty(statut))

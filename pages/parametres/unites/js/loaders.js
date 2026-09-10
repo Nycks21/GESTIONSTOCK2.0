@@ -1,4 +1,4 @@
-// loaders.js
+// loaders.js – Version avec bouton Visualiser
 async function loadUnites(options = {}) {
     const silent = !!(options && options.silent);
     if (!silent) showSpinner();
@@ -21,7 +21,7 @@ async function loadUnites(options = {}) {
             if (AppState.page < 1) AppState.page = 1;
             if (AppState.totalPages > 0 && AppState.page > AppState.totalPages) AppState.page = AppState.totalPages;
             renderTable(AppState.unites);
-            loadStats(); // ← ajout pour mettre à jour les cartes de statistiques
+            loadStats();
             createPaginationControls(AppState.totalPages);
         } else {
             showToast('Erreur', data.message || 'Impossible de charger les unités', 'error');
@@ -61,7 +61,6 @@ function renderTable(unites) {
     }
     let html = '';
     unites.forEach(u => {
-        // Badge de statut stylisé
         const statusHtml = u.ACTIVE
             ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
             : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
@@ -77,6 +76,7 @@ function renderTable(unites) {
                 <td>${nomHtml}</td>
                 <td>${statusHtml}</td>
                 <td>
+                    <button type="button" class="btn btn-sm btn-info" onclick="viewUnite('${u.ID}')" title="Voir détails"><i class="fas fa-eye"></i></button>
                     <button type="button" class="btn btn-sm btn-primary" onclick="editUnite('${u.ID}')"><i class="fas fa-edit"></i></button>
                     <button type="button" class="btn btn-sm btn-danger" onclick="deleteUnite('${u.ID}')"><i class="fas fa-trash"></i></button>
                 </td>

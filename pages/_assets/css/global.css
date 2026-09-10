@@ -361,6 +361,7 @@ body.sidebar-collapsed .main-header {
 .nav-pills .nav-link {
     display: flex;
     align-items: center;
+    width: 100%;
     padding: 9px 12px;
     border-radius: var(--radius);
     color: var(--sidebar-text);
@@ -368,6 +369,25 @@ body.sidebar-collapsed .main-header {
     transition: background var(--transition), color var(--transition);
     white-space: nowrap;
     overflow: hidden;
+}
+.nav-pills .nav-link .menu-text { margin-left: 0; }
+.sortie-pending-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    margin-left: auto;
+    margin-right: 8px;
+    border-radius: 50%;
+    background-color: #CE6A6B;
+    color: #FFFFFF;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    text-align: center;
+    flex-shrink: 0;
 }
 .nav-pills .nav-link:hover {
     background: rgba(255,255,255,.08);

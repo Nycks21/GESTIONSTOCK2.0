@@ -84,6 +84,12 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                         if (lignes.Count == 0)
                             throw new Exception("Impossible de valider un bon sans ligne.");
 
+                        foreach (var ligne in lignes)
+                        {
+                            if (Convert.ToDecimal(ligne["qteR"]) <= 0)
+                                throw new Exception("Impossible de valider un bon dont toutes les quantités reçues ne sont pas renseignées.");
+                        }
+
                         // Pour chaque ligne, déduire du stock et journaliser le mouvement.
                         foreach (var ligne in lignes)
                         {

@@ -28,18 +28,44 @@ function formatDate(dateValue) {
     return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0') + '/' + date.getFullYear();
 }
 
-function getRoleId(roleName) {
-    var roles = {
-        'SuperAdmin': 0, 'Administrateur': 1, 'Admin': 1, 'User': 2,
-        'Professeur': 3, 'Secrétaire': 4, 'Comptable': 5, 'CPE': 6, 'Parent': 7
+// ✅ FIX : getRoleId accepte un ROLEID numérique (string ou number) ET les anciens libellés.
+//   Retourne null si le rôle est invalide → force une erreur explicite côté appelant.
+function getRoleId(roleValue) {
+    if (roleValue === null || roleValue === undefined || roleValue === '') {
+        return null;
+    }
+
+    // Cas 1 : valeur numérique (cas normal)
+    var asNum = parseInt(roleValue, 10);
+    if (!isNaN(asNum) && String(asNum) === String(roleValue).trim() && asNum >= 0 && asNum <= 4) {
+        return asNum;
+    }
+
+    // Cas 2 : compatibilité avec les anciens libellés
+    var byName = {
+        'SuperAdmin': 0,
+        'Admin': 1,
+        'Administrateur': 1,
+        'User': 2,
+        'Utilisateur': 2,
+        'Logisticien': 3,
+        'Comptable': 4
     };
-    return roles[roleName] !== undefined ? roles[roleName] : 1;
+    if (Object.prototype.hasOwnProperty.call(byName, roleValue)) {
+        return byName[roleValue];
+    }
+
+    console.error('❌ getRoleId : rôle invalide → "' + roleValue + '"');
+    return null;
 }
 
 function getUserRoleName(roleId) {
     var roles = {
-        0: 'SuperAdmin', 1: 'Administrateur', 2: 'User', 3: 'Professeur',
-        4: 'Secrétaire', 5: 'Comptable', 6: 'CPE', 7: 'Parent'
+        0: 'SuperAdmin',
+        1: 'Admin',
+        2: 'User',
+        3: 'Logisticien',
+        4: 'Comptable'
     };
     return roles[roleId] || 'Utilisateur';
 }

@@ -1,6 +1,8 @@
 'use strict';
 
-// Spinner
+// ============================================================
+// SPINNER
+// ============================================================
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -19,7 +21,9 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// Modales
+// ============================================================
+// MODALES (générique)
+// ============================================================
 function showModal(id) {
     var m = document.getElementById(id || 'emplacementModal');
     if (m) {
@@ -27,23 +31,10 @@ function showModal(id) {
         document.body.style.overflow = 'hidden';
     }
 }
-function closeEmplacementModal() {
-    var m = document.getElementById('emplacementModal');
-    if (m) {
-        m.style.display = 'none';
-        document.body.style.overflow = '';
-    }
-    AppState.editingId = null;
-    clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
-}
-function clearFieldErrors(ids) {
-    ids.forEach(function(id) {
-        var err = document.getElementById('err-' + id);
-        if (err) { err.textContent = ''; err.style.display = 'none'; }
-    });
-}
 
-// Pagination
+// ============================================================
+// PAGINATION
+// ============================================================
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -124,7 +115,9 @@ function createPaginationControls(totalPages) {
     wrapper.appendChild(container);
 }
 
-// Filtres
+// ============================================================
+// FILTRES
+// ============================================================
 function applyFilters() {
     var search = document.getElementById('search-filter')?.value || '';
     var type = document.getElementById('type-filter')?.value || '';
@@ -144,7 +137,9 @@ function resetFilters() {
     loadEmplacements({ silent: true });
 }
 
-// Gestion du nombre de lignes
+// ============================================================
+// GESTION DU NOMBRE DE LIGNES PAR PAGE
+// ============================================================
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
@@ -176,6 +171,9 @@ function initRowsPerPage() {
     });
 }
 
+// ============================================================
+// ÉCOUTEURS DE FILTRES
+// ============================================================
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
     var typeSelect = document.getElementById('type-filter');
@@ -191,15 +189,21 @@ function initFilterListeners() {
     if (parentSelect) parentSelect.addEventListener('change', applyFilters);
 }
 
+// ============================================================
+// INITIALISATION UI
+// ============================================================
 function initUIControls() {
     document.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
-            closeEmplacementModal();
+            // Utiliser closeEmplacementModal défini dans crud.js
+            if (typeof closeEmplacementModal === 'function') {
+                closeEmplacementModal();
+            }
         }
     });
     initFilterListeners();
     initRowsPerPage();
-    // Empêcher la soumission du formulaire
+    // Sécuriser le formulaire
     var form = document.getElementById('emplacementForm');
     if (form) {
         form.setAttribute('novalidate', 'novalidate');
@@ -210,13 +214,13 @@ function initUIControls() {
     });
 }
 
-// Expositions globales
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.applyFilters = applyFilters;
 window.resetFilters = resetFilters;
 window.showModal = showModal;
-window.closeEmplacementModal = closeEmplacementModal;
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.createPaginationControls = createPaginationControls;
 window.initUIControls = initUIControls;
-window.clearFieldErrors = clearFieldErrors;

@@ -69,7 +69,7 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
                         string sqlEntete = @"
                             UPDATE SENTREE SET NUMERO = @numero, DATE_ENTREE = @date, FOURNISSEUR_ID = @four,
                                 REFERENCE = @ref, NOTES = @notes, UPDATED_BY = @userId, UPDATED_AT = GETDATE()
-                            WHERE ID = @id";
+                            WHERE ID = @id AND STATUT = 'BROUILLON' AND DELETION_AT IS NULL";
                         using (var cmd = new SqlCommand(sqlEntete, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", id);
@@ -79,7 +79,8 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
                             cmd.Parameters.AddWithValue("@ref", reference);
                             cmd.Parameters.AddWithValue("@notes", notes);
                             cmd.Parameters.AddWithValue("@userId", userId);
-                            cmd.ExecuteNonQuery();
+                            if (cmd.ExecuteNonQuery() != 1)
+                                throw new Exception("Impossible de modifier un bon validé ou annulé.");
                         }
 
                         // Supprimer les anciennes lignes
