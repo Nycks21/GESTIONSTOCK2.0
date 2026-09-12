@@ -14,8 +14,10 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -143,8 +145,8 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                             else
                             {
                                 string insertStock = @"
-                                    INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE_INITIAL, QUANTITE_MVT, QUANTITE_ACTUELLE, CREATED_BY, CREATED_AT)
-                                    VALUES (@articleId, @empl, 0, @qte, @qte, @userId, GETDATE())";
+                                    INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE_MVT, QUANTITE_ACTUELLE, CREATED_BY, CREATED_AT)
+                                    VALUES (@articleId, @empl, @qte, @qte, @userId, GETDATE())";
                                 using (var cmd = new SqlCommand(insertStock, conn, trans))
                                 {
                                     cmd.Parameters.AddWithValue("@articleId", articleId);

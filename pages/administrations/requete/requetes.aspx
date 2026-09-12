@@ -146,7 +146,7 @@
                     </section>
 
                     <!-- ═══ SPINNER ═══ -->
-                    <div id="spinnerOverlay" aria-hidden="true" style="display:none;visibility:hidden;">
+                    <div id="spinnerOverlays" aria-hidden="true" style="display:none;visibility:hidden;">
                         <div class="spinner"></div>
                     </div>
 

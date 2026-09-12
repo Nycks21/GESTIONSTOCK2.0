@@ -13,8 +13,10 @@ public class GetMouvements : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }

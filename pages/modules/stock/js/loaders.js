@@ -1,4 +1,23 @@
-// loaders.js
+// ============================================================
+// CHARGEMENT DES DONNÉES – STOCK
+// ============================================================
+
+// ✅ Sécurité : garantir que AppState existe avant tout usage
+if (typeof window.AppState === "undefined") {
+    window.AppState = {
+        stock: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+        sortField: "ARTICLE_NOM",
+        sortOrder: "ASC",
+        filters: { search: "", article: "", emplacement: "" },
+        editingId: null,
+        articles: [],
+        emplacements: []
+    };
+}
 
 async function loadStock(options) {
     var silent = !!(options && options.silent);
@@ -88,7 +107,7 @@ function populateSelect(selectId, data, valueKey, textKey, addEmpty, emptyText) 
         opt.textContent = emptyText || '-- Sélectionner --';
         select.appendChild(opt);
     }
-    data.forEach(function(item) {
+    data.forEach(function (item) {
         var opt = document.createElement('option');
         opt.value = item[valueKey];
         opt.textContent = item[textKey];
@@ -106,7 +125,44 @@ function populateSelect(selectId, data, valueKey, textKey, addEmpty, emptyText) 
     }
 }
 
-// loaders.js (extrait modifié de renderTable)
+// ============================================================
+// UTILITAIRE : génère un badge de statut STOCK
+// ============================================================
+function getStockStatusBadge(statut) {
+    var baseStyle =
+        'display:inline-flex;align-items:center;gap:5px;' +
+        'padding:4px 10px;border-radius:20px;' +
+        'font-size:11.5px;font-weight:600;letter-spacing:0.3px;' +
+        'text-transform:uppercase;white-space:nowrap;';
+
+    var badges = {
+        NORMALE:
+            '<span style="' + baseStyle +
+                'background:linear-gradient(135deg,#66bb6a,#4caf50);' +
+                'color:#fff;box-shadow:0 2px 6px rgba(76,175,80,0.35);">' +
+                '<i class="fas fa-check-circle" style="font-size:10px;"></i> Normale' +
+            '</span>',
+        ALERTE:
+            '<span style="' + baseStyle +
+                'background:linear-gradient(135deg,#ffb74d,#ff9800);' +
+                'color:#fff;box-shadow:0 2px 6px rgba(255,152,0,0.35);">' +
+                '<i class="fas fa-exclamation-triangle" style="font-size:10px;"></i> Alerte' +
+            '</span>',
+        RUPTURE:
+            '<span style="' + baseStyle +
+                'background:linear-gradient(135deg,#ef5350,#f44336);' +
+                'color:#fff;box-shadow:0 2px 6px rgba(244,67,54,0.35);">' +
+                '<i class="fas fa-times-circle" style="font-size:10px;"></i> Rupture' +
+            '</span>'
+    };
+
+    return badges[statut] || ('<span style="' + baseStyle +
+        'background:#e2e3e5;color:#383d41;">' + (statut || '—') + '</span>');
+}
+
+// ============================================================
+// AFFICHAGE DU TABLEAU
+// ============================================================
 
 function renderTable(stock) {
     var tbody = document.getElementById('stockTableBody');
@@ -118,37 +174,42 @@ function renderTable(stock) {
     }
 
     var html = '';
-    stock.forEach(function(s) {
-        var disponible = Number(s.DISPONIBLE ?? s.quantite ?? s.stock ?? 0);
-        var seuil = Number(s.SEUIL_ALERTE ?? s.seuil ?? 0);
-        var nomArticle = s.ARTICLE_NOM || s.nomArticle || '';
-        var codeArticle = s.ARTICLE_CODE || s.codeArticle || '';
+    stock.forEach(function (s) {
+        var disponible = Number(s.DISPONIBLE ?? 0);
+        var seuil = Number(s.SEUIL_ALERTE ?? 0);
+        var nomArticle = s.ARTICLE_NOM || '';
+        var codeArticle = s.ARTICLE_CODE || '';
         var entree = Number(s.ENTREE || 0);
         var sortie = Number(s.SORTIE || 0);
-        var articleId = s.ARTICLE_ID || s.articleId || '';
-        var emplacementId = s.EMPLACEMENT_ID || s.emplacementId || '';
+        var articleId = s.ARTICLE_ID || '';
+        var emplacementId = s.EMPLACEMENT_ID || '';
 
-        // ✅ Utiliser le statut renvoyé par le handler (provenant de SSTOCK.STATUT)
-        var statut = String(s.STATUT || 'NORMALE');
-        var statutLabel = '';
-        var badgeClass = '';
-        switch (statut.toUpperCase()) {
-            case 'RUPTURE':
-                statutLabel = 'Rupture';
-                badgeClass = 'badge-danger';
-                break;
-            case 'ALERTE':
-                statutLabel = 'Stock faible';
-                badgeClass = 'badge-warning';
-                break;
-            default: // 'NORMALE'
-                statutLabel = 'Normal';
-                badgeClass = 'badge-success';
-                break;
+        // ─────────────────────────────────────────────────────────
+        // ✅ FIX : calcul du statut À PARTIR DE DISPONIBLE et SEUIL_ALERTE
+        //    Variables :
+        //      - statut      → clé technique (NORMALE / ALERTE / RUPTURE)
+        //      - statutLabel → libellé français affiché si besoin
+        // ─────────────────────────────────────────────────────────
+        var statut;
+        var statutLabel;
+
+        if (disponible <= 0) {
+            statut = 'RUPTURE';
+            statutLabel = 'Rupture';
+        } else if (seuil > 0 && disponible <= seuil) {
+            statut = 'ALERTE';
+            statutLabel = 'Alerte';
+        } else {
+            statut = 'NORMALE';
+            statutLabel = 'Normale';
         }
-        var statusHtml = '<span class="badge ' + badgeClass + '" style="padding:4px 10px;border-radius:20px;color:white;">' + statutLabel + '</span>';
 
-        var articleHtml = '<span style="font-weight:bold;">' + (codeArticle ? codeArticle + ' - ' : '') + (nomArticle || '') + '</span>';
+        // ✅ Badge généré via la fonction utilitaire
+        var statusHtml = getStockStatusBadge(statut);
+
+        var articleHtml = '<span style="font-weight:bold;">' +
+            (codeArticle ? codeArticle + ' - ' : '') + (nomArticle || '') +
+            '</span>';
 
         html += '<tr>' +
             '<td>' + articleHtml + '</td>' +
@@ -157,7 +218,9 @@ function renderTable(stock) {
             '<td><strong>' + disponible + '</strong></td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' +
-            '<button type="button" class="btn btn-sm btn-info" onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" title="Historique"><i class="fas fa-history"></i></button>' +
+            '<button type="button" class="btn btn-sm btn-info" ' +
+            'onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" ' +
+            'title="Historique"><i class="fas fa-history"></i></button>' +
             '</td>' +
             '</tr>';
     });
@@ -165,9 +228,12 @@ function renderTable(stock) {
     document.getElementById('resultsCounter').textContent = AppState.total + ' ligne(s)';
 }
 
-// Expositions
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.loadStock = loadStock;
 window.loadStats = loadStats;
 window.loadDropdowns = loadDropdowns;
 window.populateSelect = populateSelect;
 window.renderTable = renderTable;
+window.getStockStatusBadge = getStockStatusBadge;

@@ -15,8 +15,10 @@ public class FournisseurEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -31,7 +33,6 @@ public class FournisseurEdit : IHttpHandler, IRequiresSessionState
             if (string.IsNullOrEmpty(id))
                 throw new Exception("ID manquant");
 
-            string code = GetString(data, "code");
             string nom = GetString(data, "nom");
             string adresse = GetString(data, "adresse");
             string telephone = GetString(data, "telephone");
@@ -41,9 +42,9 @@ public class FournisseurEdit : IHttpHandler, IRequiresSessionState
             string siret = GetString(data, "siret");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom))
+            if (string.IsNullOrEmpty(nom))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Le code et le nom sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Le nom sont obligatoires.\"}");
                 return;
             }
 
@@ -55,7 +56,7 @@ public class FournisseurEdit : IHttpHandler, IRequiresSessionState
                 conn.Open();
                 string sql = @"
                     UPDATE SFOURNISSEUR
-                    SET CODE = @code, NOM = @nom, ADRESSE = @adresse, TELEPHONE = @telephone,
+                    SET NOM = @nom, ADRESSE = @adresse, TELEPHONE = @telephone,
                         EMAIL = @email, CONTACT_NOM = @contactNom, CONTACT_TELEPHONE = @contactTelephone,
                         SIRET = @siret, ACTIVE = @actif, UPDATED_BY = @userId, UPDATED_AT = GETDATE()
                     WHERE ID = @id AND DELETION_AT IS NULL";
@@ -63,7 +64,6 @@ public class FournisseurEdit : IHttpHandler, IRequiresSessionState
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@code", code);
                     cmd.Parameters.AddWithValue("@nom", nom);
                     cmd.Parameters.AddWithValue("@adresse", (object)adresse ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("@telephone", (object)telephone ?? DBNull.Value);

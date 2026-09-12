@@ -1,8 +1,10 @@
-// crud.js – Version avec visualisation
+// crud.js – Version avec génération automatique du CODE côté serveur
 var currentUniteId = null;
 var currentMode = 'add'; // 'add', 'edit', 'view'
 
-// Fonction utilitaire pour activer/désactiver les champs
+// ============================================================
+// UTILITAIRE : activer / désactiver les champs du modal
+// ============================================================
 function setFieldsEnabled(enabled) {
     var inputs = document.querySelectorAll('#uniteModal input, #uniteModal select, #uniteModal textarea');
     for (var i = 0; i < inputs.length; i++) {
@@ -17,6 +19,9 @@ function setFieldsEnabled(enabled) {
     }
 }
 
+// ============================================================
+// AJOUT
+// ============================================================
 function openAddUniteModal(e) {
     if (e) e.preventDefault();
     currentUniteId = null;
@@ -24,58 +29,108 @@ function openAddUniteModal(e) {
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-ruler"></i> Ajouter une unité';
     document.getElementById('uniteForm').reset();
     document.getElementById('uniteActif').value = '1';
+
+    // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
+    var codeEl = document.getElementById('uniteCode');
+    codeEl.value = '';
+    codeEl.placeholder = 'Sera généré automatiquement (UNT-XXX-00001)';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     setFieldsEnabled(true);
+
+    // setFieldsEnabled réactive les champs → on réapplique le readonly sur le code
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveUnite').style.display = '';
     clearErrors();
     document.getElementById('uniteModal').style.display = 'flex';
 }
 
+// ============================================================
+// MODIFICATION
+// ============================================================
 function editUnite(id) {
     var unite = AppState.unites.find(function (u) { return u.ID === id; });
     if (!unite) return;
     currentUniteId = id;
     currentMode = 'edit';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier une unité';
-    document.getElementById('uniteCode').value = unite.CODE || '';
+
+    var codeEl = document.getElementById('uniteCode');
+    codeEl.value = unite.CODE || '';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('uniteNom').value = unite.NOM || '';
     document.getElementById('uniteActif').value = unite.ACTIVE ? '1' : '0';
+
     setFieldsEnabled(true);
+
+    // Réapplication du readonly sur le code (le code est immuable)
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveUnite').style.display = '';
     clearErrors();
     document.getElementById('uniteModal').style.display = 'flex';
 }
 
+// ============================================================
+// VISUALISATION
+// ============================================================
 function viewUnite(id) {
     var unite = AppState.unites.find(function (u) { return u.ID === id; });
     if (!unite) return;
     currentUniteId = id;
     currentMode = 'view';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails de l\'unité';
-    document.getElementById('uniteCode').value = unite.CODE || '';
+
+    var codeEl = document.getElementById('uniteCode');
+    codeEl.value = unite.CODE || '';
+
     document.getElementById('uniteNom').value = unite.NOM || '';
     document.getElementById('uniteActif').value = unite.ACTIVE ? '1' : '0';
+
     setFieldsEnabled(false);
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveUnite').style.display = 'none';
     clearErrors();
     document.getElementById('uniteModal').style.display = 'flex';
 }
 
+// ============================================================
+// ENREGISTREMENT (ajout ou modification)
+// ============================================================
 async function saveUnite(e) {
     e.preventDefault();
+
     if (currentMode === 'view') {
         showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
         return;
     }
+
     var id = currentUniteId;
+
+    // ⚠️ Le CODE n'est plus envoyé :
+    //    - à l'ajout → généré côté serveur (UN-PROJET-00001)
+    //    - en modification → immuable, non modifiable
     var data = {
-        code: document.getElementById('uniteCode').value.trim(),
         nom: document.getElementById('uniteNom').value.trim(),
         actif: parseInt(document.getElementById('uniteActif').value) === 1
     };
 
+    // Validation : seul le nom est requis
     var valid = true;
     clearErrors();
-    if (!data.code) { showError('uniteCode', 'Le code est requis'); valid = false; }
     if (!data.nom) { showError('uniteNom', 'Le nom est requis'); valid = false; }
     if (!valid) return;
 
@@ -91,8 +146,12 @@ async function saveUnite(e) {
             body: JSON.stringify(payload)
         });
         var result = await resp.json();
+
         if (result.success) {
-            showToast('Succès', result.message || (id ? 'Unité modifiée' : 'Unité ajoutée'), 'success');
+            // Afficher le code généré s'il est renvoyé par le serveur
+            var msg = result.message || (id ? 'Unité modifiée' : 'Unité ajoutée');
+            if (result.code && !id) msg = 'Unité ajoutée avec succès (' + result.code + ').';
+            showToast('Succès', msg, 'success');
             closeUniteModal();
             loadUnites();
             loadStats();
@@ -106,6 +165,9 @@ async function saveUnite(e) {
     }
 }
 
+// ============================================================
+// SUPPRESSION
+// ============================================================
 async function deleteUnite(id) {
     var confirmResult = await Swal.fire({
         title: 'Confirmer la suppression',
@@ -142,17 +204,36 @@ async function deleteUnite(id) {
     }
 }
 
+// ============================================================
+// FERMETURE DU MODAL
+// ============================================================
 function closeUniteModal() {
     document.getElementById('uniteModal').style.display = 'none';
+
     // Réinitialiser l'état pour le prochain usage
     currentUniteId = null;
     currentMode = 'add';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-ruler"></i> Ajouter une unité';
+
     setFieldsEnabled(true);
+
+    // Repasser le champ code en mode "généré auto"
+    var codeEl = document.getElementById('uniteCode');
+    if (codeEl) {
+        codeEl.value = '';
+        codeEl.placeholder = 'Sera généré automatiquement (UNT-XXX-00001)';
+        codeEl.readOnly = true;
+        codeEl.style.backgroundColor = '#e9ecef';
+        codeEl.style.cursor = 'not-allowed';
+    }
+
     document.getElementById('btnSaveUnite').style.display = '';
     clearErrors();
 }
 
+// ============================================================
+// GESTION DES ERREURS DE CHAMP
+// ============================================================
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
@@ -166,7 +247,9 @@ function clearErrors() {
     }
 }
 
-// Expositions
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.openAddUniteModal = openAddUniteModal;
 window.editUnite = editUnite;
 window.viewUnite = viewUnite;

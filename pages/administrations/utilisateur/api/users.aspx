@@ -18,7 +18,7 @@ protected void Page_Load(object sender, EventArgs e)
     try
     {
         // ✅ Authentification : Admin (1) ou SuperAdmin (0)
-        if (!AuthHelper.RequireApiAuth(Context, 1))
+        if (!AuthHelper.RequireApiAuth(Context, -1))
         {
             WriteResponse(false, "Accès non autorisé");
             return;

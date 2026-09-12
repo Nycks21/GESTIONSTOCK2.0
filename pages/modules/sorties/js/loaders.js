@@ -3,8 +3,24 @@
 // ============================================================
 
 function formatNumber(value, decimals) {
-    if (value === undefined || value === null || isNaN(value)) return '0';
+    if (value === undefined || value === null || isNaN(value)) return "0";
     return Number(value).toFixed(decimals || 0);
+}
+
+// Sécurité : garantir que AppState existe
+if (typeof window.AppState === "undefined") {
+    window.AppState = {
+        sorties: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+        sortField: "DATE_SORTIE",
+        sortOrder: "DESC",
+        filters: { search: "", destination: "", statut: "" },
+        editingId: null,
+        articles: [],
+    };
 }
 
 async function loadSorties(options) {
@@ -36,11 +52,7 @@ async function loadSorties(options) {
             createPaginationControls(AppState.totalPages);
             loadSortieStats();
         } else {
-            showToast(
-                "Erreur",
-                data.message || "Impossible de charger les bons",
-                "error",
-            );
+            showToast("Erreur", data.message || "Impossible de charger les bons", "error");
         }
     } catch (e) {
         showToast("Erreur", e.message, "error");
@@ -57,11 +69,9 @@ async function loadSortieStats() {
         if (data.success) {
             document.getElementById("statTotal").textContent = data.total ?? 0;
             document.getElementById("statValide").textContent = data.valide ?? 0;
-            document.getElementById("statBrouillon").textContent =
-                data.brouillon ?? 0;
+            document.getElementById("statBrouillon").textContent = data.brouillon ?? 0;
             document.getElementById("statAnnule").textContent = data.annule ?? 0;
-            // ✅ Mise à jour du badge après chargement des stats
-            if (typeof updateSortieBadge === 'function') {
+            if (typeof updateSortieBadge === "function") {
                 updateSortieBadge(data.pending);
             }
         }
@@ -71,47 +81,28 @@ async function loadSortieStats() {
 }
 
 async function loadDropdownsSortie() {
-    // Récupération des articles pour les lignes
     try {
-        var url =
-            API.BASE + API.HANDLERS_PATH + API.ARTICLES + "?page=1&pageSize=999999";
+        var url = API.BASE + API.HANDLERS_PATH + API.ARTICLES + "?page=1&pageSize=999999";
         var resp = await fetch(url);
         var data = await resp.json();
         if (data.success) {
             AppState.articles = data.Articles || [];
-            // Mettre à jour les selects déjà présents
             document.querySelectorAll(".ligne-article").forEach(function (sel) {
                 var currentVal = sel.value;
-                sel.innerHTML =
-                    '<option value="">-- Article --</option>' +
-                    AppState.articles
-                        .map(function (a) {
-                            return (
-                                '<option value="' +
-                                a.ID +
-                                '">' +
-                                a.CODE +
-                                " - " +
-                                a.NOM +
-                                "</option>"
-                            );
-                        })
-                        .join("");
+                sel.innerHTML = '<option value="">-- Article --</option>' +
+                    AppState.articles.map(function (a) {
+                        return '<option value="' + a.ID + '">' + a.CODE + " - " + a.NOM + "</option>";
+                    }).join("");
                 sel.value = currentVal;
-                if (typeof refreshArticleSelect === 'function') {
+                if (typeof refreshArticleSelect === "function") {
                     refreshArticleSelect(sel);
                 }
             });
         }
-    } catch (e) {
-        /* ignore */
-    }
+    } catch (e) { /* ignore */ }
 }
 
-// ============================================================
-// FONCTIONS D'AFFICHAGE
-// ============================================================
-
+// ─── FORMATAGE DATE ───
 function formatDateValue(value, includeTime) {
     if (value === null || value === undefined || value === "") return "-";
     var date = null;
@@ -131,120 +122,145 @@ function formatDateValue(value, includeTime) {
     }
     if (!date || isNaN(date.getTime())) return "-";
     var options = includeTime
-        ? {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-              hour: "2-digit",
-              minute: "2-digit",
-          }
-        : {
-              day: "2-digit",
-              month: "2-digit",
-              year: "numeric",
-          };
+        ? { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
+        : { day: "2-digit", month: "2-digit", year: "numeric" };
     return date.toLocaleString("fr-FR", options);
 }
 
+// ─── RENDU DU TABLEAU ───
 function renderSortiesTable(sorties) {
     var tbody = document.getElementById("sortiesTableBody");
     if (!tbody) return;
     if (!sorties.length) {
-        tbody.innerHTML =
-            '<tr><td colspan="8" class="text-center">Aucun bon de sortie trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Aucun bon de sortie trouvé</td></tr>';
         document.getElementById("resultsCounter").textContent = "0 bon(s)";
         return;
     }
+
+    var currentRoleId =
+        typeof getCurrentUserRole === "function" ? getCurrentUserRole() : -1;
+    var canValidate = currentRoleId === 0 || currentRoleId === 3;
+
     var html = "";
     sorties.forEach(function (s) {
         var lignes = s.Lignes || [];
         var statut = s.STATUT;
-        var statutBadge =
-            {
-                VIDE: '<span class="badge bg-warning" style="background:#F5DF4D;padding:4px 10px;border-radius:20px;color:#1E0F1C;">QR vide</span>',
+
+        // ─── BADGES DE STATUT MODERNES ───
+        var statutBadge = (function () {
+            var baseStyle =
+                'display:inline-flex;align-items:center;gap:5px;' +
+                'padding:5px 12px;border-radius:20px;' +
+                'font-size:11.5px;font-weight:600;letter-spacing:0.3px;' +
+                'text-transform:uppercase;white-space:nowrap;';
+
+            var badges = {
+                VIDE:
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#ffb74d,#ff9800);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(255,152,0,0.35);">' +
+                        '<i class="fas fa-qrcode" style="font-size:10px;"></i> QR vide' +
+                    '</span>',
                 BROUILLON:
-                    '<span class="badge bg-warning" style="background:#B6D8F2;padding:4px 10px;border-radius:20px;color:#1E0F1C;">En cours</span>',
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#64b5f6,#2196f3);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(33,150,243,0.35);">' +
+                        '<i class="fas fa-pencil-alt" style="font-size:10px;"></i> En cours' +
+                    '</span>',
                 VALIDE:
-                    '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:#fff;">Validé</span>',
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#66bb6a,#4caf50);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(76,175,80,0.35);">' +
+                        '<i class="fas fa-check-circle" style="font-size:10px;"></i> Validé' +
+                    '</span>',
                 ANNULE:
-                    '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:#fff;">Annulé</span>',
-            }[statut] || statut;
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#ef5350,#f44336);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(244,67,54,0.35);">' +
+                        '<i class="fas fa-times-circle" style="font-size:10px;"></i> Annulé' +
+                    '</span>',
+                TERMINE:
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#26c6da,#009688);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(0,150,136,0.35);">' +
+                        '<i class="fas fa-check-double" style="font-size:10px;"></i> Reçu' +
+                    '</span>'
+            };
+
+            return badges[statut] || ('<span style="' + baseStyle +
+                'background:#e2e3e5;color:#383d41;">' + statut + '</span>');
+        })();
+
         var articlesHtml = lignes.length
-            ? lignes
-                  .map(function (ligne) {
-                      return (
-                          '<div class="bon-article-item">' +
-                          "<span>" +
-                          (ligne.ARTICLE_CODE ? ligne.ARTICLE_CODE + " - " : "") +
-                          (ligne.ARTICLE_NOM || ligne.ARTICLE_ID || "") +
-                          "</span>" +
-                          "</div>"
-                      );
-                  })
-                  .join("")
+            ? lignes.map(function (ligne) {
+                return '<div class="bon-article-item">' +
+                    "<span>" +
+                    (ligne.ARTICLE_CODE ? ligne.ARTICLE_CODE + " - " : "") +
+                    (ligne.ARTICLE_NOM || ligne.ARTICLE_ID || "") +
+                    "</span></div>";
+            }).join("")
             : '<span class="text-muted">Aucun article</span>';
+
         var quantitesHtml = lignes.length
-            ? lignes
-                  .map(function (ligne) {
-                      return (
-                          '<div class="bon-quantity-item">' +
-                          formatNumber(ligne.QUANTITE_R, 2) +
-                          "</div>"
-                      );
-                  })
-                  .join("")
+            ? lignes.map(function (ligne) {
+                return '<div class="bon-quantity-item">' +
+                    formatNumber(ligne.QUANTITE_R, 2) + "</div>";
+            }).join("")
             : '<span class="text-muted">-</span>';
 
-        // La validation est disponible uniquement si toutes les lignes sont renseignées.
-        var allQteR = lignes.length > 0 && lignes.every(function (ligne) {
-            return ligne.QUANTITE_R > 0;
-        });
+        // Cellule "Date réception"
+        var dateReceptionHtml = s.DATE_RECEPTION
+            ? '<span style="color:#009688;font-weight:600;font-size:12.5px;">' +
+                  '<i class="fas fa-calendar-check" style="margin-right:4px;opacity:0.7;"></i>' +
+                  formatDateValue(s.DATE_RECEPTION, false) + '</span>'
+            : '<span class="text-muted" style="font-size:12px;">—</span>';
 
-        // --- Construction des actions ---
-        var actionsHtml = '';
+        var allQteR = lignes.length > 0 &&
+            lignes.every(function (ligne) { return ligne.QUANTITE_R > 0; });
 
-        // 1. Bouton Visualiser (toujours présent)
-        actionsHtml += '<button type="button" class="btn btn-sm btn-info" onclick="viewSortie(\'' + s.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button> ';
+        // ─── ACTIONS (boutons modernes) ───
+        var actionsHtml = "";
 
-        // 2. Si le statut n'est pas VALIDE, on affiche les autres actions
-        if (statut !== 'VALIDE') {
-            actionsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="editSortie(\'' + s.ID + '\')"><i class="fas fa-edit"></i></button> ';
-            actionsHtml += '<button type="button" class="btn btn-sm btn-danger" onclick="deleteSortie(\'' + s.ID + '\')"><i class="fas fa-trash"></i></button> ';
-            if (statut === 'BROUILLON' && allQteR) {
-                actionsHtml += '<button type="button" class="btn btn-sm btn-success" onclick="validerSortie(\'' + s.ID + '\')"><i class="fas fa-check"></i></button> ';
+        // 1. Visualiser (toujours présent)
+        actionsHtml +=
+            '<button type="button" class="btn-icon btn-info" onclick="viewSortie(\'' +
+            s.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button>';
+
+        // 2. Actions si statut != VALIDE et != TERMINE
+        if (statut !== "VALIDE" && statut !== "TERMINE") {
+            actionsHtml +=
+                '<button type="button" class="btn-icon btn-primary" onclick="editSortie(\'' +
+                s.ID + '\')" title="Modifier"><i class="fas fa-edit"></i></button>';
+
+            actionsHtml +=
+                '<button type="button" class="btn-icon btn-danger" onclick="deleteSortie(\'' +
+                s.ID + '\')" title="Supprimer"><i class="fas fa-trash"></i></button>';
+
+            if (statut === "BROUILLON" && allQteR && canValidate) {
+                actionsHtml +=
+                    '<button type="button" class="btn-icon btn-success btn-pulse" ' +
+                    'onclick="validerSortie(\'' + s.ID + '\')" ' +
+                    'title="Valider la sortie"><i class="fas fa-check"></i></button>';
             }
         }
 
         html +=
             "<tr>" +
-            "<td><strong>" +
-            s.NUMERO +
-            "</strong></td>" +
-            "<td>" +
-            formatDateValue(s.DATE_SORTIE, true) +
-            "</td>" +
-            '<td class="bon-articles-cell">' +
-            articlesHtml +
-            "</td>" +
-            '<td class="bon-quantities-cell">' +
-            quantitesHtml +
-            "</td>" +
-            "<td>" +
-            (s.NOM || "") +
-            "</td>" +
-            "<td>" +
-            statutBadge +
-            "</td>" +
-            "<td>" +
-            actionsHtml +
-            "</td></tr>";
+            "<td><strong>" + s.NUMERO + "</strong></td>" +
+            "<td>" + formatDateValue(s.DATE_SORTIE, true) + "</td>" +
+            "<td>" + dateReceptionHtml + "</td>" +
+            '<td class="bon-articles-cell">' + articlesHtml + "</td>" +
+            '<td class="bon-quantities-cell">' + quantitesHtml + "</td>" +
+            "<td>" + (s.NOM || "") + "</td>" +
+            "<td>" + statutBadge + "</td>" +
+            "<td>" + actionsHtml + "</td></tr>";
     });
+
     tbody.innerHTML = html;
-    document.getElementById("resultsCounter").textContent =
-        AppState.total + " bon(s)";
+    document.getElementById("resultsCounter").textContent = AppState.total + " bon(s)";
 }
 
-// Expositions globales
+// ─── EXPOSITIONS ───
 window.loadSorties = loadSorties;
 window.loadSortieStats = loadSortieStats;
 window.loadDropdownsSortie = loadDropdownsSortie;

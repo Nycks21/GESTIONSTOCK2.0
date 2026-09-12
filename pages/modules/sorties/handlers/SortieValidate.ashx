@@ -14,9 +14,20 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ 1. Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
+
+        // ✅ 2. Autorisation : seuls SuperAdmin (0) et Logisticien (3) peuvent valider
+        int userRole = AuthHelper.GetUserRole(ctx);
+        if (userRole != 0 && userRole != 3)
+        {
+            ctx.Response.StatusCode = 403;
+            ctx.Response.Write("{\"success\":false,\"message\":\"Seul un Logisticien ou SuperAdmin peut valider une sortie\"}");
             return;
         }
 
@@ -124,7 +135,6 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                                 disponible += Convert.ToDecimal(stock["quantite"]);
                             if (disponible < qteR)
                             {
-                                // Utilisation de la concaténation classique (pas d'interpolation)
                                 throw new Exception("Stock insuffisant pour l'article " + articleId +
                                     ". Disponible : " + disponible + ", demandé : " + qteR + ".");
                             }

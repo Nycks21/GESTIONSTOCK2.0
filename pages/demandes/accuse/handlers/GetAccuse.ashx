@@ -14,14 +14,17 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
         try
         {
+            int userId = AuthHelper.GetUserId(ctx);
             int page = 1, pageSize = 10;
             string search = "", destination = "", sort = "DATE_SORTIE", order = "DESC";
 
@@ -32,6 +35,15 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
             if (!string.IsNullOrEmpty(ctx.Request["sort"])) sort = ctx.Request["sort"];
             if (!string.IsNullOrEmpty(ctx.Request["order"])) order = ctx.Request["order"];
 
+            // ✅ Whitelist anti-injection SQL sur ORDER BY
+            //    ➕ AJOUT : "DATE_RECEPTION" dans la liste autorisée
+            var allowedSort = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "DATE_SORTIE", "DATE_RECEPTION", "NUMERO", "NOM", "STATUT" };
+            var allowedOrder = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "ASC", "DESC" };
+            if (!allowedSort.Contains(sort)) sort = "DATE_SORTIE";
+            if (!allowedOrder.Contains(order)) order = "DESC";
+
             string connStr = AuthHelper.ConnectionString;
             var resultList = new List<Dictionary<string, object>>();
 
@@ -39,25 +51,30 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                string where = "WHERE s.DELETION_AT IS NULL AND s.STATUT = 'VALIDE'";
+                // ✅ FIX : CREATED_BY au lieu de USERID (colonne réelle de SSORTIE)
+                string where = "WHERE s.DELETION_AT IS NULL AND s.STATUT IN ('VALIDE', 'TERMINE') AND s.CREATED_BY = @userId";
                 if (!string.IsNullOrEmpty(search))
                     where += " AND (s.NUMERO LIKE @search OR s.DESTINATION LIKE @search OR s.NOM LIKE @search)";
                 if (!string.IsNullOrEmpty(destination))
                     where += " AND s.DESTINATION LIKE @destination";
 
-                string orderBy = "ORDER BY " + sort + " " + order;
+                string orderBy = "ORDER BY s." + sort + " " + order;
 
+                // Comptage
                 string countSql = "SELECT COUNT(*) FROM SSORTIE s " + where;
                 int total = 0;
                 using (var cmd = new SqlCommand(countSql, conn))
                 {
+                    cmd.Parameters.AddWithValue("@userId", userId);
                     if (!string.IsNullOrEmpty(search)) cmd.Parameters.AddWithValue("@search", "%" + search + "%");
                     if (!string.IsNullOrEmpty(destination)) cmd.Parameters.AddWithValue("@destination", "%" + destination + "%");
                     total = (int)cmd.ExecuteScalar();
                 }
 
+                // ✅ Données — AJOUT de s.DATE_RECEPTION dans le SELECT
                 string dataSql = @"
-                    SELECT s.ID, s.NUMERO, s.DATE_SORTIE, s.STATUT, s.DESTINATION, s.NOM, s.FONCTION, s.NOTES, s.CREATED_AT
+                    SELECT s.ID, s.NUMERO, s.DATE_SORTIE, s.DATE_RECEPTION,
+                           s.STATUT, s.DESTINATION, s.NOM, s.FONCTION, s.NOTES, s.CREATED_AT
                     FROM SSORTIE s
                     " + where + @"
                     " + orderBy + @"
@@ -66,6 +83,7 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
                 var tempList = new List<Dictionary<string, object>>();
                 using (var cmd = new SqlCommand(dataSql, conn))
                 {
+                    cmd.Parameters.AddWithValue("@userId", userId);
                     if (!string.IsNullOrEmpty(search)) cmd.Parameters.AddWithValue("@search", "%" + search + "%");
                     if (!string.IsNullOrEmpty(destination)) cmd.Parameters.AddWithValue("@destination", "%" + destination + "%");
                     cmd.Parameters.AddWithValue("@offset", (page - 1) * pageSize);
@@ -78,9 +96,15 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
                             var obj = new Dictionary<string, object>();
                             string id = reader["ID"].ToString();
                             obj["ID"] = id;
-                            obj["NUMERO"] = reader["NUMERO"].ToString();
+                            obj["NUMERO"] = reader["NUMERO"] == DBNull.Value ? "" : reader["NUMERO"].ToString();
                             obj["DATE_SORTIE"] = reader["DATE_SORTIE"] == DBNull.Value ? null : reader["DATE_SORTIE"];
-                            obj["STATUT"] = reader["STATUT"].ToString();
+
+                            // ✅ AJOUT : date de réception
+                            obj["DATE_RECEPTION"] = reader["DATE_RECEPTION"] == DBNull.Value
+                                ? null
+                                : (object)reader["DATE_RECEPTION"];
+
+                            obj["STATUT"] = reader["STATUT"] == DBNull.Value ? "" : reader["STATUT"].ToString();
                             obj["DESTINATION"] = reader["DESTINATION"] == DBNull.Value ? "" : reader["DESTINATION"].ToString();
                             obj["NOM"] = reader["NOM"] == DBNull.Value ? "" : reader["NOM"].ToString();
                             obj["FONCTION"] = reader["FONCTION"] == DBNull.Value ? "" : reader["FONCTION"].ToString();
@@ -91,6 +115,7 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
                     }
                 }
 
+                // Charger les lignes pour chaque sortie
                 foreach (var obj in tempList)
                 {
                     string id = obj["ID"].ToString();
@@ -110,7 +135,8 @@ public class GetAccuse : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(
+                new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
     }
 

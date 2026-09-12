@@ -16,11 +16,14 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+// ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
+
 
         try
         {
@@ -36,7 +39,6 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
             if (!CanEdit(ctx, id))
                 throw new Exception("Impossible de modifier un bon validé ou annulé.");
 
-            string numero = GetString(data, "numero");
             string dateSortieStr = GetString(data, "dateSortie");
             DateTime dateSortie;
             bool hasNewDate = DateTime.TryParse(dateSortieStr, out dateSortie);
@@ -48,9 +50,9 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
 
             ArrayList lignes = data.ContainsKey("lignes") ? (ArrayList)data["lignes"] : new ArrayList();
 
-            if (string.IsNullOrEmpty(numero) || string.IsNullOrEmpty(destination) || lignes.Count == 0)
+            if (string.IsNullOrEmpty(destination) || lignes.Count == 0)
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Numéro, destination et au moins une ligne sont requis.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Destination et au moins une ligne sont requis.\"}");
                 return;
             }
 
@@ -66,13 +68,12 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
                     {
                         // 1. Mise à jour de l'entête (statut non modifié)
                         string sqlEntete = @"
-                            UPDATE SSORTIE SET NUMERO = @numero, DATE_SORTIE = CASE WHEN @date IS NULL THEN DATE_SORTIE ELSE @date END, DESTINATION = @dest, NOM = @nom, FONCTION = @fonction, NOTES = @notes,
+                            UPDATE SSORTIE SET DATE_SORTIE = CASE WHEN @date IS NULL THEN DATE_SORTIE ELSE @date END, DESTINATION = @dest, NOM = @nom, FONCTION = @fonction, NOTES = @notes,
                                 UPDATED_BY = @userId, UPDATED_AT = GETDATE()
                             WHERE ID = @id AND STATUT = 'BROUILLON' AND DELETION_AT IS NULL";
                         using (var cmd = new SqlCommand(sqlEntete, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", id);
-                            cmd.Parameters.AddWithValue("@numero", numero);
                             cmd.Parameters.Add("@date", SqlDbType.DateTime).Value = hasNewDate ? (object)dateSortie : DBNull.Value;
                             cmd.Parameters.AddWithValue("@dest", destination);
                             cmd.Parameters.AddWithValue("@nom", nom);

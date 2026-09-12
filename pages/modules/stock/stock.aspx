@@ -12,7 +12,8 @@
     <link rel="stylesheet" href="css/style.css?v=<%=AuthHelper.Version %>" />
   </head>
 
-  <body class="hold-transition" data-version="<%=AuthHelper.Version %>">
+  <body class="hold-transition" data-version="<%=AuthHelper.Version %>"
+    data-user-role="<%= AuthHelper.GetUserRole(Context) %>">
     <form id="stockForm" runat="server">
       <div class="wrapper">
         <!-- Topbar -->
@@ -143,11 +144,11 @@
                             <th onclick="sortData('ARTICLE_NOM')" style="cursor:pointer; width:260px;">ARTICLE <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('ENTREE')" style="cursor:pointer; width:110px;">ENTRÉE <i
-                              class="fas fa-sort ml-1"></i></th>
+                                class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('SORTIE')" style="cursor:pointer; width:110px;">SORTIE <i
-                              class="fas fa-sort ml-1"></i></th>
+                                class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DISPONIBLE')" style="cursor:pointer; width:120px;">DISPONIBLE <i
-                              class="fas fa-sort ml-1"></i></th>
+                                class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:150px;">STATUT <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th style="width:150px;">ACTIONS</th>
@@ -258,8 +259,14 @@
       </div>
 
       <!-- SPINNER -->
-      <div id="spinnerOverlay" aria-hidden="true" style="display:none;visibility:hidden;">
-        <div class="spinner"></div>
+      <div id="spinnerOverlays" aria-hidden="true" style="display:none;visibility:hidden;">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:12px;">
+          <div class="spinner"></div>
+          <div id="spinnerMessage" style="color:#fff;font-size:14px;font-weight:500;text-align:center;
+                background:rgba(0,0,0,0.35);padding:6px 14px;border-radius:20px;
+                display:none;max-width:280px;">
+          </div>
+        </div>
       </div>
 
       <!-- SCRIPTS -->

@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="EntreeAdd" %>
+﻿﻿<%@ WebHandler Language="C#" Class="EntreeAdd" %>
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -15,8 +15,10 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -27,8 +29,7 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            // Récupération des champs
-            string numero = GetString(data, "numero");
+            // ⚠️ Le NUMERO n'est plus envoyé par le client : il est généré côté serveur.
             string dateEntreeStr = GetString(data, "dateEntree");
             DateTime dateEntree;
             if (string.IsNullOrEmpty(dateEntreeStr) || !DateTime.TryParse(dateEntreeStr, out dateEntree))
@@ -44,14 +45,21 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
             ArrayList lignes = data.ContainsKey("lignes") ? (ArrayList)data["lignes"] : new ArrayList();
 
             // Validation
-            if (string.IsNullOrEmpty(numero) || string.IsNullOrEmpty(fournisseurId) || lignes.Count == 0)
+            if (string.IsNullOrEmpty(fournisseurId) || lignes.Count == 0)
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Numéro, fournisseur et au moins une ligne sont requis.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Fournisseur et au moins une ligne sont requis.\"}");
                 return;
             }
 
+            // 🔑 Récupération du code projet (Web.config : ProjectCode)
+            string projetCode = AuthHelper.GetProjectCode(ctx);
+            if (string.IsNullOrEmpty(projetCode)) projetCode = "TALIM";
+            projetCode = projetCode.Trim().ToUpperInvariant().Replace(" ", "");
+
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
+            string id = Guid.NewGuid().ToString();
+            string numero;
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -60,9 +68,54 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
                 {
                     try
                     {
-                        string id = Guid.NewGuid().ToString();
+                        // -----------------------------------------------------------
+                        // 1) Génération atomique du numéro de séquence pour le projet
+                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT,
+                        //    ce qui empêche toute collision entre utilisateurs simultanés.
+                        // -----------------------------------------------------------
+                        string sqlSeq = @"
+                            IF NOT EXISTS (
+                                SELECT 1 FROM SENTREE_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
+                                WHERE PROJET_CODE = @projet
+                            )
+                            BEGIN
+                                INSERT INTO SENTREE_SEQUENCE (PROJET_CODE, DERNIER_NUMERO)
+                                VALUES (@projet, 0);
+                            END
 
-                        // 1. Insertion de l'entête (statut = BROUILLON)
+                            UPDATE SENTREE_SEQUENCE
+                            SET DERNIER_NUMERO = DERNIER_NUMERO + 1
+                            OUTPUT INSERTED.DERNIER_NUMERO
+                            WHERE PROJET_CODE = @projet;";
+
+                        int seq;
+                        using (var cmdSeq = new SqlCommand(sqlSeq, conn, trans))
+                        {
+                            cmdSeq.Parameters.AddWithValue("@projet", projetCode);
+                            object scalar = cmdSeq.ExecuteScalar();
+                            seq = Convert.ToInt32(scalar);
+                        }
+
+                        // -----------------------------------------------------------
+                        // 2) Construction du numéro : ENT-{PROJET}-{00001}
+                        // -----------------------------------------------------------
+                        numero = string.Format("ENT-{0}-{1:D5}", projetCode, seq);
+
+                        // -----------------------------------------------------------
+                        // 3) Vérification anti-doublon (ceinture + bretelles)
+                        // -----------------------------------------------------------
+                        using (var cmdCheck = new SqlCommand(
+                            "SELECT COUNT(1) FROM SENTREE WHERE NUMERO = @numero", conn, trans))
+                        {
+                            cmdCheck.Parameters.AddWithValue("@numero", numero);
+                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
+                            if (exists > 0)
+                                throw new Exception("Le numéro généré existe déjà, veuillez réessayer.");
+                        }
+
+                        // -----------------------------------------------------------
+                        // 4) Insertion de l'entête (statut = BROUILLON)
+                        // -----------------------------------------------------------
                         string sqlEntete = @"
                             INSERT INTO SENTREE (ID, NUMERO, DATE_ENTREE, FOURNISSEUR_ID, REFERENCE, NOTES, STATUT, CREATED_BY, CREATED_AT)
                             VALUES (@id, @numero, @date, @four, @ref, @notes, 'BROUILLON', @userId, GETDATE())";
@@ -79,7 +132,9 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
                             cmd.ExecuteNonQuery();
                         }
 
-                        // 2. Insertion des lignes
+                        // -----------------------------------------------------------
+                        // 5) Insertion des lignes
+                        // -----------------------------------------------------------
                         decimal totalHT = 0, totalTVA = 0, totalTTC = 0;
 
                         foreach (Dictionary<string, object> ligne in lignes)
@@ -137,7 +192,9 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
                             }
                         }
 
-                        // 3. Mise à jour des totaux dans l'entête
+                        // -----------------------------------------------------------
+                        // 6) Mise à jour des totaux dans l'entête
+                        // -----------------------------------------------------------
                         string sqlUpdateTotaux = @"
                             UPDATE SENTREE SET TOTAL_HT = @totalHT, TOTAL_TVA = @totalTVA, TOTAL_TTC = @totalTTC
                             WHERE ID = @id";
@@ -157,12 +214,13 @@ public class EntreeAdd : IHttpHandler, IRequiresSessionState
                         {
                             success = true,
                             id = id,
-                            message = "Bon d'entrée créé avec succès."
+                            numero = numero,
+                            message = "Bon d'entrée créé avec succès (" + numero + ")."
                         }));
                     }
                     catch
                     {
-                        trans.Rollback();
+                        try { trans.Rollback(); } catch { /* ignore */ }
                         throw;
                     }
                 }

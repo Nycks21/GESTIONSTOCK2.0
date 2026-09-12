@@ -2,12 +2,31 @@
 // EXPORT DES DONNÉES (EXCEL / PDF) - ACCUSE
 // ============================================================
 
+// ✅ Formate une date SQL (peut être ISO, /Date(...)/, ou null)
+function formatDateForExport(value) {
+    if (value === null || value === undefined || value === "") return '';
+    try {
+        var dateValue = String(value);
+        var dotNetDate = dateValue.match(/^\/Date\((-?\d+)\)\/$/);
+        var d = dotNetDate ? new Date(Number(dotNetDate[1])) : new Date(dateValue);
+        if (isNaN(d.getTime())) return '';
+        var pad = function (v) { return String(v).padStart(2, '0'); };
+        return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear();
+    } catch (e) {
+        return '';
+    }
+}
+
 function buildAccuseExportRows() {
-    var rows = [['N°', 'Date', 'Destination', 'Bénéficiaire', 'Fonction', 'Statut', 'Notes']];
+    var rows = [[
+        'N°', 'Date sortie', 'Date réception', 'Destination',
+        'Bénéficiaire', 'Fonction', 'Statut', 'Notes'
+    ]];
     AppState.sorties.forEach(function (s) {
         rows.push([
             s.NUMERO || '',
-            s.DATE_SORTIE ? new Date(s.DATE_SORTIE).toLocaleString() : '',
+            formatDateForExport(s.DATE_SORTIE),
+            formatDateForExport(s.DATE_RECEPTION),
             s.DESTINATION || '',
             s.NOM || '',
             s.FONCTION || '',
@@ -37,11 +56,12 @@ function exportAccusePDF() {
     try {
         var jsPDF = window.jspdf.jsPDF;
         var doc = new jsPDF('l', 'mm', 'a4');
-        var head = [['N°', 'Date', 'Destination', 'Bénéficiaire', 'Fonction', 'Statut']];
+        var head = [['N°', 'Date sortie', 'Date réception', 'Destination', 'Bénéficiaire', 'Fonction', 'Statut']];
         var body = AppState.sorties.map(function (s) {
             return [
                 s.NUMERO || '',
-                s.DATE_SORTIE ? new Date(s.DATE_SORTIE).toLocaleString() : '',
+                formatDateForExport(s.DATE_SORTIE),
+                formatDateForExport(s.DATE_RECEPTION),
                 s.DESTINATION || '',
                 s.NOM || '',
                 s.FONCTION || '',

@@ -1,4 +1,27 @@
-// loaders.js
+// loaders.js — Module ENTRÉES (design moderne aligné sur SORTIE)
+
+// ============================================================
+// SÉCURITÉ : garantir que AppState existe
+// ============================================================
+if (typeof window.AppState === "undefined") {
+    window.AppState = {
+        entrees: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+        sortField: "DATE_ENTREE",
+        sortOrder: "DESC",
+        filters: { search: "", fournisseur: "", statut: "" },
+        editingId: null,
+        fournisseurs: [],
+        articles: []
+    };
+}
+
+// ============================================================
+// CHARGEMENT DES BONS D'ENTRÉE
+// ============================================================
 async function loadEntrees(options) {
     options = options || {};
     var silent = !!options.silent;
@@ -35,6 +58,9 @@ async function loadEntrees(options) {
     }
 }
 
+// ============================================================
+// STATS
+// ============================================================
 async function loadEntreeStats() {
     try {
         var url = API.BASE + API.HANDLERS_PATH + API.STATS;
@@ -51,6 +77,9 @@ async function loadEntreeStats() {
     }
 }
 
+// ============================================================
+// DROPDOWNS (fournisseurs + articles)
+// ============================================================
 async function loadDropdownsEntree() {
     // Fournisseurs
     try {
@@ -71,7 +100,6 @@ async function loadDropdownsEntree() {
         var data = await resp.json();
         if (data.success) {
             AppState.articles = data.Articles || [];
-            // Mettre à jour les selects dans les lignes déjà présentes
             document.querySelectorAll('.ligne-article').forEach(function (sel) {
                 var currentVal = sel.value;
                 sel.innerHTML = '<option value="">-- Article --</option>' +
@@ -106,6 +134,9 @@ function populateSelect(selectId, data, valueKey, textKey, addEmpty) {
     });
 }
 
+// ============================================================
+// UTILITAIRES DE FORMATAGE
+// ============================================================
 function formatDateValue(value, includeTime) {
     if (value === null || value === undefined || value === '') return '-';
 
@@ -129,15 +160,10 @@ function formatDateValue(value, includeTime) {
     if (!date || isNaN(date.getTime())) return '-';
 
     var options = includeTime ? {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
     } : {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
+        day: '2-digit', month: '2-digit', year: 'numeric'
     };
 
     return date.toLocaleString('fr-FR', options);
@@ -148,22 +174,77 @@ function formatNumber(value, decimals) {
     return Number(value).toFixed(decimals || 0);
 }
 
+// ============================================================
+// ✅ BADGE DE STATUT MODERNE (dégradé + icône)
+// ============================================================
+function getEntreeStatusBadge(statut) {
+    var baseStyle =
+        'display:inline-flex;align-items:center;gap:5px;' +
+        'padding:5px 12px;border-radius:20px;' +
+        'font-size:11.5px;font-weight:600;letter-spacing:0.3px;' +
+        'text-transform:uppercase;white-space:nowrap;';
+
+    var badges = {
+        BROUILLON:
+            '<span style="' + baseStyle +
+                'background:linear-gradient(135deg,#64b5f6,#2196f3);' +
+                'color:#fff;box-shadow:0 2px 6px rgba(33,150,243,0.35);">' +
+                '<i class="fas fa-pencil-alt" style="font-size:10px;"></i> En cours' +
+            '</span>',
+        VALIDE:
+            '<span style="' + baseStyle +
+                'background:linear-gradient(135deg,#66bb6a,#4caf50);' +
+                'color:#fff;box-shadow:0 2px 6px rgba(76,175,80,0.35);">' +
+                '<i class="fas fa-check-circle" style="font-size:10px;"></i> Validé' +
+            '</span>',
+        ANNULE:
+            '<span style="' + baseStyle +
+                'background:linear-gradient(135deg,#ef5350,#f44336);' +
+                'color:#fff;box-shadow:0 2px 6px rgba(244,67,54,0.35);">' +
+                '<i class="fas fa-times-circle" style="font-size:10px;"></i> Annulé' +
+            '</span>'
+    };
+
+    return badges[statut] || ('<span style="' + baseStyle +
+        'background:#e2e3e5;color:#383d41;">' + (statut || '—') + '</span>');
+}
+
+// ============================================================
+// ✅ UTILITAIRE : formatage monétaire avec séparateur de milliers
+//    Exemple : 1234567.89 → "1 234 567,89"
+// ============================================================
+function formatCurrency(value, decimals) {
+    if (value === undefined || value === null || isNaN(value)) return '0';
+    var n = Number(value);
+    var d = (decimals === undefined) ? 2 : decimals;
+    return n.toLocaleString('fr-FR', {
+        minimumFractionDigits: d,
+        maximumFractionDigits: d
+    });
+}
+
+// ============================================================
+// ✅ RENDU DU TABLEAU
+// ============================================================
 function renderEntreesTable(entrees) {
     var tbody = document.getElementById('entreesTableBody');
     if (!tbody) return;
+
     if (!entrees.length) {
         tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun bon d\'entrée trouvé</td></tr>';
         document.getElementById('resultsCounter').textContent = '0 bon(s)';
         return;
     }
+
     var html = '';
     entrees.forEach(function (e) {
-        var statutBadge = {
-            'BROUILLON': '<span class="badge bg-warning" style="background:#B6D8F2;padding:4px 10px;border-radius:20px;color:#1E0F1C;">En cours</span>',
-            'VALIDE': '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:#fff;">Validé</span>',
-            'ANNULE': '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:#fff;">Annulé</span>'
-        }[e.STATUT] || e.STATUT;
+        var statut = e.STATUT;
+
+        // ─── BADGE MODERNE ───
+        var statutBadge = getEntreeStatusBadge(statut);
+
         var lignes = e.Lignes || [];
+
         var articlesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-article-item">' +
@@ -172,25 +253,48 @@ function renderEntreesTable(entrees) {
                     '</div>';
             }).join('')
             : '<span class="text-muted">Aucun article</span>';
+
         var quantitesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE, 2) + '</div>';
             }).join('')
             : '<span class="text-muted">-</span>';
 
-        // Construction des actions selon le statut
-        var actionsHtml = '';
-        // Bouton Visualiser toujours présent
-        actionsHtml += '<button type="button" class="btn btn-sm btn-info" onclick="viewEntree(\'' + e.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button> ';
+        // ─────────────────────────────────────────────────────────
+        // ACTIONS (boutons rectangulaires avec texte)
+        // ─────────────────────────────────────────────────────────
+        var actionsHtml = '<div class="actions-cell-wrap">';
 
-        // Si le bon est validé, on n'affiche que le Visualiser
-        if (e.STATUT !== 'VALIDE') {
-            actionsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="editEntree(\'' + e.ID + '\')"><i class="fas fa-edit"></i></button> ' +
-                           '<button type="button" class="btn btn-sm btn-danger" onclick="deleteEntree(\'' + e.ID + '\')"><i class="fas fa-trash"></i></button> ';
-            if (e.STATUT === 'BROUILLON') {
-                actionsHtml += '<button type="button" class="btn btn-sm btn-success" onclick="validerEntree(\'' + e.ID + '\')"><i class="fas fa-check"></i></button>';
+        // 1. Visualiser (toujours présent)
+        actionsHtml +=
+            '<button type="button" class="btn-icon btn-info" ' +
+            'onclick="viewEntree(\'' + e.ID + '\')" title="Voir détails">' +
+            '<i class="fas fa-eye"></i><span></span></button>';
+
+        // 2. Actions si statut != VALIDE
+        if (statut !== 'VALIDE') {
+            // 2.1 Modifier
+            actionsHtml +=
+                '<button type="button" class="btn-icon btn-primary" ' +
+                'onclick="editEntree(\'' + e.ID + '\')" title="Modifier">' +
+                '<i class="fas fa-edit"></i><span></span></button>';
+
+            // 2.2 Supprimer
+            actionsHtml +=
+                '<button type="button" class="btn-icon btn-danger" ' +
+                'onclick="deleteEntree(\'' + e.ID + '\')" title="Supprimer">' +
+                '<i class="fas fa-trash"></i><span></span></button>';
+
+            // 2.3 Valider (uniquement pour BROUILLON)
+            if (statut === 'BROUILLON') {
+                actionsHtml +=
+                    '<button type="button" class="btn-icon btn-success btn-pulse" ' +
+                    'onclick="validerEntree(\'' + e.ID + '\')" title="Valider le bon">' +
+                    '<i class="fas fa-check"></i><span></span></button>';
             }
         }
+
+        actionsHtml += '</div>';
 
         html += '<tr>' +
             '<td><strong>' + e.NUMERO + '</strong></td>' +
@@ -198,15 +302,18 @@ function renderEntreesTable(entrees) {
             '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
             '<td>' + statutBadge + '</td>' +
-            '<td style="text-align:right;"><strong>' + formatNumber(e.TOTAL_TTC, 2) + '</strong></td>' +
+            '<td style="text-align:right;"><strong>' + formatCurrency(e.TOTAL_TTC, 2) + '</strong></td>' +
             '<td>' + actionsHtml + '</td>' +
             '</tr>';
     });
+
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = AppState.total + ' bon(s)';
 }
 
-// Expositions globales
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.formatDateValue = formatDateValue;
 window.formatNumber = formatNumber;
 window.loadEntrees = loadEntrees;
@@ -214,3 +321,4 @@ window.loadEntreeStats = loadEntreeStats;
 window.loadDropdownsEntree = loadDropdownsEntree;
 window.renderEntreesTable = renderEntreesTable;
 window.populateSelect = populateSelect;
+window.getEntreeStatusBadge = getEntreeStatusBadge;

@@ -1,4 +1,4 @@
-﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="accuse.cs" Inherits="accuse" %>
+﻿﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="accuses.cs" Inherits="accuses" %>
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -112,13 +112,14 @@
 
                         <div class="dash-card-body">
                             <div style="overflow-x:auto; width:100%; border:1px solid #dee2e6; border-radius:8px;">
-                                <table class="dash-table" style="table-layout:fixed; width:1200px; min-width:100%; border-collapse:collapse;">
+                                <table class="dash-table" style="table-layout:fixed; width:1320px; min-width:100%; border-collapse:collapse;">
                                     <thead>
                                         <tr style="background-color:#f8f9fa;">
                                             <th onclick="sortData('NUMERO')" style="cursor:pointer; width:120px; text-align:left;">N° <i class="fas fa-sort ml-1"></i></th>
-                                            <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:130px; text-align:left;">Date <i class="fas fa-sort ml-1"></i></th>
-                                            <th style="width:260px; text-align:left;">Articles</th>
-                                            <th style="width:110px; text-align:right;">Qté reçue</th>
+                                            <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:130px; text-align:left;">Date sortie <i class="fas fa-sort ml-1"></i></th>
+                                            <th onclick="sortData('DATE_RECEPTION')" style="cursor:pointer; width:130px; text-align:left;">Date réception <i class="fas fa-sort ml-1"></i></th>
+                                            <th style="width:240px; text-align:left;">Articles</th>
+                                            <th style="width:100px; text-align:right;">Qté reçue</th>
                                             <th onclick="sortData('DESTINATION')" style="cursor:pointer; width:150px; text-align:left;">Destination <i class="fas fa-sort ml-1"></i></th>
                                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px; text-align:left;">Statut <i class="fas fa-sort ml-1"></i></th>
                                             <th style="width:80px; text-align:left;">Actions</th>
@@ -126,7 +127,7 @@
                                     </thead>
                                     <tbody id="accuseTableBody">
                                         <tr>
-                                            <td colspan="7" style="text-align:center;padding:40px;">
+                                            <td colspan="8" style="text-align:center;padding:40px;">
                                                 <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#ccc;"></i>
                                             </td>
                                         </tr>
@@ -159,18 +160,24 @@
                         </div>
                         <div class="col-md-4">
                             <div class="form-group">
-                                <label>Date</label>
+                                <label>Date sortie</label>
                                 <input type="datetime-local" id="accuseDate" class="form-control" disabled />
                             </div>
                         </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label>Date réception</label>
+                                <input type="date" id="accuseDateReception" class="form-control" disabled />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Destination</label>
                                 <input type="text" id="accuseDestination" class="form-control" disabled />
                             </div>
                         </div>
-                    </div>
-                    <div class="row">
                         <div class="col-md-4">
                             <div class="form-group">
                                 <label>Bénéficiaire</label>
@@ -183,7 +190,9 @@
                                 <input type="text" id="accuseFonction" class="form-control" disabled />
                             </div>
                         </div>
-                        <div class="col-md-4">
+                    </div>
+                    <div class="row">
+                        <div class="col-md-12">
                             <div class="form-group">
                                 <label>Notes</label>
                                 <input type="text" id="accuseNotes" class="form-control" disabled />
@@ -219,7 +228,7 @@
         </div>
 
         <!-- SPINNER -->
-        <div id="spinnerOverlay" aria-hidden="true" style="display:none;visibility:hidden;">
+        <div id="spinnerOverlays" aria-hidden="true" style="display:none;visibility:hidden;">
             <div class="spinner"></div>
         </div>
 

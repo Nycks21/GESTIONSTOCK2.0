@@ -1,424 +1,296 @@
 ﻿﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="index.cs" Inherits="index" UICulture="Auto" Culture="Auto" %>
-    <!DOCTYPE html>
-    <html lang="fr">
+  <!DOCTYPE html>
+  <html lang="fr">
 
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>
-            <%= LocalizationHelper.GetString("Dashboard") %> — Gestion de Stock
-        </title>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>
+      <%= LocalizationHelper.GetString("Dashboard") %> — Gestion de Stock
+    </title>
 
-        <link rel="stylesheet" href="../_assets/css/all.min.css?v=<%=AuthHelper.Version %>">
-        <link rel="stylesheet" href="../_assets/css/fontawesome.css?v=<%=AuthHelper.Version %>">
-        <link rel="stylesheet" href="../_assets/css/fontawesome.min.css?v=<%=AuthHelper.Version %>">
-        <link rel="stylesheet" href="css/dashboard.css?v=<%=AuthHelper.Version %>">
-        <link rel="stylesheet" href="../_assets/css/global.css?v=<%=AuthHelper.Version %>">
-    </head>
+    <link rel="stylesheet" href="../_assets/css/all.min.css?v=<%=AuthHelper.Version %>">
+    <link rel="stylesheet" href="../_assets/css/fontawesome.css?v=<%=AuthHelper.Version %>">
+    <link rel="stylesheet" href="../_assets/css/global.css?v=<%=AuthHelper.Version %>">
+    <link rel="stylesheet" href="css/dashboard.css?v=<%=AuthHelper.Version %>">
+  </head>
 
-    <body class="hold-transition" data-version="<%=AuthHelper.Version %>">
-        <form id="form1" runat="server">
-            <asp:HiddenField ID="hfUserRole" runat="server" />
-            <div class="wrapper">
+  <body class="hold-transition" data-version="<%=AuthHelper.Version %>">
+    <form id="form1" runat="server">
+      <asp:HiddenField ID="hfUserRole" runat="server" />
+      <div class="wrapper">
 
-                <!-- ═══ TOPBAR ═══ -->
-                <%= AuthHelper.RenderTopBarHTML() %>
+        <%= AuthHelper.RenderTopBarHTML() %>
 
-                    <!-- ═══ SIDEBAR AVEC GÉNÉRATION AUTOMATIQUE DES MENUS ═══ -->
-                    <aside class="main-sidebar" id="sidebar">
-                        <a href="#" class="brand-link" onclick="loadDashboard()">
-                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Ccircle cx='16.5' cy='16.5' r='16.5' fill='%23007bff'/%3E%3Ctext x='16.5' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EGS%3C/text%3E%3C/svg%3E"
-                                alt="Logo" class="brand-image">
-                            <span class="brand-text">Gestion de Stock</span>
-                        </a>
+          <aside class="main-sidebar" id="sidebar">
+            <a href="#" class="brand-link" onclick="loadDashboard();return false;">
+              <img src="../../img/logo4.png" alt="Logo" class="brand-image">
+              <span class="brand-text">Gestion de Stock</span>
+            </a>
 
-                        <div class="sidebar">
-                            <!-- GÉNÉRATION AUTOMATIQUE DES MENUS -->
-                            <%= AuthHelper.RenderMenuHTML() %>
-                        </div>
-                    </aside>
-
-                    <!-- ═══ CONTROL SIDEBAR ═══ -->
-                    <%= AuthHelper.RenderControlSidebarHTML() %>
-
-                        <!-- ═══ CONTENT WRAPPER ═══ -->
-                        <div class="content-wrapper" id="contentWrapper">
-                            <div class="content-header">
-                                <div class="container-fluid">
-                                    <div class="row">
-                                        <div class="col-lg-6">
-                                            <h1 id="dynPageTitle">Tableau de bord</h1>
-                                        </div>
-                                        <div class="col-lg-6">
-                                            <ol class="breadcrumb" style="float: right;">
-                                                <li class="breadcrumb-item">Accueil</li>
-                                                <li class="breadcrumb-item active" id="dynBreadcrumb">Tableau de bord
-                                                </li>
-                                            </ol>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- ═══ ZONE DE CONTENU DYNAMIQUE ═══ -->
-                            <section class="content">
-                                <div class="container-fluid">
-
-                                    <!-- KPI Row -->
-                                    <div class="kpi-row">
-                                        <div class="kpi-card" onclick="showKPIDetail('eleves')">
-                                            <div class="kpi-accent" style="background:var(--primary)"></div>
-                                            <div class="kpi-label">Total élèves</div>
-                                            <div class="kpi-val" id="valEleves">—</div>
-                                            <div class="kpi-sub"><span class="pill pill-up"
-                                                    id="pillEleves">+0</span><span>depuis la rentrée</span></div>
-                                        </div>
-                                        <div class="kpi-card" onclick="showKPIDetail('classes')">
-                                            <div class="kpi-accent" style="background:var(--success)"></div>
-                                            <div class="kpi-label">Classes actives</div>
-                                            <div class="kpi-val" id="valClasses">—</div>
-                                            <div class="kpi-sub"><span class="pill pill-neu" id="pillClasses">Moy. —
-                                                    élèves</span></div>
-                                        </div>
-                                        <div class="kpi-card" onclick="showKPIDetail('presence')">
-                                            <div class="kpi-accent" style="background:var(--warning)"></div>
-                                            <div class="kpi-label">Taux de présence</div>
-                                            <div class="kpi-val"><span id="valPresence">—</span><span
-                                                    class="kpi-unit">%</span></div>
-                                            <div class="kpi-sub"><span class="pill pill-up"
-                                                    id="pillPresence">+0%</span><span id="lblMoisPresence">ce
-                                                    mois</span></div>
-                                        </div>
-
-                                        <!-- Frais impayés - visible uniquement avec permission -->
-                                        <% if (AuthHelper.HasPermission("frais")) { %>
-                                            <div class="kpi-card" onclick="showKPIDetail('impayes')">
-                                                <div class="kpi-accent" style="background:var(--danger)"></div>
-                                                <div class="kpi-label">Frais impayés</div>
-                                                <div class="kpi-val" id="valImpayes">—</div>
-                                                <div class="kpi-sub"><span class="pill pill-dn"
-                                                        id="pillImpayes">0</span><span>vs mois dernier</span></div>
-                                            </div>
-                                            <% } %>
-                                    </div>
-
-                                    <!-- Présences + Répartition -->
-                                    <div class="row mt-1">
-                                        <div class="col-lg-10">
-                                            <div class="dash-card">
-                                                <div class="dash-card-head">
-                                                    <span class="dash-card-title"><span
-                                                            class="dot-terra"></span>Présences — 7 derniers jours</span>
-                                                    <span class="dash-card-meta" id="lblMoisPresence2"></span>
-                                                </div>
-                                                <div class="dash-card-body3">
-
-                                                    <div style="position:relative;height:200px;"><canvas
-                                                            id="chartPresence"></canvas></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div class="col-lg-2">
-                                            <div class="dash-card">
-                                                <div class="dash-card-head"><span class="dash-card-title"><span
-                                                            class="dot-terra"></span>Répartition par niveau</span></div>
-                                                <div class="dash-card-body3">
-                                                    <div
-                                                        style="overflow-y: auto; max-height: 250px; display: flex; justify-content: center; width: 100%;">
-                                                        <div class="donut-wrap"
-                                                            style="display: flex; flex-direction: column; align-items: center; justify-content: center;">
-                                                            <canvas id="chartDonut"
-                                                                style="display: block; margin: 0 auto;"></canvas>
-                                                            <div class="donut-legend" id="donutLegend"
-                                                                style="margin-top: 15px; text-align: center;"></div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Réussite + Frais + Indicateurs -->
-                                    <div class="row mt-4">
-                                        <div class="col-lg-4">
-                                            <div class="dash-card">
-                                                <div class="dash-card-head"><span class="dash-card-title"><span
-                                                            class="dot-terra"></span>Taux de réussite par classe</span>
-                                                </div>
-                                                <div style="overflow-y: auto; max-height: 250px;">
-                                                    <div class="dash-card-body3" id="reussiteContainer">
-                                                        <div style="position:relative;height:250px;">
-                                                            <canvas id="chartReussite"></canvas>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <!-- Frais scolaires mensuels - visible uniquement avec permission -->
-                                        <% if (AuthHelper.HasPermission("frais")) { %>
-                                            <div class="col-lg-4">
-                                                <div class="dash-card">
-                                                    <div class="dash-card-head"><span class="dash-card-title"><span
-                                                                class="dot-terra"></span>Frais scolaires mensuels</span>
-                                                    </div>
-                                                    <div class="dash-card-body1">
-                                                        <div style="position:relative;height:180px;"><canvas
-                                                                id="chartFrais"></canvas></div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            <% } %>
-
-                                                <div class="col-lg-4">
-                                                    <div class="dash-card">
-                                                        <div class="dash-card-head"><span class="dash-card-title"><span
-                                                                    class="dot-terra"></span>Indicateurs clés</span>
-                                                        </div>
-                                                        <div class="dash-card-body3">
-                                                            <% if (AuthHelper.HasPermission("frais")) { %>
-                                                                <div class="gauge-row" id="gaugeContainer"></div>
-                                                                <div class="divider-line mt-3 mb-3"></div>
-                                                                <% } %>
-                                                                    <div class="prog-item">
-                                                                        <div class="prog-head"><span
-                                                                                class="prog-name">Garçons</span><span
-                                                                                class="prog-pct"
-                                                                                id="pctGarcons">—%</span></div>
-                                                                        <div class="prog-track">
-                                                                            <div class="prog-fill" id="fillGarcons"
-                                                                                style="background: rgb(56, 150, 238)">
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                    <div class="prog-item">
-                                                                        <div class="prog-head"><span
-                                                                                class="prog-name">Filles</span><span
-                                                                                class="prog-pct"
-                                                                                id="pctFilles">—%</span></div>
-                                                                        <div class="prog-track">
-                                                                            <div class="prog-fill" id="fillFilles"
-                                                                                style="background: rgb(253, 127, 148)">
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                    </div>
-
-                                    <!-- Retards & Absences + Activité récente -->
-                                    <div class="row mt-1">
-                                        <div class="col-lg-6">
-                                            <div class="dash-card">
-                                                <div class="dash-card-head">
-                                                    <span class="dash-card-title"><span class="dot-terra"></span>Élèves
-                                                        — absences fréquentes</span>
-                                                    <span class="dash-card-meta">Ce mois</span>
-                                                </div>
-
-                                                <div
-                                                    style="overflow-y: auto; max-height: 250px; border: 1px solid #dee2e6;">
-                                                    <table class="dash-table"
-                                                        style="table-layout: fixed; max-width: 200px; min-width: 100%; border-collapse: collapse; ">
-
-                                                        <thead>
-                                                            <tr
-                                                                style="background-color: #f8f9fa; text-align: center; position: sticky; top: 0; z-index: 10; padding-bottom: 10px;">
-                                                                <th>Élève</th>
-                                                                <th>Classe</th>
-                                                                <th>Absences</th>
-                                                                <th>Retards</th>
-                                                                <th>Statut</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody id="tbodyAbsences"></tbody>
-
-                                                    </table>
-                                                </div>
-
-                                            </div>
-                                        </div>
-
-                                        <div class="col-lg-6">
-                                            <div class="dash-card">
-                                                <div class="dash-card-head"><span class="dash-card-title"><span
-                                                            class="dot-terra"></span>Activité récente</span></div>
-                                                <div style="overflow-y: auto; max-height: 250px;">
-                                                    <div class="dash-card-body1" id="activityFeed"></div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <!-- Agenda scolaire (calendrier compact) -->
-                                    <div class="row mt-1">
-                                        <div class="col-12">
-                                            <div class="dash-card">
-                                                <!-- EN-TÊTE AVEC LE TITRE UNIQUEMENT -->
-                                                <div class="dash-card-head">
-                                                    <span class="dash-card-title">
-                                                        <span class="dot-terra"></span>Agenda scolaire
-                                                    </span>
-                                                </div>
-
-                                                <!-- CORPS AVEC CALENDRIER + LISTE ÉVÉNEMENTS -->
-                                                <div class="dash-card-body2"
-                                                    style="display:flex;gap:30px;align-items:flex-start;flex-wrap:wrap;">
-                                                    <!-- PARTIE GAUCHE : CALENDRIER -->
-                                                    <div style="flex:0 0 280px;max-width:280px;">
-                                                        <!-- CONTROLES DE NAVIGATION AU-DESSUS DU CALENDRIER -->
-                                                        <div class="cal-legend">
-                                                            <button type="button"
-                                                                class="btn btn-sm btn-outline-secondary"
-                                                                onclick="prevMonth()" title="Mois précédent">
-                                                                <i class="fas fa-chevron-left"></i>
-                                                            </button>
-                                                            <span id="calendarMonthTitle"
-                                                                class="calendar-month-title">Janvier 2026</span>
-                                                            <button type="button"
-                                                                class="btn btn-sm btn-outline-secondary"
-                                                                onclick="nextMonth()" title="Mois suivant">
-                                                                <i class="fas fa-chevron-right"></i>
-                                                            </button>
-                                                            <button type="button"
-                                                                class="btn btn-sm btn-outline-secondary"
-                                                                onclick="todayMonth()" title="Aujourd'hui">
-                                                                <i class="fas fa-calendar-day"></i>
-                                                            </button>
-                                                        </div>
-                                                        <!-- GRILLE DU CALENDRIER -->
-                                                        <div id="calendarGrid" class="mini-cal"></div>
-                                                    </div>
-
-                                                    <!-- PARTIE DROITE : LISTE DES ÉVÉNEMENTS -->
-                                                    <div style="flex:1;min-width:200px;">
-                                                        <div class="event-list" id="eventList">
-                                                            <div class="event-empty">Chargement des événements...</div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                            </section>
-                        </div>
-
-                        <div id="spinnerOverlay">
-                            <div class="spinner"></div>
-                        </div>
+            <style>
+              .brand-image {
+                width: 33px;
+                height: 33px;
+                object-fit: contain;
+              }
+            </style>
+            <div class="sidebar">
+              <%= AuthHelper.RenderMenuHTML() %>
             </div>
+          </aside>
 
-            <script>
-                document.addEventListener('DOMContentLoaded', function () {
-                    loadDashboard();
-                });
-                // À ajouter dans la page d'accueil (index.aspx)
-                document.addEventListener('DOMContentLoaded', function () {
-                    // Lire le toast stocké
-                    var toastData = sessionStorage.getItem('loginToast');
+          <%= AuthHelper.RenderControlSidebarHTML() %>
 
-                    if (toastData) {
-                        // Supprimer immédiatement pour éviter les doublons
-                        sessionStorage.removeItem('loginToast');
+            <div class="content-wrapper" id="contentWrapper">
+              <div class="content-header">
+                <div class="container-fluid">
+                  <div class="row">
+                    <div class="col-lg-6">
+                      <h1><i class="fas fa-chalkboard"></i> Tableau de bord</h1>
+                    </div>
+                    <div class="col-lg-6">
+                      <ol class="breadcrumb" style="float:right;">
+                        <li class="breadcrumb-item">Accueil</li>
+                        <li class="breadcrumb-item active">Tableau de bord</li>
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
-                        var parts = toastData.split('|');
-                        var type = parts[0] || 'success';
-                        var message = parts[1] || 'Authentification réussie';
+              <section class="content">
+                <div class="container-fluid">
 
-                        // Afficher le toast après un léger délai
-                        setTimeout(function () {
-                            if (typeof showNotification === 'function') {
-                                showNotification(message, type, 10000);
-                            } else if (typeof showLoginSuccessNotification === 'function') {
-                                showLoginSuccessNotification(message);
-                            } else {
-                                // 🔥 SUPPRIMÉ : alert(message);
-                                // ✅ Fallback en DOM/CSS pur
-                                createFallbackToast(message, type, 10000);
-                            }
-                        }, 500);
-                    }
-                });
+                  <!-- ═══ ZONE 1 : KPI ═══ -->
+                  <div class="kpi-row">
+                    <div class="kpi-card" onclick="location.href='../modules/articles/articles.aspx'">
+                      <div class="kpi-accent" style="background:#007bff"></div>
+                      <div class="kpi-label"><i class="fas fa-boxes"></i> Articles actifs</div>
+                      <div class="kpi-val" id="valArticles">—</div>
+                      <div class="kpi-sub"><span class="pill pill-neu" id="pillArticlesTotal">— total</span></div>
+                    </div>
 
-                // ✅ Fonction fallback en DOM/CSS pur
-                function createFallbackToast(message, type, duration) {
-                    duration = duration || 5000;
+                    <div class="kpi-card" onclick="location.href='../modules/stock/stock.aspx'">
+                      <div class="kpi-accent" style="background:#dc3545"></div>
+                      <div class="kpi-label"><i class="fas fa-exclamation-triangle"></i> Alertes stock</div>
+                      <div class="kpi-val text-danger" id="valAlertes">—</div>
+                      <div class="kpi-sub">
+                        <span class="pill pill-dn" id="pillRuptures">0 rupture(s)</span>
+                        <span class="pill pill-neu" id="pillAlertesCount">0 alerte(s)</span>
+                      </div>
+                    </div>
 
-                    var colors = {
-                        success: '#28a745',
-                        error: '#dc3545',
-                        warning: '#ffc107',
-                        info: '#17a2b8'
-                    };
-                    var color = colors[type] || colors.info;
+                    <div class="kpi-card" onclick="location.href='../modules/entrees/entrees.aspx'">
+                      <div class="kpi-accent" style="background:#ffc107"></div>
+                      <div class="kpi-label"><i class="fas fa-hourglass-half"></i> Bons en attente</div>
+                      <div class="kpi-val" id="valBons">—</div>
+                      <div class="kpi-sub">
+                        <span class="pill pill-neu" id="pillEntree">0 entrée(s)</span>
+                        <span class="pill pill-neu" id="pillSortie">0 sortie(s)</span>
+                      </div>
+                    </div>
 
-                    // Conteneur
-                    var container = document.getElementById('fallbackToastContainer');
-                    if (!container) {
-                        container = document.createElement('div');
-                        container.id = 'fallbackToastContainer';
-                        Object.assign(container.style, {
-                            position: 'fixed',
-                            top: '20px',
-                            right: '20px',
-                            zIndex: '99999',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '10px',
-                            maxWidth: '320px'
-                        });
-                        document.body.appendChild(container);
-                    }
+                    <div class="kpi-card" onclick="location.href='../modules/stock/stock.aspx'">
+                      <div class="kpi-accent" style="background:#28a745"></div>
+                      <div class="kpi-label"><i class="fas fa-coins"></i> Valeur du stock</div>
+                      <div class="kpi-val" id="valValeur">—</div>
+                      <div class="kpi-sub">
+                        <span class="pill pill-up" id="pillSousSeuil">0 article(s) sous seuil</span>
+                      </div>
+                    </div>
+                  </div>
 
-                    // Toast
-                    var toast = document.createElement('div');
-                    Object.assign(toast.style, {
-                        background: color,
-                        color: '#fff',
-                        padding: '14px 18px',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                        fontSize: '13px',
-                        lineHeight: '1.4',
-                        opacity: '0',
-                        transform: 'translateX(20px)',
-                        transition: 'opacity .3s ease, transform .3s ease',
-                        fontFamily: 'sans-serif'
-                    });
-                    toast.textContent = message;
+                  <!-- ═══ ZONE 2 : ALERTES ═══ -->
+                  <% if (AuthHelper.HasPermission("stock") || AuthHelper.HasPermission("articles")) { %>
+                    <div class="dash-card dash-card-alert" id="alertCard" style="display:none;">
+                      <div class="dash-card-head">
+                        <span class="dash-card-title">
+                          <i class="fas fa-exclamation-triangle" style="color:#dc3545;"></i>
+                          Alertes prioritaires
+                          <span class="badge-count" id="alertCount">0</span>
+                        </span>
+                        <button class="btn btn-sm btn-danger" onclick="location.href='../modules/stock/stock.aspx'">
+                          <i class="fas fa-arrow-right"></i> Voir tout
+                        </button>
+                      </div>
+                      <div style="overflow-x:auto; max-height:320px;">
+                        <table class="dash-table">
+                          <thead>
+                            <tr>
+                              <th>Code</th>
+                              <th>Article</th>
+                              <th>Catégorie</th>
+                              <th>Emplacement</th>
+                              <th>Qté</th>
+                              <th>Seuil</th>
+                              <th>Statut</th>
+                            </tr>
+                          </thead>
+                          <tbody id="tbodyAlerts"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <% } %>
 
-                    container.appendChild(toast);
+                      <!-- ═══ ZONE 3 : GRAPHIQUES ═══ -->
+                      <div class="row mt-3">
+                        <% if (AuthHelper.HasPermission("stock")) { %>
+                          <div class="col-lg-8">
+                            <div class="dash-card">
+                              <div class="dash-card-head">
+                                <span class="dash-card-title">
+                                  <span class="dot-blue"></span> Mouvements — 30 derniers jours
+                                </span>
+                              </div>
+                              <div class="dash-card-body">
+                                <div style="position:relative;height:280px;">
+                                  <canvas id="chartMovements"></canvas>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <div class="col-lg-4">
+                            <div class="dash-card">
+                              <div class="dash-card-head">
+                                <span class="dash-card-title">
+                                  <span class="dot-blue"></span> Stock par catégorie
+                                </span>
+                              </div>
+                              <div class="dash-card-body">
+                                <div style="position:relative;height:200px;">
+                                  <canvas id="chartCategories"></canvas>
+                                </div>
+                                <div class="donut-legend" id="donutLegend" style="margin-top:12px;"></div>
+                              </div>
+                            </div>
+                          </div>
+                          <% } %>
+                      </div>
 
-                    // Animation entrée
-                    requestAnimationFrame(() => {
-                        toast.style.opacity = '1';
-                        toast.style.transform = 'translateX(0)';
-                    });
+                      <!-- ═══ ZONE 4 : ACTIVITÉ ═══ -->
+                      <div class="row mt-3">
+                        <% if (AuthHelper.HasPermission("stock")) { %>
+                          <div class="col-lg-6">
+                            <div class="dash-card">
+                              <div class="dash-card-head">
+                                <span class="dash-card-title">
+                                  <span class="dot-green"></span> Derniers mouvements
+                                </span>
+                              </div>
+                              <div style="max-height:350px; overflow-y:auto;">
+                                <div class="activity-feed" id="activityFeed">
+                                  <div class="loading-mini">Chargement…</div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                          <% } %>
 
-                    // Auto-suppression
-                    setTimeout(() => {
-                        toast.style.opacity = '0';
-                        toast.style.transform = 'translateX(20px)';
-                        setTimeout(() => toast.remove(), 300);
-                    }, duration);
-                }
-            </script>
-            <script src="../_assets/js/chart.umd.min.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="../_assets/js/sweetalert2.all.min.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/config.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/state.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/utils.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/ui.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/charts.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/kpi.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/calendar.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/loaders.js?v=<%=AuthHelper.Version %>"></script>
-            <script src="js/init.js?v=<%=AuthHelper.Version %>"></script>
-        </form>
-    </body>
+                            <% if (AuthHelper.HasPermission("entrees") || AuthHelper.HasPermission("sorties")) { %>
+                              <div class="col-lg-6">
+                                <div class="dash-card">
+                                  <div class="dash-card-head">
+                                    <span class="dash-card-title">
+                                      <span class="dot-blue"></span> Derniers documents
+                                    </span>
+                                  </div>
+                                  <div style="max-height:350px; overflow-y:auto;">
+                                    <div class="activity-feed" id="documentsFeed">
+                                      <div class="loading-mini">Chargement…</div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <% } %>
+                      </div>
 
-    </html>
+                      <!-- ═══ ZONE 5 : TOP ARTICLES + RACCOURCIS ═══ -->
+                      <div class="row mt-3">
+                        <% if (AuthHelper.HasPermission("stock") || AuthHelper.HasPermission("articles")) { %>
+                          <div class="col-lg-6">
+                            <div class="dash-card">
+                              <div class="dash-card-head">
+                                <span class="dash-card-title">
+                                  <span class="dot-gold"></span> Top 5 articles (30j)
+                                </span>
+                              </div>
+                              <div class="dash-card-body">
+                                <div id="topArticlesList"></div>
+                              </div>
+                            </div>
+                          </div>
+                          <% } %>
+
+                            <div class="col-lg-6">
+                              <div class="dash-card">
+                                <div class="dash-card-head">
+                                  <span class="dash-card-title">
+                                    <span class="dot-gold"></span> Accès rapides
+                                  </span>
+                                </div>
+                                <div class="dash-card-body">
+                                  <div class="quick-actions">
+                                    <% if (AuthHelper.HasPermission("entrees")) { %>
+                                      <a href="../modules/entrees/entrees.aspx" class="quick-action">
+                                        <i class="fas fa-arrow-down"></i> Entrées
+                                      </a>
+                                      <% } %>
+                                        <% if (AuthHelper.HasPermission("sorties")) { %>
+                                          <a href="../modules/sorties/sorties.aspx" class="quick-action">
+                                            <i class="fas fa-arrow-up"></i> Sorties
+                                          </a>
+                                          <% } %>
+                                            <% if (AuthHelper.HasPermission("articles")) { %>
+                                              <a href="../modules/articles/articles.aspx" class="quick-action">
+                                                <i class="fas fa-boxes"></i> Articles
+                                              </a>
+                                              <% } %>
+                                                <% if (AuthHelper.HasPermission("stock")) { %>
+                                                  <a href="../modules/stock/stock.aspx" class="quick-action">
+                                                    <i class="fas fa-warehouse"></i> Stock
+                                                  </a>
+                                                  <% } %>
+                                                    <% if (AuthHelper.HasPermission("inventaire")) { %>
+                                                      <a href="../modules/inventaire/inventaire.aspx"
+                                                        class="quick-action">
+                                                        <i class="fas fa-clipboard-list"></i> Inventaire
+                                                      </a>
+                                                      <% } %>
+                                                        <% if (AuthHelper.HasPermission("fournisseurs")) { %>
+                                                          <a href="../parametres/fournisseurs/fournisseurs.aspx"
+                                                            class="quick-action">
+                                                            <i class="fas fa-truck"></i> Fournisseurs
+                                                          </a>
+                                                          <% } %>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                      </div>
+
+                </div>
+              </section>
+            </div>
+      </div>
+
+      <div id="spinnerOverlay"
+        style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.35);z-index:9998;align-items:center;justify-content:center;">
+        <div class="spinner"></div>
+      </div>
+
+      <script src="../_assets/js/chart.umd.min.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="../_assets/js/sweetalert2.all.min.js?v=<%=AuthHelper.Version %>"></script>
+      <script>window.BASE_PATH = '<%= ResolveUrl("~/") %>';</script>
+      <script src="js/config.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="js/state.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="js/utils.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="js/ui.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="js/charts.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="js/loaders.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="js/init.js?v=<%=AuthHelper.Version %>"></script>
+    </form>
+  </body>
+
+  </html>

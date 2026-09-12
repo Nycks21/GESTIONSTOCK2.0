@@ -12,8 +12,10 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Cache.SetNoStore();
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -31,7 +33,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                 return;
             }
 
-            string code = GetString(data, "code");
             string nom = GetString(data, "nom");
             string description = GetString(data, "description") ?? "";
             string categorieId = GetString(data, "categorieId");
@@ -43,9 +44,9 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             bool actif = GetBool(data, "actif", true);
             bool estService = GetBool(data, "estService", false);
 
-            if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(uniteId))
+            if (string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(uniteId))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Code, nom et unité sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Nom et unité sont obligatoires.\"}");
                 return;
             }
 
@@ -57,7 +58,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                 conn.Open();
                 string sql = @"
                     UPDATE MARTICLE SET
-                        CODE = @code,
                         NOM = @nom,
                         DESCRIPTION = @desc,
                         CATEGORIE_ID = @cat,
@@ -75,7 +75,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@code", code);
                     cmd.Parameters.AddWithValue("@nom", nom);
                     cmd.Parameters.AddWithValue("@desc", description ?? (object)DBNull.Value);
                     cmd.Parameters.AddWithValue("@cat", string.IsNullOrEmpty(categorieId) ? (object)DBNull.Value : categorieId);

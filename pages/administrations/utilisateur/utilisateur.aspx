@@ -258,9 +258,11 @@
                       <input type="checkbox" id="permUser" value="utilisateurs" style="margin-right: 8px;">
                       <label for="permUser" style="margin: 0;">📖 Utilisateurs</label>
                     </div>
+                    <% if (AuthHelper.IsSuperAdmin()) { %>
                     <div style="display: flex; align-items: center;">
                       <input type="checkbox" id="permRequetes" value="requetes" style="margin-right: 8px;">
                       <label for="permRequetes" style="margin: 0;">💻 Requêtes SQL</label>
+                    <% } %>
                     </div>
                   </div>
                 </div>

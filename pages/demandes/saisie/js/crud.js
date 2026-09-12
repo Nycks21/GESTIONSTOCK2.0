@@ -8,14 +8,18 @@ var currentMode = 'add'; // 'add', 'edit', 'view'
 function getModalTitle() {
     var title = document.getElementById('modalTitle');
     if (!title) {
-        // Fallback : chercher dans le modal spécifique
         title = document.querySelector('#saisieModal .modal-header h3');
     }
     return title;
 }
 
-// Active/désactive tous les champs du modal
+// ============================================================
+// ✅ Activer/désactiver les champs du modal
+//    ⚠️ Les boutons marqués data-keep-active="true" (ex: Annuler)
+//       ne sont JAMAIS désactivés.
+// ============================================================
 function setFieldsEnabled(enabled) {
+    // ─── Champs de saisie ───
     var inputs = document.querySelectorAll('#saisieModal input, #saisieModal select, #saisieModal textarea');
     for (var i = 0; i < inputs.length; i++) {
         inputs[i].disabled = !enabled;
@@ -27,21 +31,39 @@ function setFieldsEnabled(enabled) {
             inputs[i].style.cursor = '';
         }
     }
+
+    // ─── Boutons de ligne (btn-success, btn-danger) ───
     var ligneBtns = document.querySelectorAll('#saisieModal .btn-success, #saisieModal .btn-danger');
     for (var j = 0; j < ligneBtns.length; j++) {
+        // ⚠️ NE PAS désactiver les boutons marqués "data-keep-active"
+        if (ligneBtns[j].getAttribute('data-keep-active') === 'true') {
+            ligneBtns[j].disabled = false;
+            continue;
+        }
         ligneBtns[j].disabled = !enabled;
     }
 }
 
-// Masque/affiche les boutons d'action (Enregistrer, Réinitialiser, Annuler)
+// Masque/affiche les boutons d'action (Enregistrer, Réinitialiser)
 function setActionButtonsVisible(visible) {
     var btnSave = document.getElementById('btnSaveSaisie');
     if (btnSave) btnSave.style.display = visible ? '' : 'none';
     var btnReset = document.getElementById('btnResetSaisie');
     if (btnReset) btnReset.style.display = visible ? '' : 'none';
-    // Le bouton Annuler/Fermer reste toujours visible
+
+    // ✅ Le bouton Annuler reste TOUJOURS visible ET actif
+    var btnAnnuler = document.getElementById('btnAnnulerDemande');
+    if (btnAnnuler) {
+        btnAnnuler.style.display = '';
+        btnAnnuler.disabled = false;
+        btnAnnuler.style.opacity = '1';
+        btnAnnuler.style.cursor = 'pointer';
+    }
 }
 
+// ============================================================
+// OUVERTURE DU MODAL (AJOUT)
+// ============================================================
 function openModalSaisie(e) {
     if (e) e.preventDefault();
     AppState.editingId = null;
@@ -54,6 +76,9 @@ function openModalSaisie(e) {
     document.getElementById('saisieModal').style.display = 'flex';
 }
 
+// ============================================================
+// FERMETURE DU MODAL
+// ============================================================
 function closeModalSaisie() {
     document.getElementById('saisieModal').style.display = 'none';
     AppState.editingId = null;
@@ -63,6 +88,9 @@ function closeModalSaisie() {
     clearErrors();
 }
 
+// ============================================================
+// RÉINITIALISATION DU FORMULAIRE
+// ============================================================
 function resetFormSaisie() {
     var numero = document.getElementById('sortieNumero');
     if (numero) numero.value = '';
@@ -78,7 +106,7 @@ function resetFormSaisie() {
     if (notes) notes.value = '';
     var lignesBody = document.getElementById('lignesBody');
     if (lignesBody) lignesBody.innerHTML = '';
-    ajouterLigne(); // ligne par défaut
+    ajouterLigne();
     clearErrors();
 }
 
@@ -123,7 +151,6 @@ function chargerDemandeDansModal(demande) {
 // ============================================================
 // SAUVEGARDE (création ou modification)
 // ============================================================
-
 async function saveSaisie(e) {
     e.preventDefault();
     if (currentMode === 'view') {
@@ -154,7 +181,7 @@ async function saveSaisie(e) {
 
     try {
         showSpinner();
-        var url = API.BASE + endpoint; // car ADD, EDIT sont des chemins complets
+        var url = API.BASE + endpoint;
         var resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -178,18 +205,34 @@ async function saveSaisie(e) {
 
 // ============================================================
 // VISUALISATION (VIEW)
+//    ⚠️ Le bouton Annuler doit rester ACTIF et VISIBLE
 // ============================================================
-
 function viewDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
     if (!demande) return;
     AppState.editingId = id;
     currentMode = 'view';
+
     var title = getModalTitle();
     if (title) title.innerHTML = '<i class="fas fa-eye"></i> Détails de la demande';
+
     chargerDemandeDansModal(demande);
+
+    // Désactive tous les champs SAUF les boutons data-keep-active="true"
     setFieldsEnabled(false);
-    setActionButtonsVisible(false); // Masque Enregistrer et Réinitialiser
+
+    // Masque Enregistrer et Réinitialiser (mais PAS Annuler)
+    setActionButtonsVisible(false);
+
+    // ✅ Sécurité supplémentaire : s'assurer que le bouton Annuler est actif
+    var btnAnnuler = document.getElementById('btnAnnulerDemande');
+    if (btnAnnuler) {
+        btnAnnuler.disabled = false;
+        btnAnnuler.style.opacity = '1';
+        btnAnnuler.style.cursor = 'pointer';
+        btnAnnuler.style.display = '';
+    }
+
     clearErrors();
     document.getElementById('saisieModal').style.display = 'flex';
 }
@@ -197,7 +240,6 @@ function viewDemande(id) {
 // ============================================================
 // MODIFICATION (EDIT)
 // ============================================================
-
 function editDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
     if (!demande) return;
@@ -219,7 +261,6 @@ function editDemande(id) {
 // ============================================================
 // SUPPRESSION
 // ============================================================
-
 async function deleteDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
     if (demande && demande.STATUT !== 'BROUILLON') {
@@ -264,7 +305,6 @@ async function deleteDemande(id) {
 // ============================================================
 // UTILITAIRES D'ERREURS
 // ============================================================
-
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
@@ -280,7 +320,6 @@ function clearErrors() {
 // ============================================================
 // EXPOSITIONS GLOBALES
 // ============================================================
-
 window.openModalSaisie = openModalSaisie;
 window.closeModalSaisie = closeModalSaisie;
 window.resetFormSaisie = resetFormSaisie;

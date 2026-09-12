@@ -1,9 +1,18 @@
+// ============================================================
+// CONFIGURATION — ACCUSE
+// ============================================================
+
+// BASE_PATH : fallback sûr
+window.BASE_PATH = window.BASE_PATH || '/';
+
+// ✅ Toujours réassigner (idempotent : pas d'erreur au rechargement)
 window.API = {
-    BASE: window.BASE_PATH || '/',
+    BASE: window.BASE_PATH,
     HANDLERS_PATH: 'pages/demandes/accuse/handlers/',
     LIST: 'GetAccuse.ashx',
-    STATS: 'GetAccuseStats.ashx', // on peut créer un handler stats si besoin
-    ARTICLES: 'GetArticles.ashx'   // pour le modal de visualisation (si besoin)
+    STATS: 'GetAccuseStats.ashx',
+    ARTICLES: 'GetArticles.ashx',
+    SET_ACCUSE: 'SetAccuse.ashx'
 };
 
 window.DEFAULTS = {

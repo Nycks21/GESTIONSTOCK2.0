@@ -1,7 +1,9 @@
-// crud.js
+// crud.js - Module Emplacements avec génération automatique du CODE
 var currentMode = 'add'; // 'add', 'edit', 'view'
 
-// Fonction utilitaire pour activer/désactiver les champs
+// ============================================================
+// UTILITAIRE : activer / désactiver les champs
+// ============================================================
 function setFieldsEnabled(enabled) {
     var inputs = document.querySelectorAll('#emplacementModal input, #emplacementModal select, #emplacementModal textarea');
     for (var i = 0; i < inputs.length; i++) {
@@ -16,6 +18,9 @@ function setFieldsEnabled(enabled) {
     }
 }
 
+// ============================================================
+// AJOUT
+// ============================================================
 function openAddEmplacementModal(e) {
     if (e) e.preventDefault();
     AppState.editingId = null;
@@ -24,64 +29,114 @@ function openAddEmplacementModal(e) {
     document.getElementById('emplacementForm').reset();
     document.getElementById('emplacementActif').value = '1';
     document.getElementById('emplacementParent').value = '';
+
+    // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
+    var codeEl = document.getElementById('emplacementCode');
+    codeEl.value = '';
+    codeEl.placeholder = 'Sera généré automatiquement (EMP-XXX-00001)';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     setFieldsEnabled(true);
+
+    // setFieldsEnabled réactive les champs → on réapplique le readonly sur le code
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveEmplacement').style.display = '';
     clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
     document.getElementById('emplacementModal').style.display = 'flex';
 }
 
+// ============================================================
+// MODIFICATION
+// ============================================================
 function editEmplacement(id) {
-    var emplacement = AppState.emplacements.find(function(e) { return e.ID === id; });
+    var emplacement = AppState.emplacements.find(function (e) { return e.ID === id; });
     if (!emplacement) return;
     AppState.editingId = id;
     currentMode = 'edit';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier un emplacement';
-    document.getElementById('emplacementCode').value = emplacement.CODE || '';
+
+    var codeEl = document.getElementById('emplacementCode');
+    codeEl.value = emplacement.CODE || '';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('emplacementNom').value = emplacement.NOM || '';
     document.getElementById('emplacementType').value = emplacement.TYPE || '';
     document.getElementById('emplacementParent').value = emplacement.PARENT_ID || '';
     document.getElementById('emplacementActif').value = emplacement.ACTIVE ? '1' : '0';
+
     setFieldsEnabled(true);
+
+    // Réapplication du readonly sur le code (le code est immuable)
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveEmplacement').style.display = '';
     clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
     document.getElementById('emplacementModal').style.display = 'flex';
 }
 
+// ============================================================
+// VISUALISATION
+// ============================================================
 function viewEmplacement(id) {
-    var emplacement = AppState.emplacements.find(function(e) { return e.ID === id; });
+    var emplacement = AppState.emplacements.find(function (e) { return e.ID === id; });
     if (!emplacement) return;
     AppState.editingId = id;
     currentMode = 'view';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails de l\'emplacement';
-    document.getElementById('emplacementCode').value = emplacement.CODE || '';
+
+    var codeEl = document.getElementById('emplacementCode');
+    codeEl.value = emplacement.CODE || '';
+
     document.getElementById('emplacementNom').value = emplacement.NOM || '';
     document.getElementById('emplacementType').value = emplacement.TYPE || '';
     document.getElementById('emplacementParent').value = emplacement.PARENT_ID || '';
     document.getElementById('emplacementActif').value = emplacement.ACTIVE ? '1' : '0';
+
     setFieldsEnabled(false);
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveEmplacement').style.display = 'none';
     clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
     document.getElementById('emplacementModal').style.display = 'flex';
 }
 
+// ============================================================
+// ENREGISTREMENT (ajout ou modification)
+// ============================================================
 async function saveEmplacement(e) {
     e.preventDefault();
+
     if (currentMode === 'view') {
         showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
         return;
     }
+
     var id = AppState.editingId;
+
+    // ⚠️ Le CODE n'est plus envoyé :
+    //    - à l'ajout → généré côté serveur (EMP-PROJET-00001)
+    //    - en modification → immuable, non modifiable
     var data = {
-        code: document.getElementById('emplacementCode').value.trim(),
         nom: document.getElementById('emplacementNom').value.trim(),
         type: document.getElementById('emplacementType').value,
         parentId: document.getElementById('emplacementParent').value || null,
         actif: parseInt(document.getElementById('emplacementActif').value) === 1
     };
 
+    // Validation : nom et type requis
     var valid = true;
     clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
-    if (!data.code) { showFieldError('emplacementCode', 'Le code est requis'); valid = false; }
     if (!data.nom) { showFieldError('emplacementNom', 'Le nom est requis'); valid = false; }
     if (!data.type) { showFieldError('emplacementType', 'Le type est requis'); valid = false; }
     if (!valid) return;
@@ -98,8 +153,11 @@ async function saveEmplacement(e) {
             body: JSON.stringify(payload)
         });
         var result = await resp.json();
+
         if (result.success) {
-            showToast('Succès', result.message || (id ? 'Emplacement modifié' : 'Emplacement ajouté'), 'success');
+            var msg = result.message || (id ? 'Emplacement modifié' : 'Emplacement ajouté');
+            if (result.code && !id) msg = 'Emplacement ajouté avec succès (' + result.code + ').';
+            showToast('Succès', msg, 'success');
             closeEmplacementModal();
             loadEmplacements();
             loadStats();
@@ -113,11 +171,9 @@ async function saveEmplacement(e) {
     }
 }
 
-function showFieldError(fieldId, msg) {
-    var err = document.getElementById('err-' + fieldId);
-    if (err) { err.textContent = msg; err.style.display = 'block'; }
-}
-
+// ============================================================
+// SUPPRESSION
+// ============================================================
 async function deleteEmplacement(id) {
     var confirmResult = await Swal.fire({
         title: 'Confirmer la suppression',
@@ -154,24 +210,49 @@ async function deleteEmplacement(id) {
     }
 }
 
+// ============================================================
+// FERMETURE DU MODAL
+// ============================================================
 function closeEmplacementModal() {
     document.getElementById('emplacementModal').style.display = 'none';
     AppState.editingId = null;
     currentMode = 'add';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-warehouse"></i> Ajouter un emplacement';
+
     setFieldsEnabled(true);
+
+    // Repasser le champ code en mode "généré auto"
+    var codeEl = document.getElementById('emplacementCode');
+    if (codeEl) {
+        codeEl.value = '';
+        codeEl.placeholder = 'Sera généré automatiquement (EMP-XXX-00001)';
+        codeEl.readOnly = true;
+        codeEl.style.backgroundColor = '#e9ecef';
+        codeEl.style.cursor = 'not-allowed';
+    }
+
     document.getElementById('btnSaveEmplacement').style.display = '';
     clearFieldErrors(['emplacementCode', 'emplacementNom', 'emplacementType']);
 }
 
+// ============================================================
+// GESTION DES ERREURS DE CHAMP
+// ============================================================
+function showFieldError(fieldId, msg) {
+    var err = document.getElementById('err-' + fieldId);
+    if (err) { err.textContent = msg; err.style.display = 'block'; }
+}
+
 function clearFieldErrors(ids) {
-    ids.forEach(function(id) {
+    ids.forEach(function (id) {
         var err = document.getElementById('err-' + id);
         if (err) { err.textContent = ''; err.style.display = 'none'; }
     });
 }
 
-// Expositions globales
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.openAddEmplacementModal = openAddEmplacementModal;
 window.editEmplacement = editEmplacement;
 window.viewEmplacement = viewEmplacement;

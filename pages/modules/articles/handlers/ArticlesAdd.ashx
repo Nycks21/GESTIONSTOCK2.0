@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="ArticlesAdd" %>
+﻿﻿<%@ WebHandler Language="C#" Class="ArticlesAdd" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -11,9 +11,13 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
     public void ProcessRequest(HttpContext ctx)
     {
         ctx.Response.ContentType = "application/json";
+        ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -24,8 +28,7 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            string id = data.ContainsKey("id") && data["id"] != null ? data["id"].ToString() : null;
-            string code = GetString(data, "code");
+            // ⚠️ Le CODE n'est plus envoyé par le client : il est généré côté serveur.
             string nom = GetString(data, "nom");
             string description = GetString(data, "description") ?? "";
             string categorieId = GetString(data, "categorieId");
@@ -38,14 +41,21 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
             bool actif = GetBool(data, "actif", true);
             bool estService = GetBool(data, "estService", false);
 
-            if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(uniteId) || string.IsNullOrEmpty(emplacementId))
+            if (string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(uniteId) || string.IsNullOrEmpty(emplacementId))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Code, nom, unité et emplacement sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Nom, unité et emplacement sont obligatoires.\"}");
                 return;
             }
 
+            // 🔑 Récupération du code projet (Web.config : ProjectCode)
+            string projetCode = AuthHelper.GetProjectCode(ctx);
+            if (string.IsNullOrEmpty(projetCode)) projetCode = "TALIM";
+            projetCode = projetCode.Trim().ToUpperInvariant().Replace(" ", "");
+
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
+            string newId = Guid.NewGuid().ToString();
+            string code;
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -54,8 +64,53 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                 {
                     try
                     {
-                        string newId = Guid.NewGuid().ToString();
+                        // -----------------------------------------------------------
+                        // 1) Génération atomique du numéro de séquence pour le projet
+                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT
+                        // -----------------------------------------------------------
+                        string sqlSeq = @"
+                            IF NOT EXISTS (
+                                SELECT 1 FROM MARTICLE_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
+                                WHERE PROJET_CODE = @projet
+                            )
+                            BEGIN
+                                INSERT INTO MARTICLE_SEQUENCE (PROJET_CODE, DERNIER_NUMERO)
+                                VALUES (@projet, 0);
+                            END
 
+                            UPDATE MARTICLE_SEQUENCE
+                            SET DERNIER_NUMERO = DERNIER_NUMERO + 1
+                            OUTPUT INSERTED.DERNIER_NUMERO
+                            WHERE PROJET_CODE = @projet;";
+
+                        int numero;
+                        using (var cmdSeq = new SqlCommand(sqlSeq, conn, trans))
+                        {
+                            cmdSeq.Parameters.AddWithValue("@projet", projetCode);
+                            object scalar = cmdSeq.ExecuteScalar();
+                            numero = Convert.ToInt32(scalar);
+                        }
+
+                        // -----------------------------------------------------------
+                        // 2) Construction du code : ART-{PROJET}-{00001}
+                        // -----------------------------------------------------------
+                        code = string.Format("ART-{0}-{1:D5}", projetCode, numero);
+
+                        // -----------------------------------------------------------
+                        // 3) Vérification anti-doublon (ceinture + bretelles)
+                        // -----------------------------------------------------------
+                        using (var cmdCheck = new SqlCommand(
+                            "SELECT COUNT(1) FROM MARTICLE WHERE CODE = @code", conn, trans))
+                        {
+                            cmdCheck.Parameters.AddWithValue("@code", code);
+                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
+                            if (exists > 0)
+                                throw new Exception("Le code généré existe déjà, veuillez réessayer.");
+                        }
+
+                        // -----------------------------------------------------------
+                        // 4) Insertion de l'article
+                        // -----------------------------------------------------------
                         string articleSql = @"
                             INSERT INTO MARTICLE (ID, CODE, NOM, DESCRIPTION, CATEGORIE_ID, FOURNISSEUR_PREFERE_ID, UNITE_MESURE_ID, EMPLACEMENT_ID,
                                                  SEUIL_ALERTE, SEUIL_MIN, ACTIVE, EST_SERVICE, CREATED_BY, CREATED_AT)
@@ -78,11 +133,14 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                             cmd.ExecuteNonQuery();
                         }
 
+                        // -----------------------------------------------------------
+                        // 5) Stock initial (si fourni)
+                        // -----------------------------------------------------------
                         if (stockInitial > 0 && !string.IsNullOrEmpty(emplacementId))
                         {
                             string stockSql = @"
-                                INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE_INITIAL, QUANTITE_MVT, QUANTITE_ACTUELLE, CREATED_BY, CREATED_AT)
-                                VALUES (@articleId, @empl, @stock, 0, @stock, @userId, GETDATE())";
+                                INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE_MVT, QUANTITE_ACTUELLE, CREATED_BY, CREATED_AT)
+                                VALUES (@articleId, @empl, @stock, @stock, @userId, GETDATE())";
                             using (var cmd = new SqlCommand(stockSql, conn, trans))
                             {
                                 cmd.Parameters.AddWithValue("@articleId", newId);
@@ -94,11 +152,18 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                         }
 
                         trans.Commit();
-                        ctx.Response.Write(serializer.Serialize(new { success = true, id = newId, message = "Article ajouté avec succès." }));
+
+                        ctx.Response.Write(serializer.Serialize(new
+                        {
+                            success = true,
+                            id = newId,
+                            code = code,
+                            message = "Article ajouté avec succès (" + code + ")."
+                        }));
                     }
-                    catch (Exception)
+                    catch
                     {
-                        trans.Rollback();
+                        try { trans.Rollback(); } catch { /* ignore */ }
                         throw;
                     }
                 }
@@ -107,7 +172,11 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

@@ -1,7 +1,25 @@
 // ============================================================
-// CHARGEMENT DES DEMANDES (filtrées par utilisateur)
+// CHARGEMENT DES DEMANDES – SAISIE (style aligné sur SORTIE)
 // ============================================================
 
+// Sécurité : garantir que AppState existe
+if (typeof window.AppState === 'undefined') {
+    window.AppState = {
+        sorties: [],
+        total: 0,
+        page: 1,
+        pageSize: 10,
+        totalPages: 0,
+        sortField: 'DATE_SORTIE',
+        sortOrder: 'DESC',
+        filters: { search: '', statut: '' },
+        articles: []
+    };
+}
+
+// ============================================================
+// CHARGEMENT DES DEMANDES
+// ============================================================
 async function loadDemandes(options) {
     options = options || {};
     var silent = !!options.silent;
@@ -37,6 +55,9 @@ async function loadDemandes(options) {
     }
 }
 
+// ============================================================
+// STATS
+// ============================================================
 async function loadDemandesStats() {
     try {
         var url = API.BASE + API.HANDLERS_PATH + API.STATS;
@@ -53,6 +74,9 @@ async function loadDemandesStats() {
     }
 }
 
+// ============================================================
+// ARTICLES (pour les dropdowns du modal)
+// ============================================================
 async function loadArticlesForSaisie() {
     try {
         var url = API.BASE + 'pages/modules/articles/handlers/' + API.ARTICLES + '?page=1&pageSize=999999';
@@ -65,9 +89,8 @@ async function loadArticlesForSaisie() {
 }
 
 // ============================================================
-// FONCTIONS UTILITAIRES
+// UTILITAIRES DE FORMATAGE
 // ============================================================
-
 function formatNumber(value, decimals) {
     if (value === undefined || value === null || isNaN(value)) return '0';
     return Number(value).toFixed(decimals || 0);
@@ -92,25 +115,14 @@ function formatDateValue(value, includeTime) {
     }
     if (!date || isNaN(date.getTime())) return '-';
     var options = includeTime
-        ? {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        }
-        : {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric'
-        };
+        ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
+        : { day: '2-digit', month: '2-digit', year: 'numeric' };
     return date.toLocaleString('fr-FR', options);
 }
 
 // ============================================================
-// AFFICHAGE DU TABLEAU AVEC ACTIONS DYNAMIQUES
+// RENDU DU TABLEAU
 // ============================================================
-
 function renderDemandesTable(sorties) {
     var tbody = document.getElementById('saisieTableBody');
     if (!tbody) return;
@@ -119,14 +131,45 @@ function renderDemandesTable(sorties) {
         document.getElementById('resultsCounter').textContent = '0 demande(s)';
         return;
     }
+
     var html = '';
     sorties.forEach(function (s) {
-        var statutBadge = {
-            'BROUILLON': '<span class="badge bg-warning" style="background:#B6D8F2;padding:4px 10px;border-radius:20px;color:#1E0F1C;">En cours</span>',
-            'VALIDE': '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:#fff;">Validé</span>',
-            'ANNULE': '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:#fff;">Annulé</span>'
-        }[s.STATUT] || s.STATUT;
+        var statut = s.STATUT;
+
+        var statutBadge = (function () {
+            var baseStyle =
+                'display:inline-flex;align-items:center;gap:5px;' +
+                'padding:5px 12px;border-radius:20px;' +
+                'font-size:11.5px;font-weight:600;letter-spacing:0.3px;' +
+                'text-transform:uppercase;white-space:nowrap;';
+
+            var badges = {
+                BROUILLON:
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#64b5f6,#2196f3);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(33,150,243,0.35);">' +
+                        '<i class="fas fa-pencil-alt" style="font-size:10px;"></i> En cours' +
+                    '</span>',
+                VALIDE:
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#66bb6a,#4caf50);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(76,175,80,0.35);">' +
+                        '<i class="fas fa-check-circle" style="font-size:10px;"></i> Validé' +
+                    '</span>',
+                ANNULE:
+                    '<span style="' + baseStyle +
+                        'background:linear-gradient(135deg,#ef5350,#f44336);' +
+                        'color:#fff;box-shadow:0 2px 6px rgba(244,67,54,0.35);">' +
+                        '<i class="fas fa-times-circle" style="font-size:10px;"></i> Annulé' +
+                    '</span>'
+            };
+
+            return badges[statut] || ('<span style="' + baseStyle +
+                'background:#e2e3e5;color:#383d41;">' + statut + '</span>');
+        })();
+
         var lignes = s.Lignes || [];
+
         var articlesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-article-item">' +
@@ -135,20 +178,30 @@ function renderDemandesTable(sorties) {
                     '</div>';
             }).join('')
             : '<span class="text-muted">Aucun article</span>';
+
         var quantitesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE_D, 2) + '</div>';
             }).join('')
             : '<span class="text-muted">-</span>';
 
-        // --- Construction des actions selon le statut ---
-        var actionsHtml = '';
-        // Bouton Visualiser toujours présent
-        actionsHtml += '<button type="button" class="btn btn-sm btn-info" onclick="viewDemande(\'' + s.ID + '\')" title="Voir détails"><i class="fas fa-eye"></i></button> ';
-        // Si le statut est "BROUILLON" (En cours), on ajoute Modifier et Supprimer
-        if (s.STATUT === 'BROUILLON') {
-            actionsHtml += '<button type="button" class="btn btn-sm btn-primary" onclick="editDemande(\'' + s.ID + '\')" title="Modifier"><i class="fas fa-edit"></i></button> ';
-            actionsHtml += '<button type="button" class="btn btn-sm btn-danger" onclick="deleteDemande(\'' + s.ID + '\')" title="Supprimer"><i class="fas fa-trash"></i></button>';
+        var actionsHtml = "";
+
+        actionsHtml +=
+            '<button type="button" class="btn-icon btn-info" ' +
+            'onclick="viewDemande(\'' + s.ID + '\')" title="Voir détails">' +
+            '<i class="fas fa-eye"></i></button>';
+
+        if (statut === 'BROUILLON') {
+            actionsHtml +=
+                '<button type="button" class="btn-icon btn-primary" ' +
+                'onclick="editDemande(\'' + s.ID + '\')" title="Modifier">' +
+                '<i class="fas fa-edit"></i></button>';
+
+            actionsHtml +=
+                '<button type="button" class="btn-icon btn-danger" ' +
+                'onclick="deleteDemande(\'' + s.ID + '\')" title="Supprimer">' +
+                '<i class="fas fa-trash"></i></button>';
         }
 
         html += '<tr>' +
@@ -161,11 +214,14 @@ function renderDemandesTable(sorties) {
             '<td>' + actionsHtml + '</td>' +
             '</tr>';
     });
+
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = AppState.total + ' demande(s)';
 }
 
-// Expositions
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.loadDemandes = loadDemandes;
 window.loadDemandesStats = loadDemandesStats;
 window.loadArticlesForSaisie = loadArticlesForSaisie;

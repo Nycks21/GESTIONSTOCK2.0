@@ -1,228 +1,233 @@
 'use strict';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LOADERS — Module Dashboard
-// ─────────────────────────────────────────────────────────────────────────────
-
 function loadDashboard() {
-    showLoading('Chargement du tableau de bord...');
-
-    var dynTitle = document.getElementById('dynPageTitle');
-    var dynBreadcrumb = document.getElementById('dynBreadcrumb');
-    if (dynTitle) dynTitle.textContent = 'Tableau de bord';
-    if (dynBreadcrumb) dynBreadcrumb.textContent = 'Tableau de bord';
-
+    showSpinner();
     activateDashboardLink();
 
     Promise.all([
-        loadKPI(),
-        loadPresences(),
-        loadRepartition(),
-        loadReussite(),
-        loadFrais(),
-        loadAbsencesFrequentes(),
-        loadActivite(),
-        loadCalendarEvents()
-    ]).catch(function(error) {
-        console.error('Erreur chargement dashboard:', error);
-        if (typeof showToast === 'function') {
-            showToast('Erreur lors du chargement des données', 'error');
-        }
+        loadKpi(),
+        loadAlerts(),
+        loadMovements(),
+        loadStockByCategory(),
+        loadRecentMovements(),
+        loadRecentDocuments(),
+        loadTopArticles()
+    ]).catch(function(err) {
+        console.error('Dashboard load error:', err);
+        showToast('Erreur lors du chargement du tableau de bord', 'error');
     }).finally(function() {
-        hideLoading();
+        hideSpinner();
+        DashboardState.lastRefresh = new Date();
     });
-
-    generateCalendar(currentDate);
 }
 
-async function loadKPI() {
-    try {
-        var response = await fetch(API_DASHBOARD.kpi);
-        var data = await response.json();
+async function fetchJson(url) {
+    var resp = await fetch(url, { credentials: 'same-origin' });
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    return resp.json();
+}
 
-        if (data.success) {
-            dashboardData.kpi = data;
-            updateKPI(data);
-        }
-    } catch (error) {
-        console.error('Erreur KPI:', error);
-        if (typeof showToast === 'function') {
-            showToast('Erreur chargement des indicateurs', 'error');
-        }
+// ═══ KPI ═══
+async function loadKpi() {
+    try {
+        var data = await fetchJson(DASHBOARD_API.KPI);
+        if (!data.success) return;
+        DashboardState.kpi = data;
+
+        document.getElementById('valArticles').textContent = formatNumber(data.articlesActifs);
+        document.getElementById('pillArticlesTotal').textContent = formatNumber(data.articlesTotal) + ' total';
+
+        document.getElementById('valAlertes').textContent = formatNumber(data.alertesStock);
+        document.getElementById('pillRuptures').textContent = formatNumber(data.ruptures) + ' rupture(s)';
+        document.getElementById('pillAlertesCount').textContent = formatNumber(data.alertes) + ' alerte(s)';
+
+        document.getElementById('valBons').textContent = formatNumber(data.bonsAttente);
+        document.getElementById('pillEntree').textContent = formatNumber(data.bonsEntree) + ' entrée(s)';
+        document.getElementById('pillSortie').textContent = formatNumber(data.bonsSortie) + ' sortie(s)';
+
+        document.getElementById('valValeur').textContent = formatCurrency(data.valeurStock);
+        document.getElementById('pillSousSeuil').textContent = formatNumber(data.articlesSousSeuil) + ' sous seuil';
+    } catch (e) {
+        console.error('KPI:', e);
     }
 }
 
-async function loadPresences() {
-    try {
-        var response = await fetch(API_DASHBOARD.presence);
-        var data = await response.json();
+// ═══ ALERTES ═══
+async function loadAlerts() {
+    var card = document.getElementById('alertCard');
+    if (!card) return;
 
-        var ctx = document.getElementById('chartPresence');
-        if (ctx) {
-            initChartPresence(ctx, data.labels, data.presents, data.absents);
+    try {
+        var data = await fetchJson(DASHBOARD_API.ALERTS);
+        var items = data.data || [];
+        DashboardState.alerts = items;
+
+        if (!items.length) {
+            card.style.display = 'none';
+            return;
         }
-    } catch (error) {
-        console.error('Erreur Présences:', error);
+        card.style.display = 'block';
+        document.getElementById('alertCount').textContent = items.length;
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+            var a = items[i];
+            html += '<tr>'
+                + '<td><strong>' + escapeHtml(a.code) + '</strong></td>'
+                + '<td>' + escapeHtml(a.nom) + '</td>'
+                + '<td>' + escapeHtml(a.categorie || '—') + '</td>'
+                + '<td>' + escapeHtml(a.emplacement || '—') + '</td>'
+                + '<td><strong>' + formatNumber(a.quantite) + '</strong> ' + escapeHtml(a.unite) + '</td>'
+                + '<td>' + formatNumber(a.seuilAlerte) + '</td>'
+                + '<td>' + statutBadge(a.statut) + '</td>'
+                + '</tr>';
+        }
+        document.getElementById('tbodyAlerts').innerHTML = html;
+    } catch (e) {
+        console.error('Alerts:', e);
     }
 }
 
-async function loadRepartition() {
+// ═══ MOUVEMENTS ═══
+async function loadMovements() {
     try {
-        var response = await fetch(API_DASHBOARD.repartition);
-        var data = await response.json();
-
-        var ctx = document.getElementById('chartDonut');
-        if (ctx) {
-            initChartDonut(ctx, data.niveaux, data.counts);
-        }
-    } catch (error) {
-        console.error('Erreur Répartition:', error);
+        var data = await fetchJson(DASHBOARD_API.MOVEMENTS);
+        if (!data.success) return;
+        DashboardState.movements = data;
+        initMovementsChart(data.labels, data.entrees, data.sorties);
+    } catch (e) {
+        console.error('Movements:', e);
     }
 }
 
-async function loadReussite() {
+// ═══ CATÉGORIES ═══
+async function loadStockByCategory() {
     try {
-        var response = await fetch(API_DASHBOARD.reussite);
-        var data = await response.json();
-
-        if (data.success && data.data) {
-            // ✅ Utiliser le graphique avec légende intégrée (canvas)
-            initReussiteChart('chartReussite', data.data);
-        } else {
-            // Si pas de données, afficher un message dans le conteneur parent (optionnel)
-            var container = document.getElementById('reussiteContainer');
-            if (container) {
-                container.innerHTML = '<p class="text-center" style="color:#6c757d;padding:20px;">Aucune donnée disponible</p>';
-            }
-        }
-    } catch (error) {
-        console.error('Erreur Réussite:', error);
-        var container = document.getElementById('reussiteContainer');
-        if (container) {
-            container.innerHTML = '<p class="text-center" style="color:#6c757d;padding:20px;">Erreur chargement</p>';
-        }
+        var data = await fetchJson(DASHBOARD_API.STOCK_CATEGORY);
+        if (!data.success || !data.labels) return;
+        DashboardState.categories = data;
+        initCategoriesChart(data.labels, data.quantites);
+    } catch (e) {
+        console.error('Categories:', e);
     }
 }
 
-async function loadFrais() {
-    try {
-        var response = await fetch(API_DASHBOARD.frais);
-        var data = await response.json();
+// ═══ ACTIVITÉ RÉCENTE (mouvements) ═══
+async function loadRecentMovements() {
+    var feed = document.getElementById('activityFeed');
+    if (!feed) return;
 
-        var ctx = document.getElementById('chartFrais');
-        if (ctx) {
-            initChartFrais(ctx, data.labels, data.payes, data.impayes, data.totals);
+    try {
+        var data = await fetchJson(DASHBOARD_API.RECENT_MVT);
+        var items = data.data || [];
+        DashboardState.recentMovements = items;
+
+        if (!items.length) {
+            feed.innerHTML = '<div class="loading-mini">Aucun mouvement récent</div>';
+            return;
         }
-    } catch (error) {
-        console.error('Erreur Frais:', error);
+
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+            var m = items[i];
+            var isEntree = m.type === 'ENTREE';
+            html += '<div class="activity-item">'
+                + '<div class="activity-icon ' + (isEntree ? 'entry' : 'exit') + '">'
+                + '<i class="fas fa-arrow-' + (isEntree ? 'down' : 'up') + '"></i>'
+                + '</div>'
+                + '<div class="activity-content">'
+                + '<div class="activity-text">'
+                + '<strong>' + (isEntree ? '+' : '-') + formatNumber(m.quantite) + ' ' + escapeHtml(m.unite) + '</strong>'
+                + ' — ' + escapeHtml(m.code) + ' ' + escapeHtml(m.nom)
+                + '</div>'
+                + '<div class="activity-time">'
+                + timeAgo(m.date)
+                + (m.utilisateur ? ' · ' + escapeHtml(m.utilisateur) : '')
+                + '</div>'
+                + '</div>'
+                + '</div>';
+        }
+        feed.innerHTML = html;
+    } catch (e) {
+        console.error('Recent movements:', e);
+        feed.innerHTML = '<div class="loading-mini">Erreur de chargement</div>';
     }
 }
 
-async function loadAbsencesFrequentes() {
+// ═══ DOCUMENTS RÉCENTS ═══
+async function loadRecentDocuments() {
+    var feed = document.getElementById('documentsFeed');
+    if (!feed) return;
+
     try {
-        var response = await fetch(API_DASHBOARD.absences);
-        var data = await response.json();
+        var data = await fetchJson(DASHBOARD_API.RECENT_DOCS);
+        var items = data.data || [];
+        DashboardState.recentDocuments = items;
 
-        var tbody = document.getElementById('tbodyAbsences');
-        if (!tbody) return;
+        if (!items.length) {
+            feed.innerHTML = '<div class="loading-mini">Aucun document récent</div>';
+            return;
+        }
 
-        if (data.success && data.data && data.data.length) {
-            var html = '';
-            for (var i = 0; i < data.data.length; i++) {
-                var item = data.data[i];
-                var badgeClass = item.statut === 'Critique' ? 'badge-danger' : 
-                                 item.statut === 'Surveiller' ? 'badge-warning' : 'badge-success';
-                // Afficher 0 si absent
-                var absences = item.nb || 0;
-                var retards = item.retards || 0;
-                html += '<tr style="cursor:pointer;" onclick="showStudentDetail(\'' + escapeHtml(item.nom) + '\')">'
-                    + '<td><strong>' + escapeHtml(item.nom) + '</strong></td>'
-                    + '<td>' + escapeHtml(item.classe) + '</td>'
-                    + '<td>' + absences + '</td>'
-                    + '<td>' + retards + '</td>'
-                    + '<td><span class="badge ' + badgeClass + '">' + escapeHtml(item.statut) + '</span></td>'
-                    + '</tr>';
-            }
-            tbody.innerHTML = html;
-        } else {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:30px;">Aucune absence ni retard ce mois</td></tr>';
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+            var d = items[i];
+            var isEntree = d.type === 'ENTREE';
+            html += '<div class="activity-item">'
+                + '<div class="activity-icon doc">'
+                + '<i class="fas fa-file-' + (isEntree ? 'import' : 'export') + '"></i>'
+                + '</div>'
+                + '<div class="activity-content">'
+                + '<div class="activity-text">'
+                + '<strong>' + escapeHtml(d.numero) + '</strong> '
+                + statutBadge(d.statut)
+                + '</div>'
+                + '<div class="activity-time">'
+                + (isEntree ? 'Entrée' : 'Sortie') + ' · ' + formatDateFr(d.date)
+                + '</div>'
+                + '</div>'
+                + '</div>';
         }
-    } catch (error) {
-        console.error('Erreur Absences:', error);
-        var tbody = document.getElementById('tbodyAbsences');
-        if (tbody) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:30px;">Erreur chargement</td></tr>';
-        }
+        feed.innerHTML = html;
+    } catch (e) {
+        console.error('Recent documents:', e);
+        feed.innerHTML = '<div class="loading-mini">Erreur de chargement</div>';
     }
 }
 
-async function loadActivite() {
+// ═══ TOP ARTICLES ═══
+async function loadTopArticles() {
+    var container = document.getElementById('topArticlesList');
+    if (!container) return;
+
     try {
-        var response = await fetch(API_DASHBOARD.activite);
-        var data = await response.json();
+        var data = await fetchJson(DASHBOARD_API.TOP_ARTICLES);
+        var items = data.data || [];
+        DashboardState.topArticles = items;
 
-        var feed = document.getElementById('activityFeed');
-        if (!feed) return;
-
-        var icons = {
-            success: 'fa-check-circle',
-            danger: 'fa-exclamation-circle',
-            warning: 'fa-clock',
-            info: 'fa-edit'
-        };
-
-        if (data.success && data.data && data.data.length) {
-            var html = '';
-            for (var i = 0; i < data.data.length; i++) {
-                var item = data.data[i];
-                html += '<div class="activity-item">'
-                    + '<div class="activity-icon ' + item.type + '">'
-                    + '<i class="fas ' + (icons[item.type] || 'fa-bell') + '"></i>'
-                    + '</div>'
-                    + '<div class="activity-content">'
-                    + '<div class="activity-text">' + escapeHtml(item.texte) + '</div>'
-                    + '<div class="activity-time">' + escapeHtml(item.temps) + '</div>'
-                    + '</div>'
-                    + '</div>';
-            }
-            feed.innerHTML = html;
-        } else {
-            feed.innerHTML = '<p class="text-center" style="color:#6c757d;padding:20px;">Aucune activité récente</p>';
+        if (!items.length) {
+            container.innerHTML = '<div class="loading-mini">Aucune donnée sur 30 jours</div>';
+            return;
         }
-    } catch (error) {
-        console.error('Erreur Activité:', error);
-        var feed = document.getElementById('activityFeed');
-        if (feed) {
-            feed.innerHTML = '<p class="text-center" style="color:#6c757d;padding:20px;">Erreur chargement</p>';
-        }
-    }
-}
 
-async function loadCalendarEvents() {
-    try {
-        var response = await fetch(API_DASHBOARD.events);
-        var data = await response.json();
-
-        if (data.success && data.events) {
-            calendarEvents = data.events;
-            generateCalendar(currentDate);
-        } else {
-            calendarEvents = [];
-            generateCalendar(currentDate);
+        var html = '';
+        for (var i = 0; i < items.length; i++) {
+            var a = items[i];
+            var rankClass = i < 3 ? ' rank-' + (i + 1) : '';
+            html += '<div class="top-article">'
+                + '<div class="top-rank' + rankClass + '">' + (i + 1) + '</div>'
+                + '<div class="top-info">'
+                + '<div class="top-name">' + escapeHtml(a.nom) + '</div>'
+                + '<div class="top-code">' + escapeHtml(a.code) + '</div>'
+                + '</div>'
+                + '<div class="top-volume">' + formatNumber(a.volume) + ' ' + escapeHtml(a.unite) + '</div>'
+                + '</div>';
         }
-    } catch (error) {
-        console.error('Erreur chargement événements:', error);
-        calendarEvents = [];
-        generateCalendar(currentDate);
+        container.innerHTML = html;
+    } catch (e) {
+        console.error('Top articles:', e);
+        container.innerHTML = '<div class="loading-mini">Erreur de chargement</div>';
     }
 }
 
 window.loadDashboard = loadDashboard;
-window.loadKPI = loadKPI;
-window.loadPresences = loadPresences;
-window.loadRepartition = loadRepartition;
-window.loadReussite = loadReussite;
-window.loadFrais = loadFrais;
-window.loadAbsencesFrequentes = loadAbsencesFrequentes;
-window.loadActivite = loadActivite;
-window.loadCalendarEvents = loadCalendarEvents;

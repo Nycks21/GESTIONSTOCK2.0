@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="UniteEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="UniteEdit" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -14,8 +14,10 @@ public class UniteEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -27,13 +29,13 @@ public class UniteEdit : IHttpHandler, IRequiresSessionState
             Dictionary<string, object> data = serializer.Deserialize<Dictionary<string, object>>(json);
 
             string id = GetString(data, "id");
-            string code = GetString(data, "code");
+            // ⚠️ Le CODE est immuable : il n'est plus lu ni mis à jour
             string nom = GetString(data, "nom");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom))
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(nom))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"ID, code et nom sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID et nom sont obligatoires.\"}");
                 return;
             }
 
@@ -43,21 +45,22 @@ public class UniteEdit : IHttpHandler, IRequiresSessionState
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
+                // ⚠️ Plus de "CODE = @code" dans le SET
                 string sql = @"
                     UPDATE SUNITE
-                    SET CODE = @code,
-                        NOM = @nom,
+                    SET NOM = @nom,
                         ACTIVE = @active,
                         UPDATED_BY = @userId,
                         UPDATED_AT = GETDATE()
                     WHERE ID = @id AND DELETION_AT IS NULL";
+
                 using (SqlCommand cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@code", code);
                     cmd.Parameters.AddWithValue("@nom", nom);
                     cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                     cmd.Parameters.AddWithValue("@userId", userId);
+
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
                     {
@@ -67,12 +70,20 @@ public class UniteEdit : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            ctx.Response.Write(serializer.Serialize(new { success = true, message = "Unité modifiée avec succès." }));
+            ctx.Response.Write(serializer.Serialize(new
+            {
+                success = true,
+                message = "Unité modifiée avec succès."
+            }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

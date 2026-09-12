@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="EmplacementAdd" %>
+﻿﻿<%@ WebHandler Language="C#" Class="EmplacementAdd" %>
 
 using System;
 using System.Collections.Generic;
@@ -15,8 +15,10 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -27,47 +29,125 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            string code = GetString(data, "code");
+            // ⚠️ Le CODE n'est plus envoyé par le client : il est généré côté serveur.
             string nom = GetString(data, "nom");
             string type = GetString(data, "type");
             string parentId = GetString(data, "parentId");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(type))
+            if (string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(type))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Code, nom et type sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"Le nom et le type sont obligatoires.\"}");
                 return;
             }
+
+            // 🔑 Récupération du code projet (Web.config : ProjectCode)
+            string projetCode = AuthHelper.GetProjectCode(ctx);
+            if (string.IsNullOrEmpty(projetCode)) projetCode = "TALIM";
+            projetCode = projetCode.Trim().ToUpperInvariant().Replace(" ", "");
 
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
             string newId = Guid.NewGuid().ToString();
+            string code;
 
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                string sql = @"
-                    INSERT INTO SEMPLACEMENT (ID, CODE, NOM, TYPE, PARENT_ID, ACTIVE, CREATED_BY, CREATED_AT)
-                    VALUES (@id, @code, @nom, @type, @parent, @active, @userId, GETDATE())";
-                using (var cmd = new SqlCommand(sql, conn))
+
+                using (SqlTransaction tx = conn.BeginTransaction())
                 {
-                    cmd.Parameters.AddWithValue("@id", newId);
-                    cmd.Parameters.AddWithValue("@code", code);
-                    cmd.Parameters.AddWithValue("@nom", nom);
-                    cmd.Parameters.AddWithValue("@type", type);
-                    cmd.Parameters.AddWithValue("@parent", string.IsNullOrEmpty(parentId) ? (object)DBNull.Value : parentId);
-                    cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
-                    cmd.Parameters.AddWithValue("@userId", userId);
-                    cmd.ExecuteNonQuery();
+                    try
+                    {
+                        // -----------------------------------------------------------
+                        // 1) Génération atomique du numéro de séquence pour le projet
+                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT
+                        // -----------------------------------------------------------
+                        string sqlSeq = @"
+                            IF NOT EXISTS (
+                                SELECT 1 FROM SEMPLACEMENT_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
+                                WHERE PROJET_CODE = @projet
+                            )
+                            BEGIN
+                                INSERT INTO SEMPLACEMENT_SEQUENCE (PROJET_CODE, DERNIER_NUMERO)
+                                VALUES (@projet, 0);
+                            END
+
+                            UPDATE SEMPLACEMENT_SEQUENCE
+                            SET DERNIER_NUMERO = DERNIER_NUMERO + 1
+                            OUTPUT INSERTED.DERNIER_NUMERO
+                            WHERE PROJET_CODE = @projet;";
+
+                        int numero;
+                        using (var cmdSeq = new SqlCommand(sqlSeq, conn, tx))
+                        {
+                            cmdSeq.Parameters.AddWithValue("@projet", projetCode);
+                            object scalar = cmdSeq.ExecuteScalar();
+                            numero = Convert.ToInt32(scalar);
+                        }
+
+                        // -----------------------------------------------------------
+                        // 2) Construction du code : EMP-{PROJET}-{00001}
+                        // -----------------------------------------------------------
+                        code = string.Format("EMP-{0}-{1:D5}", projetCode, numero);
+
+                        // -----------------------------------------------------------
+                        // 3) Vérification anti-doublon (ceinture + bretelles)
+                        // -----------------------------------------------------------
+                        using (var cmdCheck = new SqlCommand(
+                            "SELECT COUNT(1) FROM SEMPLACEMENT WHERE CODE = @code", conn, tx))
+                        {
+                            cmdCheck.Parameters.AddWithValue("@code", code);
+                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
+                            if (exists > 0)
+                                throw new Exception("Le code généré existe déjà, veuillez réessayer.");
+                        }
+
+                        // -----------------------------------------------------------
+                        // 4) Insertion de l'emplacement
+                        // -----------------------------------------------------------
+                        string sqlInsert = @"
+                            INSERT INTO SEMPLACEMENT (ID, CODE, NOM, TYPE, PARENT_ID, ACTIVE, CREATED_BY, CREATED_AT)
+                            VALUES (@id, @code, @nom, @type, @parent, @active, @userId, GETDATE())";
+
+                        using (var cmd = new SqlCommand(sqlInsert, conn, tx))
+                        {
+                            cmd.Parameters.AddWithValue("@id", newId);
+                            cmd.Parameters.AddWithValue("@code", code);
+                            cmd.Parameters.AddWithValue("@nom", nom);
+                            cmd.Parameters.AddWithValue("@type", type);
+                            cmd.Parameters.AddWithValue("@parent", string.IsNullOrEmpty(parentId) ? (object)DBNull.Value : parentId);
+                            cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
+                            cmd.Parameters.AddWithValue("@userId", userId);
+                            cmd.ExecuteNonQuery();
+                        }
+
+                        tx.Commit();
+                    }
+                    catch
+                    {
+                        try { tx.Rollback(); } catch { /* ignore */ }
+                        throw;
+                    }
                 }
             }
 
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, id = newId, message = "Emplacement ajouté avec succès." }));
+            ctx.Response.Write(serializer.Serialize(new
+            {
+                success = true,
+                id = newId,
+                code = code,
+                message = "Emplacement ajouté avec succès (" + code + ")."
+            }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 
@@ -93,4 +173,4 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
     {
         get { return false; }
     }
-}   // ← cette accolade fermante était manquante
+}

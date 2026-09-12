@@ -14,8 +14,10 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -32,6 +34,14 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
             if (!string.IsNullOrEmpty(ctx.Request["statut"])) statut = ctx.Request["statut"];
             if (!string.IsNullOrEmpty(ctx.Request["sort"])) sort = ctx.Request["sort"];
             if (!string.IsNullOrEmpty(ctx.Request["order"])) order = ctx.Request["order"];
+
+            // ✅ Whitelist anti-injection SQL sur ORDER BY
+            var allowedSort = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "DATE_SORTIE", "DATE_RECEPTION", "NUMERO", "NOM", "STATUT" };
+            var allowedOrder = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                { "ASC", "DESC" };
+            if (!allowedSort.Contains(sort)) sort = "DATE_SORTIE";
+            if (!allowedOrder.Contains(order)) order = "DESC";
 
             string connStr = AuthHelper.ConnectionString;
             var resultList = new List<Dictionary<string, object>>();
@@ -67,8 +77,11 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
                     total = (int)cmd.ExecuteScalar();
                 }
 
+                // ✅ AJOUT : s.DATE_RECEPTION dans le SELECT
                 string dataSql = @"
-                    SELECT s.ID, s.NUMERO, s.DATE_SORTIE, " + statutCalculeSql + @" AS STATUT, s.DESTINATION, s.NOM, s.FONCTION, s.NOTES, s.CREATED_AT
+                    SELECT s.ID, s.NUMERO, s.DATE_SORTIE, s.DATE_RECEPTION,
+                           " + statutCalculeSql + @" AS STATUT,
+                           s.DESTINATION, s.NOM, s.FONCTION, s.NOTES, s.CREATED_AT
                     FROM SSORTIE s
                     " + where + @"
                     " + orderBy + @"
@@ -92,6 +105,12 @@ public class GetSorties : IHttpHandler, IRequiresSessionState
                             obj["ID"] = id;
                             obj["NUMERO"] = reader["NUMERO"].ToString();
                             obj["DATE_SORTIE"] = reader["DATE_SORTIE"] == DBNull.Value ? null : reader["DATE_SORTIE"];
+
+                            // ✅ AJOUT : date de réception
+                            obj["DATE_RECEPTION"] = reader["DATE_RECEPTION"] == DBNull.Value
+                                ? null
+                                : (object)reader["DATE_RECEPTION"];
+
                             obj["STATUT"] = reader["STATUT"].ToString();
                             obj["DESTINATION"] = reader["DESTINATION"] == DBNull.Value ? "" : reader["DESTINATION"].ToString();
                             obj["NOM"] = reader["NOM"] == DBNull.Value ? "" : reader["NOM"].ToString();

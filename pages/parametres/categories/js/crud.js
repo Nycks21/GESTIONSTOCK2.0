@@ -1,8 +1,10 @@
-// crud.js - Module Catégories avec visualisation
+// crud.js - Module Catégories avec génération automatique du CODE
 var currentCategorieId = null;
 var currentMode = 'add'; // 'add', 'edit', 'view'
 
-// Fonction utilitaire pour activer/désactiver les champs
+// ============================================================
+// UTILITAIRE : activer / désactiver les champs
+// ============================================================
 function setFieldsEnabled(enabled) {
     var inputs = document.querySelectorAll('#categorieModal input, #categorieModal select, #categorieModal textarea');
     for (var i = 0; i < inputs.length; i++) {
@@ -17,79 +19,135 @@ function setFieldsEnabled(enabled) {
     }
 }
 
+// ============================================================
+// AJOUT
+// ============================================================
 function openAddCategorieModal(e) {
     if (e) e.preventDefault();
     currentCategorieId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-tag"></i> Ajouter une catégorie';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-tags"></i> Ajouter une catégorie';
     document.getElementById('categorieForm').reset();
     document.getElementById('categorieActif').value = '1';
     document.getElementById('categorieParent').value = '';
+
+    // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
+    var codeEl = document.getElementById('categorieCode');
+    codeEl.value = '';
+    codeEl.placeholder = 'Sera généré automatiquement (CAT-XXX-00001)';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     setFieldsEnabled(true);
+
+    // setFieldsEnabled réactive les champs → on réapplique le readonly sur le code
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveCategorie').style.display = '';
     clearErrors();
     loadParentDropdown();
     document.getElementById('categorieModal').style.display = 'flex';
 }
 
+// ============================================================
+// MODIFICATION
+// ============================================================
 function editCategorie(id) {
     var cat = AppState.categories.find(function (c) { return c.ID === id; });
     if (!cat) return;
     currentCategorieId = id;
     currentMode = 'edit';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier une catégorie';
-    document.getElementById('categorieCode').value = cat.CODE || '';
+
+    var codeEl = document.getElementById('categorieCode');
+    codeEl.value = cat.CODE || '';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('categorieNom').value = cat.NOM || '';
     document.getElementById('categorieDescription').value = cat.DESCRIPTION || '';
     document.getElementById('categorieActif').value = cat.ACTIVE ? '1' : '0';
+
     setFieldsEnabled(true);
+
+    // Réapplication du readonly sur le code (le code est immuable)
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('btnSaveCategorie').style.display = '';
+
     // Charger le dropdown parent et sélectionner la valeur actuelle
-    loadParentDropdown(function() {
+    loadParentDropdown(function () {
         document.getElementById('categorieParent').value = cat.PARENT_ID || '';
     });
+
     clearErrors();
     document.getElementById('categorieModal').style.display = 'flex';
 }
 
+// ============================================================
+// VISUALISATION
+// ============================================================
 function viewCategorie(id) {
     var cat = AppState.categories.find(function (c) { return c.ID === id; });
     if (!cat) return;
     currentCategorieId = id;
     currentMode = 'view';
     document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails de la catégorie';
-    document.getElementById('categorieCode').value = cat.CODE || '';
+
+    var codeEl = document.getElementById('categorieCode');
+    codeEl.value = cat.CODE || '';
+
     document.getElementById('categorieNom').value = cat.NOM || '';
     document.getElementById('categorieDescription').value = cat.DESCRIPTION || '';
     document.getElementById('categorieActif').value = cat.ACTIVE ? '1' : '0';
-    // Charger le dropdown parent pour afficher le parent, mais désactivé
-    loadParentDropdown(function() {
+
+    setFieldsEnabled(false);
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
+    document.getElementById('btnSaveCategorie').style.display = 'none';
+
+    loadParentDropdown(function () {
         document.getElementById('categorieParent').value = cat.PARENT_ID || '';
     });
-    setFieldsEnabled(false);
-    document.getElementById('btnSaveCategorie').style.display = 'none';
+
     clearErrors();
     document.getElementById('categorieModal').style.display = 'flex';
 }
 
+// ============================================================
+// ENREGISTREMENT (ajout ou modification)
+// ============================================================
 async function saveCategorie(e) {
     e.preventDefault();
+
     if (currentMode === 'view') {
         showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
         return;
     }
+
     var id = currentCategorieId;
+
+    // ⚠️ Le CODE n'est plus envoyé :
+    //    - à l'ajout → généré côté serveur (CA-PROJET-00001)
+    //    - en modification → immuable, non modifiable
     var data = {
-        code: document.getElementById('categorieCode').value.trim(),
         nom: document.getElementById('categorieNom').value.trim(),
         description: document.getElementById('categorieDescription').value.trim(),
         parentId: document.getElementById('categorieParent').value || null,
         actif: parseInt(document.getElementById('categorieActif').value) === 1
     };
 
+    // Validation : seul le nom est requis
     var valid = true;
     clearErrors();
-    if (!data.code) { showError('categorieCode', 'Le code est requis'); valid = false; }
     if (!data.nom) { showError('categorieNom', 'Le nom est requis'); valid = false; }
     if (!valid) return;
 
@@ -105,8 +163,11 @@ async function saveCategorie(e) {
             body: JSON.stringify(payload)
         });
         var result = await resp.json();
+
         if (result.success) {
-            showToast('Succès', result.message || (id ? 'Catégorie modifiée' : 'Catégorie ajoutée'), 'success');
+            var msg = result.message || (id ? 'Catégorie modifiée' : 'Catégorie ajoutée');
+            if (result.code && !id) msg = 'Catégorie ajoutée avec succès (' + result.code + ').';
+            showToast('Succès', msg, 'success');
             closeCategorieModal();
             loadCategories();
             loadStats();
@@ -120,6 +181,9 @@ async function saveCategorie(e) {
     }
 }
 
+// ============================================================
+// SUPPRESSION
+// ============================================================
 async function deleteCategorie(id) {
     var confirmResult = await Swal.fire({
         title: 'Confirmer la suppression',
@@ -156,20 +220,40 @@ async function deleteCategorie(id) {
     }
 }
 
+// ============================================================
+// FERMETURE DU MODAL
+// ============================================================
 function closeCategorieModal() {
     document.getElementById('categorieModal').style.display = 'none';
+
     currentCategorieId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-tag"></i> Ajouter une catégorie';
+    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-tags"></i> Ajouter une catégorie';
+
     setFieldsEnabled(true);
+
+    // Repasser le champ code en mode "généré auto"
+    var codeEl = document.getElementById('categorieCode');
+    if (codeEl) {
+        codeEl.value = '';
+        codeEl.placeholder = 'Sera généré automatiquement (CAT-XXX-00001)';
+        codeEl.readOnly = true;
+        codeEl.style.backgroundColor = '#e9ecef';
+        codeEl.style.cursor = 'not-allowed';
+    }
+
     document.getElementById('btnSaveCategorie').style.display = '';
     clearErrors();
 }
 
+// ============================================================
+// GESTION DES ERREURS DE CHAMP
+// ============================================================
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
     if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
 }
+
 function clearErrors() {
     var errors = document.querySelectorAll('.field-error');
     for (var i = 0; i < errors.length; i++) {
@@ -178,7 +262,9 @@ function clearErrors() {
     }
 }
 
-// Expositions
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.openAddCategorieModal = openAddCategorieModal;
 window.editCategorie = editCategorie;
 window.viewCategorie = viewCategorie;

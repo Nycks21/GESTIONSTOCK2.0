@@ -1,6 +1,6 @@
 using System;
 
-public partial class accuse : System.Web.UI.Page
+public partial class saisies : System.Web.UI.Page
 {
     protected void Page_Load(object sender, EventArgs e)
     {

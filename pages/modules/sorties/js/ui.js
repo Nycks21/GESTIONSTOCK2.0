@@ -1,6 +1,8 @@
 // ============================================================
-// SPINNER
+// UI - SORTIES (Spinner, Modales, Pagination, Lignes)
 // ============================================================
+
+// ─── SPINNER ───
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -19,9 +21,7 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// ============================================================
-// MODALES
-// ============================================================
+// ─── MODALES ───
 function showModal(id) {
     var m = document.getElementById(id || 'sortieModal');
     if (m) {
@@ -37,9 +37,7 @@ function closeModal(id) {
     }
 }
 
-// ============================================================
-// PAGINATION
-// ============================================================
+// ─── PAGINATION ───
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -78,17 +76,11 @@ function createPaginationControls(totalPages) {
     };
 
     container.appendChild(createBtn('«', function () {
-        if (AppState.page !== 1) {
-            AppState.page = 1;
-            loadSorties();
-        }
+        if (AppState.page !== 1) { AppState.page = 1; loadSorties(); }
     }, AppState.page === 1));
 
     container.appendChild(createBtn('‹', function () {
-        if (AppState.page > 1) {
-            AppState.page--;
-            loadSorties();
-        }
+        if (AppState.page > 1) { AppState.page--; loadSorties(); }
     }, AppState.page === 1));
 
     var maxVisible = 5;
@@ -97,74 +89,66 @@ function createPaginationControls(totalPages) {
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
 
     if (start > 1) {
-        container.appendChild(createBtn('1', function () {
-            AppState.page = 1;
-            loadSorties();
-        }));
+        container.appendChild(createBtn('1', function () { AppState.page = 1; loadSorties(); }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
-
     for (var i = start; i <= end; i++) {
         (function (page) {
             container.appendChild(createBtn(String(page), function () {
-                if (page !== AppState.page) {
-                    AppState.page = page;
-                    loadSorties();
-                }
+                if (page !== AppState.page) { AppState.page = page; loadSorties(); }
             }));
         })(i);
     }
-
     if (end < totalPages) {
         if (end < totalPages - 1) container.appendChild(createBtn('...', null, true, true));
         (function (tp) {
-            container.appendChild(createBtn(String(tp), function () {
-                AppState.page = tp;
-                loadSorties();
-            }));
+            container.appendChild(createBtn(String(tp), function () { AppState.page = tp; loadSorties(); }));
         })(totalPages);
     }
 
     container.appendChild(createBtn('›', function () {
-        if (AppState.page < totalPages) {
-            AppState.page++;
-            loadSorties();
-        }
+        if (AppState.page < totalPages) { AppState.page++; loadSorties(); }
     }, AppState.page === totalPages));
 
     container.appendChild(createBtn('»', function () {
-        if (AppState.page !== totalPages) {
-            AppState.page = totalPages;
-            loadSorties();
-        }
+        if (AppState.page !== totalPages) { AppState.page = totalPages; loadSorties(); }
     }, AppState.page === totalPages));
 
     wrapper.appendChild(container);
 }
 
-// ============================================================
-// GESTION DES LIGNES (SORTIE)
-// ============================================================
+// ─── LIGNES ───
 function ajouterLigne(articleId, qteD, qteR, obs) {
     var tbody = document.getElementById('lignesBody');
     if (!tbody) return;
     var rowCount = tbody.children.length;
     var tr = document.createElement('tr');
     tr.dataset.index = rowCount;
-    tr.innerHTML = `
-        <td>${rowCount + 1}</td>
-        <td>
-            <select class="form-control form-control-sm ligne-article" required>
-                <option value="">-- Article --</option>
-                ${AppState.articles.map(a => `<option value="${a.ID}" ${a.ID === articleId ? 'selected' : ''}>${a.CODE} - ${a.NOM}</option>`).join('')}
-            </select>
-        </td>
-        <td><input type="number" class="form-control form-control-sm ligne-qted" step="0.01" min="0" value="${qteD || ''}" required /></td>
-        <td><input type="number" class="form-control form-control-sm ligne-qter" step="0.01" min="0" value="${qteR || ''}" /></td>
-        <td><input type="text" class="form-control form-control-sm ligne-obs" value="${obs || ''}" /></td>
-        <td><button type="button" class="btn btn-sm btn-danger" onclick="supprimerLigne(this)"><i class="fas fa-trash"></i></button></td>
-    `;
+
+    var optionsHtml = AppState.articles.map(function (a) {
+        return '<option value="' + a.ID + '"' + (a.ID === articleId ? ' selected' : '') + '>' +
+               a.CODE + ' - ' + a.NOM + '</option>';
+    }).join('');
+
+    tr.innerHTML =
+        '<td>' + (rowCount + 1) + '</td>' +
+        '<td>' +
+            '<select class="form-control form-control-sm ligne-article" required>' +
+                '<option value="">-- Article --</option>' +
+                optionsHtml +
+            '</select>' +
+        '</td>' +
+        '<td><input type="number" class="form-control form-control-sm ligne-qted" step="0.01" min="0" value="' + (qteD || '') + '" required /></td>' +
+        '<td><input type="number" class="form-control form-control-sm ligne-qter" step="0.01" min="0" value="' + (qteR || '') + '" /></td>' +
+        '<td><input type="text" class="form-control form-control-sm ligne-obs" value="' + (obs || '') + '" /></td>' +
+        '<td style="text-align:center;">' +
+            '<button type="button" class="btn-icon btn-danger" onclick="supprimerLigne(this)" title="Supprimer la ligne">' +
+                '<i class="fas fa-trash"></i>' +
+            '</button>' +
+        '</td>';
+
     tbody.appendChild(tr);
+
     if (typeof enhanceArticleSelect === 'function') {
         enhanceArticleSelect(tr.querySelector('.ligne-article'));
     }
@@ -199,9 +183,7 @@ function getLignesFromModal() {
     return lignes;
 }
 
-// ============================================================
-// INITIALISATION DES CONTRÔLES UI
-// ============================================================
+// ─── INITIALISATION UI ───
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
@@ -228,7 +210,7 @@ function initUIControls() {
     }
 }
 
-// Expositions globales
+// ─── EXPOSITIONS ───
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.showModal = showModal;

@@ -14,8 +14,10 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -27,13 +29,12 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
             Dictionary<string, object> data = serializer.Deserialize<Dictionary<string, object>>(json);
 
             string id = GetString(data, "id");
-            string code = GetString(data, "code");
             string nom = GetString(data, "nom");
             string description = GetString(data, "description") ?? "";
             string parentId = GetString(data, "parentId");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom))
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(nom))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID, code et nom sont obligatoires.\"}");
                 return;
@@ -47,7 +48,7 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
                 conn.Open();
                 string sql = @"
                     UPDATE SCATEGORIE
-                    SET CODE = @code,
+                    SET
                         NOM = @nom,
                         DESCRIPTION = @desc,
                         PARENT_ID = @parent,
@@ -58,7 +59,6 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
                 using (SqlCommand cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@code", code);
                     cmd.Parameters.AddWithValue("@nom", nom);
                     cmd.Parameters.AddWithValue("@desc", description);
                     cmd.Parameters.AddWithValue("@parent", string.IsNullOrEmpty(parentId) ? (object)DBNull.Value : parentId);

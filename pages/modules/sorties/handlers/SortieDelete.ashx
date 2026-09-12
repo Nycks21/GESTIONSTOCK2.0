@@ -1,6 +1,7 @@
-<%@ WebHandler Language="C#" Class="SortieDelete" %>
+﻿<%@ WebHandler Language="C#" Class="SortieDelete" %>
 using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,8 +15,10 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -26,6 +29,41 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
+            // ─────────────────────────────────────────────────────────
+            // ✅ VÉRIFICATION DU MOT DE PASSE DE SUPPRESSION (obligatoire)
+            //    La comparaison se fait UNIQUEMENT côté serveur,
+            //    jamais dans le JavaScript.
+            // ─────────────────────────────────────────────────────────
+            string password = null;
+            if (data.ContainsKey("password") && data["password"] != null)
+                password = data["password"].ToString();
+
+            string expectedPassword = ConfigurationManager.AppSettings["suppr"];
+
+            if (string.IsNullOrEmpty(expectedPassword))
+            {
+                ctx.Response.Write(serializer.Serialize(new
+                {
+                    success = false,
+                    message = "Mot de passe de suppression non configuré sur le serveur."
+                }));
+                return;
+            }
+
+            if (string.IsNullOrEmpty(password) || password != expectedPassword)
+            {
+                ctx.Response.Write(serializer.Serialize(new
+                {
+                    success = false,
+                    passwordError = true,
+                    message = "Mot de passe incorrect. Veuillez réessayer."
+                }));
+                return;
+            }
+
+            // ─────────────────────────────────────────────────────────
+            // Récupération de l'ID
+            // ─────────────────────────────────────────────────────────
             string id = null;
             if (data.ContainsKey("id") && data["id"] != null)
                 id = data["id"].ToString();
@@ -38,6 +76,7 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
+
                 string referenceSql = @"
                     SELECT STATUT
                     FROM SSORTIE
@@ -56,6 +95,7 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
                         return;
                     }
                 }
+
                 string sql = "UPDATE SSORTIE SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ID = @id AND STATUT = 'BROUILLON'";
                 using (var cmd = new SqlCommand(sql, conn))
                 {
@@ -67,12 +107,20 @@ public class SortieDelete : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Bon de sortie supprimé." }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = true,
+                message = "Bon de sortie supprimé."
+            }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

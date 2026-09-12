@@ -16,8 +16,10 @@ public class GetStock : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -45,16 +47,13 @@ public class GetStock : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
+                // ✅ Filtre : tous les articles ayant du stock réel (SSTOCK)
                 string whereClause = @"
                     WHERE a.DELETION_AT IS NULL
                       AND EXISTS (
-                          SELECT 1
-                          FROM MLENTREE le
-                          INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
-                          WHERE le.ARTICLE_ID = a.ID
-                            AND le.DELETION_AT IS NULL
-                            AND be.STATUT = 'VALIDE'
-                            AND be.DELETION_AT IS NULL
+                          SELECT 1 FROM SSTOCK s
+                          WHERE s.ARTICLE_ID = a.ID
+                            AND s.DELETION_AT IS NULL
                       )";
                 if (!string.IsNullOrEmpty(search))
                     whereClause += " AND (a.CODE LIKE @search OR a.NOM LIKE @search)";
@@ -78,26 +77,21 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                 }
                 string orderBy = "ORDER BY " + sortColumn + " " + (sortOrder.ToUpperInvariant() == "DESC" ? "DESC" : "ASC");
 
+                // ✅ FIX :
+                //   - ENTREE / SORTIE : lus depuis MSTOCK (tous mouvements : bons + ajustements)
+                //   - DISPONIBLE : lu directement depuis SSTOCK (source de vérité)
+                //   - Emplacement : le plus grand porteur de stock (OUTER APPLY)
                 string fromSql = @"
                     FROM MARTICLE a
                     LEFT JOIN (
-                        SELECT le.ARTICLE_ID, SUM(le.QUANTITE) AS ENTREE
-                        FROM MLENTREE le
-                        INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
-                        WHERE le.DELETION_AT IS NULL
-                          AND be.STATUT = 'VALIDE'
-                          AND be.DELETION_AT IS NULL
-                        GROUP BY le.ARTICLE_ID
-                    ) ent ON ent.ARTICLE_ID = a.ID
-                    LEFT JOIN (
-                        SELECT ls.ARTICLE_ID, SUM(ls.QUANTITE_R) AS SORTIE
-                        FROM MLSORTIE ls
-                        INNER JOIN SSORTIE bs ON bs.ID = ls.BON_SORTIE_ID
-                        WHERE ls.DELETION_AT IS NULL
-                          AND bs.STATUT = 'VALIDE'
-                          AND bs.DELETION_AT IS NULL
-                        GROUP BY ls.ARTICLE_ID
-                    ) sor ON sor.ARTICLE_ID = a.ID
+                        SELECT
+                            ARTICLE_ID,
+                            SUM(CASE WHEN TYPE = 'ENTREE' THEN QUANTITE ELSE 0 END) AS ENTREE,
+                            SUM(CASE WHEN TYPE = 'SORTIE' THEN QUANTITE ELSE 0 END) AS SORTIE
+                        FROM MSTOCK
+                        WHERE DELETION_AT IS NULL
+                        GROUP BY ARTICLE_ID
+                    ) mvt ON mvt.ARTICLE_ID = a.ID
                     OUTER APPLY (
                         SELECT TOP 1 s.EMPLACEMENT_ID, e.NOM AS EMPLACEMENT_NOM, s.STATUT
                         FROM SSTOCK s
@@ -113,9 +107,11 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                     emp.EMPLACEMENT_ID,
                     emp.EMPLACEMENT_NOM,
                     a.SEUIL_ALERTE,
-                    ISNULL(ent.ENTREE, 0) AS ENTREE,
-                    ISNULL(sor.SORTIE, 0) AS SORTIE,
-                    ISNULL(ent.ENTREE, 0) - ISNULL(sor.SORTIE, 0) AS DISPONIBLE,
+                    ISNULL(mvt.ENTREE, 0) AS ENTREE,
+                    ISNULL(mvt.SORTIE, 0) AS SORTIE,
+                    ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE)
+                            FROM SSTOCK s
+                            WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) AS DISPONIBLE,
                     emp.STATUT AS STATUT";
 
                 string countSql = "SELECT COUNT(*) " + fromSql + " " + whereClause;
@@ -144,7 +140,6 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                             {
                                 var d = new Dictionary<string, object>();
                                 d["ARTICLE_ID"] = reader["ARTICLE_ID"].ToString();
-                                // ✅ Correction : remplacer ?. par vérification DBNull
                                 d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString();
                                 d["ARTICLE_CODE"] = reader["ARTICLE_CODE"];
                                 d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
@@ -171,7 +166,6 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                             {
                                 var d = new Dictionary<string, object>();
                                 d["ARTICLE_ID"] = reader["ARTICLE_ID"].ToString();
-                                // ✅ Correction : remplacer ?. par vérification DBNull
                                 d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString();
                                 d["ARTICLE_CODE"] = reader["ARTICLE_CODE"];
                                 d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];

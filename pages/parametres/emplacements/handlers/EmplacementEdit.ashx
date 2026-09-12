@@ -15,8 +15,10 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -28,15 +30,14 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
             string id = GetString(data, "id");
-            string code = GetString(data, "code");
             string nom = GetString(data, "nom");
             string type = GetString(data, "type");
             string parentId = GetString(data, "parentId");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(code) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(type))
+            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(type))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"ID, code, nom et type sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID, nom et type sont obligatoires.\"}");
                 return;
             }
 
@@ -48,13 +49,12 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
                 conn.Open();
                 string sql = @"
                     UPDATE SEMPLACEMENT
-                    SET CODE = @code, NOM = @nom, TYPE = @type, PARENT_ID = @parent, ACTIVE = @active,
+                    SET NOM = @nom, TYPE = @type, PARENT_ID = @parent, ACTIVE = @active,
                         UPDATED_BY = @userId, UPDATED_AT = GETDATE()
                     WHERE ID = @id AND DELETION_AT IS NULL";
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
-                    cmd.Parameters.AddWithValue("@code", code);
                     cmd.Parameters.AddWithValue("@nom", nom);
                     cmd.Parameters.AddWithValue("@type", type);
                     cmd.Parameters.AddWithValue("@parent", string.IsNullOrEmpty(parentId) ? (object)DBNull.Value : parentId);

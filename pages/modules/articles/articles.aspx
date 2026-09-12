@@ -154,11 +154,12 @@
                             <th onclick="sortData('CATEGORIE_NOM')" style="cursor:pointer; width:130px;">CATÉGORIE <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('FOURNISSEUR_NOM')" style="cursor:pointer; width:130px;">FOURNISSEUR
-                              <i class="fas fa-sort ml-1"></i></th>
+                              <i class="fas fa-sort ml-1"></i>
+                            </th>
                             <th onclick="sortData('UNITE_SYMBOLE')" style="cursor:pointer; width:80px;">UNITÉ <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('STOCK_TOTAL')" style="cursor:pointer; width:100px;">STOCK <i
-                                class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('STOCK_TOTAL')" style="cursor:pointer; width:100px;">STOCK DISPONIBLE
+                              <i class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('SEUIL_MIN')" style="cursor:pointer; width:90px;">SEUIL MIN <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('SEUIL_ALERTE')" style="cursor:pointer; width:90px;">SEUIL ALERTE <i
@@ -195,8 +196,8 @@
             <div class="row">
               <div class="col-md-6">
                 <div class="form-group">
-                  <label>Code <span class="text-danger">*</span></label>
-                  <input type="text" id="articleCode" class="form-control" placeholder="Ex: ART-001" required />
+                  <label>Code <small class="text-muted">(généré automatiquement)</small></label>
+                  <input type="text" id="articleCode" class="form-control" placeholder="ART-XXX-00001" readonly />
                   <small class="field-error" id="err-articleCode"></small>
                 </div>
               </div>
@@ -210,7 +211,8 @@
             </div>
             <div class="form-group">
               <label>Description</label>
-              <textarea id="articleDescription" class="form-control" rows="2" placeholder="Description..." style="resize: vertical;"></textarea>
+              <textarea id="articleDescription" class="form-control" rows="2" placeholder="Description..."
+                style="resize: vertical;"></textarea>
             </div>
             <div class="row">
               <div class="col-md-6">
@@ -223,7 +225,7 @@
               </div>
               <div class="col-md-6">
                 <div class="form-group">
-                  <label>Fournisseur préféré</label>
+                  <label>Fournisseur</label>
                   <select id="articleFournisseur" class="form-control">
                     <option value="">-- Aucun --</option>
                   </select>
@@ -401,7 +403,7 @@
       </div>
 
       <!-- SPINNER -->
-      <div id="spinnerOverlay" aria-hidden="true" style="display:none;visibility:hidden;">
+      <div id="spinnerOverlays" aria-hidden="true" style="display:none;visibility:hidden;">
         <div class="spinner"></div>
       </div>
 

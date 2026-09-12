@@ -23,7 +23,6 @@ public static class AuthHelper
     private const string SK_SESSION_TOKEN = "SESSION_TOKEN";
     private const string SK_USER_PERMISSIONS = "USER_PERMISSIONS";
 
-    // ✅ Constructeur statique (initialisation de la chaîne de connexion)
     static AuthHelper()
     {
         try
@@ -45,16 +44,13 @@ public static class AuthHelper
         }
     }
 
-    // ============================================================
-    // EXPOSITION DE LA CHAÎNE DE CONNEXION
-    // ============================================================
     public static string ConnectionString
     {
         get { return connStr; }
     }
 
     // ============================================================
-    // VÉRIFICATION D'AUTHENTIFICATION (pour pages et handlers)
+    // VÉRIFICATION D'AUTHENTIFICATION
     // ============================================================
     public static bool IsAuthenticated(HttpContext context)
     {
@@ -82,12 +78,25 @@ public static class AuthHelper
         if (minRole >= 0)
         {
             int userRole = GetUserRole(context);
-            // SuperAdmin (0) est toujours autorisé
             if (userRole == 0) return true;
             if (userRole > minRole) return false;
         }
 
         return true;
+    }
+
+    public static bool RequirePermission(HttpContext context, string permissionCode)
+    {
+        if (context == null || context.Session == null)
+            return false;
+
+        if (context.Session[SK_AUTHENTICATED] == null || !(bool)context.Session[SK_AUTHENTICATED])
+            return false;
+
+        if (!ValidateSessionToken(context))
+            return false;
+
+        return HasPermission(permissionCode);
     }
 
     public static bool CanManageEmploi(HttpContext context)
@@ -96,7 +105,6 @@ public static class AuthHelper
             return false;
 
         int userRole = GetUserRole(context);
-        // Autoriser SuperAdmin, Admin - à adapter selon besoin
         return userRole == 0 || userRole == 1;
     }
 
@@ -112,7 +120,7 @@ public static class AuthHelper
 
             if (userId <= 0 || string.IsNullOrEmpty(sessionToken))
             {
-                LogAuthError("ValidateSessionToken: userId ou token manquant (userId=" + userId + ", token=" + (string.IsNullOrEmpty(sessionToken) ? "vide" : "présent") + ")");
+                LogAuthError("ValidateSessionToken: userId ou token manquant (userId=" + userId + ")");
                 return false;
             }
 
@@ -132,7 +140,7 @@ public static class AuthHelper
                     cmd.Parameters.AddWithValue("@token", sessionToken);
                     int count = (int)cmd.ExecuteScalar();
                     if (count == 0)
-                        LogAuthError("ValidateSessionToken: token invalide ou expiré pour userId=" + userId);
+                        LogAuthError("ValidateSessionToken: token invalide pour userId=" + userId);
                     return count > 0;
                 }
             }
@@ -175,29 +183,23 @@ public static class AuthHelper
     }
 
     // ============================================================
-    // DÉFINITION DES MENUS (tous les menus possibles)
+    // DÉFINITION DES MENUS
     // ============================================================
     public static readonly List<MenuItem> AllMenus = new List<MenuItem>
     {
-        // Dashboard
         new MenuItem { Code = "accueil", Text = "Accueil", Url = "/pages/accueil/index.aspx", Icon = "fas fa-chalkboard", Section = "Accueil", Order = 1 },
-        // Paramètres
         new MenuItem { Code = "unites", Text = "Unité", Url = "/pages/parametres/unites/unites.aspx", Icon = "fas fa-ruler", Section = "Paramètres", Order = 2 },
         new MenuItem { Code = "categories", Text = "Catégories", Url = "/pages/parametres/categories/categories.aspx", Icon = "fas fa-tags", Section = "Paramètres", Order = 3 },
         new MenuItem { Code = "fournisseurs", Text = "Fournisseurs", Url = "/pages/parametres/fournisseurs/fournisseurs.aspx", Icon = "fas fa-truck", Section = "Paramètres", Order = 4 },
         new MenuItem { Code = "emplacements", Text = "Emplacements", Url = "/pages/parametres/emplacements/emplacements.aspx", Icon = "fas fa-map-marker-alt", Section = "Paramètres", Order = 5 },
-        // Mouvements
         new MenuItem { Code = "articles", Text = "Articles", Url = "/pages/modules/articles/articles.aspx", Icon = "fas fa-boxes", Section = "Mouvements", Order = 6 },
         new MenuItem { Code = "entrees", Text = "Entrées", Url = "/pages/modules/entrees/entrees.aspx", Icon = "fas fa-arrow-down", Section = "Mouvements", Order = 7 },
         new MenuItem { Code = "sorties", Text = "Sorties", Url = "/pages/modules/sorties/sorties.aspx", Icon = "fas fa-arrow-up", Section = "Mouvements", Order = 8 },
         new MenuItem { Code = "stock", Text = "Stock", Url = "/pages/modules/stock/stock.aspx", Icon = "fas fa-warehouse", Section = "Mouvements", Order = 9 },
-        // Demandes
-        new MenuItem { Code = "saisies", Text = "Saisies", Url = "/pages/demandes/saisie/saisie.aspx", Icon = "fas fa-file-alt", Section = "Demandes", Order = 10 },
-        new MenuItem { Code = "accuses", Text = "Accusés de réception", Url = "/pages/demandes/accuse/accuse.aspx", Icon = "fas fa-check-circle", Section = "Demandes", Order = 11 },
-        // Rapports
+        new MenuItem { Code = "saisies", Text = "Saisies", Url = "/pages/demandes/saisie/saisies.aspx", Icon = "fas fa-file-alt", Section = "Demandes", Order = 10 },
+        new MenuItem { Code = "accuses", Text = "Accusés de réception", Url = "/pages/demandes/accuse/accuses.aspx", Icon = "fas fa-check-circle", Section = "Demandes", Order = 11 },
         new MenuItem { Code = "inventaire", Text = "Inventaire", Url = "/pages/modules/inventaire/inventaire.aspx", Icon = "fas fa-clipboard-list", Section = "Rapports", Order = 13 },
         new MenuItem { Code = "exploitation", Text = "Exploitations", Url = "/pages/rapports/stock-disponible.aspx", Icon = "fas fa-chart-bar", Section = "Rapports", Order = 14 },
-        // Administration
         new MenuItem { Code = "utilisateurs", Text = "Utilisateurs", Url = "/pages/administrations/utilisateur/utilisateur.aspx", Icon = "fas fa-user-cog", Section = "Administration", Order = 15 },
         new MenuItem { Code = "requetes", Text = "Requêtes SQL", Url = "/pages/administrations/requete/requetes.aspx", Icon = "fas fa-terminal", Section = "Administration", Order = 16 },
     };
@@ -217,10 +219,7 @@ public static class AuthHelper
         if (IsSuperAdmin())
         {
             var allPerms = new List<string>();
-            foreach (var menu in AllMenus)
-            {
-                allPerms.Add(menu.Code);
-            }
+            foreach (var menu in AllMenus) allPerms.Add(menu.Code);
             if (session != null) session[SK_USER_PERMISSIONS] = allPerms;
             return allPerms;
         }
@@ -230,10 +229,7 @@ public static class AuthHelper
             var adminPerms = new List<string>();
             foreach (var menu in AllMenus)
             {
-                if (menu.Code != "requetes")
-                {
-                    adminPerms.Add(menu.Code);
-                }
+                if (menu.Code != "requetes") adminPerms.Add(menu.Code);
             }
             if (session != null) session[SK_USER_PERMISSIONS] = adminPerms;
             return adminPerms;
@@ -263,8 +259,7 @@ public static class AuthHelper
                 conn.Open();
 
                 string checkColumnQuery = @"
-                    SELECT COUNT(*)
-                    FROM INFORMATION_SCHEMA.COLUMNS
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                     WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
 
                 using (SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn))
@@ -328,10 +323,7 @@ public static class AuthHelper
 
         foreach (var menu in AllMenus)
         {
-            if (HasPermission(menu.Code))
-            {
-                authorizedMenus.Add(menu);
-            }
+            if (HasPermission(menu.Code)) authorizedMenus.Add(menu);
         }
 
         return authorizedMenus.OrderBy(m => m.Order).ToList();
@@ -348,8 +340,7 @@ public static class AuthHelper
                 conn.Open();
 
                 string checkColumnQuery = @"
-                    SELECT COUNT(*)
-                    FROM INFORMATION_SCHEMA.COLUMNS
+                    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                     WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'MENU_PERMISSIONS'";
 
                 using (SqlCommand checkCmd = new SqlCommand(checkColumnQuery, conn))
@@ -407,25 +398,14 @@ public static class AuthHelper
     }
 
     // ============================================================
-    // MULTI-LANGAGE (délégation à LocalizationHelper)
+    // MULTI-LANGAGE
     // ============================================================
-    public static string T(string key)
-    {
-        return LocalizationHelper.GetString(key);
-    }
-
-    public static string T(string key, params object[] args)
-    {
-        return LocalizationHelper.GetString(key, args);
-    }
-
-    public static string RenderLanguageSelector()
-    {
-        return LocalizationHelper.RenderLanguageSelector();
-    }
+    public static string T(string key) { return LocalizationHelper.GetString(key); }
+    public static string T(string key, params object[] args) { return LocalizationHelper.GetString(key, args); }
+    public static string RenderLanguageSelector() { return LocalizationHelper.RenderLanguageSelector(); }
 
     // ============================================================
-    // GÉNÉRATION DU PROFIL UTILISATEUR (HTML)
+    // ✅ GÉNÉRATION DU PROFIL UTILISATEUR (HTML) — MODERN
     // ============================================================
     public static string RenderUserProfileHTML()
     {
@@ -434,10 +414,7 @@ public static class AuthHelper
             string userName = GetUserName();
             string roleName = GetRoleName();
 
-            if (string.IsNullOrEmpty(userName))
-            {
-                userName = T("User");
-            }
+            if (string.IsNullOrEmpty(userName)) userName = T("User");
 
             var html = new StringBuilder();
             html.Append(@"
@@ -448,7 +425,7 @@ public static class AuthHelper
                 </div>
                 <div class=""user-info"">
                     <span id=""profilUsername"" class=""user-role"">");
-            html.Append(roleName);
+            html.Append(HttpUtility.HtmlEncode(roleName));
             html.Append(@"</span>
                     <span id=""navbarUsername"" class=""user-name"">");
             html.Append(HttpUtility.HtmlEncode(userName));
@@ -465,7 +442,7 @@ public static class AuthHelper
     }
 
     // ============================================================
-    // GÉNÉRATION DU MENU HTML (avec navigation active et badge SORTIES)
+    // ✅ GÉNÉRATION DU MENU HTML — MODERN
     // ============================================================
     public static string RenderMenuHTML()
     {
@@ -475,12 +452,11 @@ public static class AuthHelper
 
             if (menus == null || menus.Count == 0)
             {
-                return "<div class='nav-section' style='padding:15px;text-align:center;'>" +
+                return "<div class='nav-section-modern' style='padding:15px;text-align:center;'>" +
                        T("NoData") +
                        "<br><small>" + T("ContactAdmin") + "</small></div>";
             }
 
-            // Récupérer la page actuelle (nom du fichier sans extension)
             string currentPage = "";
             try
             {
@@ -492,34 +468,38 @@ public static class AuthHelper
             }
             catch { }
 
-            // Grouper les menus par section
             var sections = new Dictionary<string, List<MenuItem>>();
             foreach (var menu in menus)
             {
                 string sectionKey = menu.Section;
                 if (!sections.ContainsKey(sectionKey))
-                {
                     sections[sectionKey] = new List<MenuItem>();
-                }
                 sections[sectionKey].Add(menu);
             }
 
             var html = new StringBuilder();
+
+            // Profil utilisateur
             html.Append(RenderUserProfileHTML());
-            html.Append(@"<ul class=""nav-pills"">");
+
+            // Container modern
+            html.Append(@"<div class=""sidebar-nav-modern"">");
 
             foreach (var section in sections)
             {
                 string sectionName = T(section.Key);
+
                 html.AppendFormat(@"
-                <li class=""nav-item"">
-                    <div class=""nav-section"">{0}</div>", sectionName);
+                <div class=""nav-section-modern"">
+                    <span class=""nav-section-label"">{0}</span>
+                </div>", HttpUtility.HtmlEncode(sectionName));
+
+                html.Append(@"<ul class=""nav-list-modern"">");
 
                 foreach (var menu in section.Value.OrderBy(m => m.Order))
                 {
                     string menuText = T(menu.Text);
 
-                    // Détection de la page active
                     bool isActive = false;
                     if (!string.IsNullOrEmpty(currentPage) && !string.IsNullOrEmpty(menu.Url))
                     {
@@ -529,37 +509,37 @@ public static class AuthHelper
 
                     string activeClass = isActive ? " active" : "";
 
-                    // Construction du lien
                     html.AppendFormat(@"
-                    <a href=""{0}"" class=""nav-link{1}"" data-menu=""{2}"">
-                        <div style=""width:30px; text-align:center; margin-right:10px;"">
-                            <i class=""{3}""></i>
-                        </div>
-                        <span class=""menu-text"">{4}</span>", menu.Url, activeClass, menu.Code, menu.Icon, menuText);
+                    <li class=""nav-item-modern"">
+                        <a href=""{0}"" class=""nav-link-modern{1}"" data-menu=""{2}"">
+                            <span class=""nav-icon-wrap"">
+                                <i class=""{3}""></i>
+                            </span>
+                            <span class=""nav-link-text"">{4}</span>",
+                        menu.Url, activeClass, menu.Code, menu.Icon, HttpUtility.HtmlEncode(menuText));
 
-                    // Ajout du badge pour le menu SORTIES
                     if (menu.Code == "sorties")
                     {
-                        html.Append(@" <span id=""sortiePendingCount"" class=""sortie-pending-badge"" style=""display:none;"" aria-label=""Bons de sortie non validés""></span>");
+                        html.Append(@" <span id=""sortiePendingCount"" class=""nav-badge-pending"" style=""display:none;"" aria-label=""Bons de sortie non validés""></span>");
                     }
 
-                    html.Append(@"</a>");
+                    html.Append(@"</a></li>");
                 }
 
-                html.Append(@"</li>");
+                html.Append(@"</ul>");
             }
 
-            html.Append(@"</ul>");
+            html.Append(@"</div>");
             return html.ToString();
         }
         catch (Exception ex)
         {
-            return "<div style='color:red;padding:10px;'>Erreur: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
+            return "<div style='color:red;padding:10px;'>Erreur menu: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
         }
     }
 
-    // ============================================================
-    // GÉNÉRATION DE LA TOPBAR HTML
+        // ============================================================
+    // ✅ GÉNÉRATION DE LA TOPBAR HTML — MODERN (badge projet centré)
     // ============================================================
     public static string RenderTopBarHTML()
     {
@@ -584,89 +564,125 @@ public static class AuthHelper
                 isUsersPage = currentPage.Contains("utilisateur.aspx") || currentPage.Contains("users.aspx");
             }
 
+            // ============================================================
+            // STRUCTURE EN 3 SECTIONS : gauche | centre | droite
+            // ============================================================
             html.Append(@"
-        <nav class=""main-header"">
-            <ul class=""navbar-nav"">
+        <nav class=""main-header modern-topbar"">
+            <ul class=""navbar-nav topbar-left"">
                 <li class=""nav-item"">
-                    <a class=""nav-link"" id=""menuToggle"" role=""button"">
+                    <a class=""nav-link topbar-icon-btn"" id=""menuToggle"" role=""button"" title=""Menu"">
                         <i class=""fas fa-bars""></i>
                     </a>
                 </li>
-            </ul>
-            <ul class=""navbar-nav"">");
+            </ul>");
 
+            // ============================================================
+            // SECTION CENTRALE : BADGE PROJET
+            // ============================================================
+            string projetCode = GetProjectCode(HttpContext.Current);
+            html.AppendFormat(@"
+            <div class=""topbar-center"">
+                <span class=""project-badge-modern"" title=""{1}"">
+                    <i class=""fas fa-project-diagram""></i>
+                    <span class=""project-badge-label"">PROJET</span>
+                    <span class=""project-badge-sep"">:</span>
+                    <span class=""project-badge-code"">{0}</span>
+                </span>
+            </div>",
+                HttpUtility.HtmlEncode(projetCode),
+                HttpUtility.HtmlEncode(T("ProjetCourant")));
+
+            // ============================================================
+            // SECTION DROITE : langue, dark mode, notifications, etc.
+            // ============================================================
+            html.Append(@"<ul class=""navbar-nav topbar-right"">");
+
+            // SÉLECTEUR DE LANGUE
             string currentCulture = LocalizationHelper.CurrentCultureCode;
             html.Append(@"
-                <li class=""nav-item language-selector-wrapper"" style=""display:flex;align-items:center;margin:0 10px;"">
-                    <select id=""langSelect"" class=""form-select form-select-sm"" style=""background:transparent;border:1px solid #ced4da;border-radius:4px;padding:4px 8px;color:#333;font-size:13px;"">");
+                <li class=""nav-item"">
+                    <div class=""lang-selector-modern"">
+                        <i class=""fas fa-globe lang-selector-icon""></i>
+                        <select id=""langSelect"" class=""lang-select-modern"">");
 
             for (int i = 0; i < LocalizationHelper.SupportedCultures.Length; i++)
             {
                 string code = LocalizationHelper.SupportedCultures[i];
                 string name = LocalizationHelper.CultureNames[i];
                 string selected = (code == currentCulture) ? " selected" : "";
-                html.AppendFormat(@"<option value=""{0}""{1}>{2}</option>", code, selected, name);
+                html.AppendFormat(@"<option value=""{0}""{1}>{2}</option>", code, selected, HttpUtility.HtmlEncode(name));
             }
 
             html.Append(@"</select>
+                    </div>
                 </li>");
 
-            // Dark mode
+            // DARK MODE
             html.Append(@"
-                  <li class=""nav-item d-flex align-items-center"">
-                      <label class=""switch"" for=""toggleDarkMode"">
-                          <input type=""checkbox"" id=""toggleDarkMode"">
-                          <span class=""slider round""></span>
-                      </label>
-                  </li>");
+                <li class=""nav-item"">
+                    <label class=""switch switch-modern"" for=""toggleDarkMode"" title=""Mode sombre"">
+                        <input type=""checkbox"" id=""toggleDarkMode"">
+                        <span class=""slider-modern round""></span>
+                    </label>
+                </li>");
 
-            // Notifications
+            // NOTIFICATIONS
             if (HasPermission("accueil"))
             {
                 html.Append(@"
                 <li class=""nav-item"">
-                    <a class=""nav-link"" id=""notifToggle"" title=""" + T("Notifications") + @""" style=""position:relative;"">
+                    <a class=""nav-link topbar-icon-btn"" id=""notifToggle"" title=""" + T("Notifications") + @""">
                         <i class=""fas fa-bell""></i>
-                        <span class=""badge-notif"" id=""badgeNotif"">3</span>
+                        <span class=""topbar-badge"">3</span>
                     </a>
-                    <div class=""dropdown-menu"" id=""notifDropdown"">
-                        <span class=""dropdown-header"">3 " + T("Notifications") + @"</span>
-                        <div class=""dropdown-divider""></div>
-                        <a href=""#"" class=""dropdown-item"">
-                            <i class=""fas fa-user-plus text-success mr-2""></i> " + T("NewStudent") + @"
-                            <span style=""float: right; color: #6c757d; font-size: 11px;"">" + T("TimeAgo") + @" 23 min</span>
+                    <div class=""dropdown-menu topbar-dropdown"" id=""notifDropdown"">
+                        <div class=""topbar-dropdown-header"">
+                            <i class=""fas fa-bell""></i>
+                            <span>3 " + T("Notifications") + @"</span>
+                        </div>
+                        <div class=""topbar-dropdown-divider""></div>
+                        <a href=""#"" class=""topbar-dropdown-item"">
+                            <span class=""topbar-dropdown-icon icon-success""><i class=""fas fa-user-plus""></i></span>
+                            <span class=""topbar-dropdown-text"">" + T("N") + @"</span>
+                            <span class=""topbar-dropdown-time"">" + T("TimeAgo") + @" 23 min</span>
                         </a>
-                        <a href=""#"" class=""dropdown-item"">
-                            <i class=""fas fa-exclamation-circle text-danger mr-2""></i> " + T("AbsenceReported") + @"
-                            <span style=""float: right; color: #6c757d; font-size: 11px;"">" + T("TimeAgo") + @" 1h</span>
+                        <a href=""#"" class=""topbar-dropdown-item"">
+                            <span class=""topbar-dropdown-icon icon-danger""><i class=""fas fa-exclamation-circle""></i></span>
+                            <span class=""topbar-dropdown-text"">" + T("A") + @"</span>
+                            <span class=""topbar-dropdown-time"">" + T("TimeAgo") + @" 1h</span>
                         </a>
-                        <a href=""#"" class=""dropdown-item"">
-                            <i class=""fas fa-money-bill text-warning mr-2""></i> " + T("PaymentReceived") + @"
-                            <span style=""float: right; color: #6c757d; font-size: 11px;"">" + T("TimeAgo") + @" 2h</span>
+                        <a href=""#"" class=""topbar-dropdown-item"">
+                            <span class=""topbar-dropdown-icon icon-warning""><i class=""fas fa-money-bill""></i></span>
+                            <span class=""topbar-dropdown-text"">" + T("P") + @"</span>
+                            <span class=""topbar-dropdown-time"">" + T("TimeAgo") + @" 2h</span>
                         </a>
                     </div>
                 </li>");
             }
 
+            // LOGOUT
             html.Append(@"
                 <li class=""nav-item"">
-                    <a href=""../../../auth/Logout.aspx"" class=""nav-link"" title=""" + T("Logout") + @""">
+                    <a href=""../../../auth/Logout.aspx"" class=""nav-link topbar-icon-btn topbar-logout"" title=""" + T("Logout") + @""">
                         <i class=""fas fa-sign-out-alt""></i>
                     </a>
                 </li>");
 
+            // FULLSCREEN
             html.Append(@"
                 <li class=""nav-item"">
-                    <a class=""nav-link"" id=""fullscreenToggle"" title=""" + T("Fullscreen") + @""">
+                    <a class=""nav-link topbar-icon-btn"" id=""fullscreenToggle"" title=""" + T("Fullscreen") + @""">
                         <i class=""fas fa-expand-arrows-alt""></i>
                     </a>
                 </li>");
 
+            // SETTINGS
             if (isUsersPage && HasPermission("utilisateurs"))
             {
                 html.Append(@"
                 <li class=""nav-item"">
-                    <a class=""nav-link"" id=""toggleSidebarBtn"" title=""" + T("Settings") + @""" style=""cursor: pointer;"">
+                    <a class=""nav-link topbar-icon-btn"" id=""toggleSidebarBtn"" title=""" + T("Settings") + @""">
                         <i class=""fas fa-database""></i>
                     </a>
                 </li>");
@@ -680,12 +696,12 @@ public static class AuthHelper
         }
         catch (Exception ex)
         {
-            return "<div style='color:red;padding:10px;'>Erreur topbar: " + ex.Message + "</div>";
+            return "<div style='color:red;padding:10px;'>Erreur topbar: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
         }
     }
 
     // ============================================================
-    // GÉNÉRATION DU CONTROL SIDEBAR HTML
+    // ✅ GÉNÉRATION DU CONTROL SIDEBAR HTML — MODERN
     // ============================================================
     public static string RenderControlSidebarHTML()
     {
@@ -694,79 +710,67 @@ public static class AuthHelper
             var html = new StringBuilder();
 
             html.Append(@"
-            <aside class=""control-sidebar control-sidebar-dark"" id=""controlSidebar""
-                style=""position: fixed;top: 0;right: -300px;width: 300px;padding: 20px;height: 100%;background: #343a40;color: #fff;transition: right 0.3s ease-in-out;z-index: 1050;box-shadow: -2px 0 5px rgba(0,0,0,0.2);overflow-y: auto;"">
-                <div class=""p-3"">
-                    <div style=""display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #4a5259; padding-bottom: 10px; margin-bottom: 15px;"">
-                        <h5 style=""margin: 0; color: #fff;"">
-                            <i class=""fas fa-database""></i> " + T("Settings") + @"
+            <aside class=""control-sidebar-modern"" id=""controlSidebar"">
+                <div class=""control-sidebar-inner"">
+
+                    <div class=""control-sidebar-header"">
+                        <h5 class=""control-sidebar-title"">
+                            <i class=""fas fa-database""></i>
+                            <span>" + T("Settings") + @"</span>
                         </h5>
-                        <button type=""button"" id=""closeSidebarBtn""
-                            style=""background: none; border: none; color: #fff; font-size: 20px; cursor: pointer;"">
+                        <button type=""button"" id=""closeSidebarBtn"" class=""control-sidebar-close"" title=""Fermer"">
                             <i class=""fas fa-times""></i>
                         </button>
                     </div>
 
-                    <div id=""licenceExpirationInfo"" class=""mb-3"" style=""color: #adb5bd; font-size: 0.85em;"">
-                        <i class=""fas fa-calendar-alt""></i> " + T("LicenceExpires") + @" :
-                        <strong id=""expirationDateStr"">" + GetExpirationDateString() + @"</strong>
-                    </div>
-
-                    <div class=""mb-3"" style=""color: #adb5bd; font-size: 0.85em;"">
-                        <i class=""fas fa-users""></i> " + T("MaxUsers") + @" :
-                        <strong id=""maxUsersCount"">" + GetMaxUsersString() + @"</strong>
-                    </div>
-
-                    <hr style=""border-color: #4a5259;"">");
+                    <div class=""control-sidebar-info"">
+                        <div class=""control-info-item"">
+                            <i class=""fas fa-calendar-alt""></i>
+                            <span>" + T("LicenceExpires") + @" :</span>
+                            <strong id=""expirationDateStr"">" + GetExpirationDateString() + @"</strong>
+                        </div>
+                        <div class=""control-info-item"">
+                            <i class=""fas fa-users""></i>
+                            <span>" + T("MaxUsers") + @" :</span>
+                            <strong id=""maxUsersCount"">" + GetMaxUsersString() + @"</strong>
+                        </div>
+                    </div>");
 
             if (IsSuperAdmin())
             {
                 html.Append(@"
-                    <div style=""display: flex; flex-direction: column; gap: 10px; padding: 10px;"">
-                        <div style=""width: 100%;"">
-                            <button type=""button"" id=""btnCheckUpdates"" class=""btn btn-primary""
-                                style=""width: 100%; padding: 10px 15px; text-align: center;""
-                                onclick=""checkForUpdates()"">
-                                <i class=""fas fa-sync-alt""></i> " + T("CheckUpdates") + @"
-                            </button>
-                        </div>
-                        <div style=""width: 100%;"">
-                            <button type=""button"" id=""btnBackup"" class=""btn btn-success""
-                                style=""width: 100%; padding: 10px 15px; text-align: center;""
-                                onclick=""backupDatabase()"">
-                                <i class=""fas fa-database""></i> " + T("Backup") + @"
-                            </button>
-                        </div>
-                        <div style=""width: 100%;"">
-                            <button type=""button"" id=""btnRestore"" class=""btn btn-warning""
-                                style=""width: 100%; padding: 10px 15px; text-align: center;""
-                                onclick=""openRestoreModal()"">
-                                <i class=""fas fa-undo-alt""></i> " + T("Restore") + @"
-                            </button>
-                        </div>
-                    </div>
-
-                    <hr style=""border-color: #4a5259;"">");
+                    <div class=""control-sidebar-actions"">
+                        <button type=""button"" id=""btnCheckUpdates"" class=""control-btn control-btn-primary"" onclick=""checkForUpdates()"">
+                            <i class=""fas fa-sync-alt""></i>
+                            <span>" + T("CheckUpdates") + @"</span>
+                        </button>
+                        <button type=""button"" id=""btnBackup"" class=""control-btn control-btn-success"" onclick=""backupDatabase()"">
+                            <i class=""fas fa-database""></i>
+                            <span>" + T("Backup") + @"</span>
+                        </button>
+                        <button type=""button"" id=""btnRestore"" class=""control-btn control-btn-warning"" onclick=""openRestoreModal()"">
+                            <i class=""fas fa-undo-alt""></i>
+                            <span>" + T("Restore") + @"</span>
+                        </button>
+                    </div>");
             }
 
             html.Append(@"
                 </div>
             </aside>
 
-            <div id=""sidebarOverlay""
-                style=""position: fixed;top: 0;left: 0;width: 100%;height: 100%;background: rgba(0,0,0,0.5);z-index: 1040;display: none;cursor: pointer;"">
-            </div>");
+            <div id=""sidebarOverlay"" class=""control-sidebar-overlay""></div>");
 
             return html.ToString();
         }
         catch (Exception ex)
         {
-            return "<div style='color:red;padding:10px;'>Erreur control sidebar: " + ex.Message + "</div>";
+            return "<div style='color:red;padding:10px;'>Erreur control sidebar: " + HttpUtility.HtmlEncode(ex.Message) + "</div>";
         }
     }
 
     // ============================================================
-    // MÉTHODES DE SESSION ET UTILISATEUR
+    // MÉTHODES DE SESSION
     // ============================================================
     public static void VerifySession(Page page)
     {
@@ -813,10 +817,7 @@ public static class AuthHelper
                 }
             }
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
     private static void SetUsername(Page page)
@@ -865,7 +866,7 @@ public static class AuthHelper
                     }
                 }
             }
-            catch { /* ignorer */ }
+            catch { }
         }
 
         context.Session.Clear();
@@ -923,6 +924,17 @@ public static class AuthHelper
         return (val != null) ? Convert.ToInt32(val) : -1;
     }
 
+    public static string GetProjectCode(HttpContext ctx)
+    {
+        try
+        {
+            string code = ConfigurationManager.AppSettings["ProjectCode"];
+            if (string.IsNullOrEmpty(code)) code = "TALIM";
+            return code.Trim().ToUpperInvariant().Replace(" ", "");
+        }
+        catch { return "TALIM"; }
+    }
+
     private static int? GetUserRoleId()
     {
         var session = HttpContext.Current.Session;
@@ -942,39 +954,12 @@ public static class AuthHelper
     // ============================================================
     // VÉRIFICATIONS DE RÔLES
     // ============================================================
-    public static bool IsSuperAdmin()
-    {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 0;
-    }
+    public static bool IsSuperAdmin() { var r = GetUserRoleId(); return r.HasValue && r.Value == 0; }
+    public static bool IsAdmin()      { var r = GetUserRoleId(); return r.HasValue && r.Value == 1; }
+    public static bool IsUser()       { var r = GetUserRoleId(); return r.HasValue && r.Value == 2; }
+    public static bool IsLogisticien(){ var r = GetUserRoleId(); return r.HasValue && r.Value == 3; }
+    public static bool IsComptable()  { var r = GetUserRoleId(); return r.HasValue && r.Value == 4; }
 
-    public static bool IsAdmin()
-    {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 1;
-    }
-
-    public static bool IsUser()
-    {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 2;
-    }
-
-    public static bool IsLogisticien()
-    {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 3;
-    }
-
-    public static bool IsComptable()
-    {
-        var role = GetUserRoleId();
-        return role.HasValue && role.Value == 4;
-    }
-
-    // ============================================================
-    // OBTENTION DU NOM DU RÔLE
-    // ============================================================
     public static string GetRoleName()
     {
         var roleId = GetUserRoleId();
@@ -991,9 +976,6 @@ public static class AuthHelper
         }
     }
 
-    // ============================================================
-    // VERSION
-    // ============================================================
     public static string Version
     {
         get
@@ -1016,50 +998,34 @@ public static class AuthHelper
 
     public static string GetExpirationDateString()
     {
-        DateTime expirationDate;
-        int maxUsers;
+        DateTime expirationDate; int maxUsers;
         LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
 
         if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
-        {
             return expirationDate.ToString("dd/MM/yyyy");
-        }
         else if (status == LicenceStatus.Manquante)
-        {
             return T("LicenceMissing");
-        }
         else
-        {
             return T("LicenceInvalid");
-        }
     }
 
     public static string GetMaxUsersString()
     {
-        DateTime expirationDate;
-        int maxUsers;
+        DateTime expirationDate; int maxUsers;
         LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
 
         if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
-        {
             return maxUsers.ToString();
-        }
         else
-        {
             return "0";
-        }
     }
 
     public static bool IsMaxUsersReached()
     {
-        DateTime expirationDate;
-        int maxUsers;
+        DateTime expirationDate; int maxUsers;
         LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
 
-        if (status != LicenceStatus.Valide)
-        {
-            return true;
-        }
+        if (status != LicenceStatus.Valide) return true;
 
         try
         {
@@ -1075,28 +1041,22 @@ public static class AuthHelper
                 }
             }
         }
-        catch
-        {
-            return false;
-        }
+        catch { return false; }
     }
 
     public static bool IsLicenceValid()
     {
-        DateTime expirationDate;
-        int maxUsers;
+        DateTime expirationDate; int maxUsers;
         LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
         return status == LicenceStatus.Valide;
     }
 
     public static SidebarInfo GetSidebarInfo()
     {
-        DateTime expirationDate;
-        int maxUsers;
+        DateTime expirationDate; int maxUsers;
         LicenceStatus status = CheckLicence(out expirationDate, out maxUsers);
 
-        string expirationText;
-        string maxUsersText;
+        string expirationText; string maxUsersText;
 
         if (status == LicenceStatus.Valide || status == LicenceStatus.Expiree)
         {
@@ -1206,9 +1166,7 @@ public static class AuthHelper
         foreach (var line in lines)
         {
             if (line.StartsWith(key + "="))
-            {
                 values.Add(line.Substring(key.Length + 1).Trim());
-            }
         }
 
         if (values.Count == 0) return null;
@@ -1238,8 +1196,7 @@ public static class AuthHelper
 
     public static LicenceInfo GetLicenceInfo()
     {
-        DateTime exp;
-        int max;
+        DateTime exp; int max;
         var status = CheckLicence(out exp, out max);
         var info = new LicenceInfo
         {
@@ -1252,9 +1209,6 @@ public static class AuthHelper
         return info;
     }
 
-    // ============================================================
-    // CLASSES PUBLIQUES
-    // ============================================================
     public class SidebarInfo
     {
         public string ExpirationDate { get; set; }

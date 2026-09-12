@@ -1,12 +1,22 @@
-// crud.js
+// crud.js - Module Articles avec génération automatique du CODE
 
-// ---- OUVERTURE / FERMETURE MODAL ARTICLE ----
+// ============================================================
+// OUVERTURE / FERMETURE MODAL ARTICLE
+// ============================================================
 function openAddArticleModal(e) {
     if (e) e.preventDefault();
     AppState.editingId = null;
     document.getElementById('modalTitle').textContent = 'Ajouter un article';
     document.getElementById('editingId').value = '';
-    document.getElementById('articleCode').value = '';
+
+    // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
+    var codeEl = document.getElementById('articleCode');
+    codeEl.value = '';
+    codeEl.placeholder = 'Sera généré automatiquement (ART-XXX-00001)';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('articleNom').value = '';
     document.getElementById('articleDescription').value = '';
     document.getElementById('articleCategorie').value = '';
@@ -17,7 +27,8 @@ function openAddArticleModal(e) {
     document.getElementById('articleSeuilMin').value = '0';
     document.getElementById('articleActif').value = '1';
     document.getElementById('articleEstService').value = '0';
-    clearFieldErrors(['articleCode','articleNom','articleUnite','articleEmplacement']);
+
+    clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
     document.getElementById('articleModal').style.display = 'flex';
 }
 
@@ -30,7 +41,14 @@ function editArticle(id) {
     }
     document.getElementById('modalTitle').textContent = 'Modifier l\'article';
     document.getElementById('editingId').value = id;
-    document.getElementById('articleCode').value = article.CODE || '';
+
+    // 🔒 Le CODE est immuable → readonly
+    var codeEl = document.getElementById('articleCode');
+    codeEl.value = article.CODE || '';
+    codeEl.readOnly = true;
+    codeEl.style.backgroundColor = '#e9ecef';
+    codeEl.style.cursor = 'not-allowed';
+
     document.getElementById('articleNom').value = article.NOM || '';
     document.getElementById('articleDescription').value = article.DESCRIPTION || '';
     document.getElementById('articleCategorie').value = article.CATEGORIE_ID || '';
@@ -41,21 +59,38 @@ function editArticle(id) {
     document.getElementById('articleSeuilMin').value = article.SEUIL_MIN || 0;
     document.getElementById('articleActif').value = article.ACTIVE ? '1' : '0';
     document.getElementById('articleEstService').value = article.EST_SERVICE ? '1' : '0';
-    clearFieldErrors(['articleCode','articleNom','articleUnite','articleEmplacement']);
+
+    clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
     document.getElementById('articleModal').style.display = 'flex';
 }
 
 function closeArticleModal() {
     document.getElementById('articleModal').style.display = 'none';
     AppState.editingId = null;
+
+    // Repasser le champ code en mode "généré auto"
+    var codeEl = document.getElementById('articleCode');
+    if (codeEl) {
+        codeEl.value = '';
+        codeEl.placeholder = 'Sera généré automatiquement (ART-XXX-00001)';
+        codeEl.readOnly = true;
+        codeEl.style.backgroundColor = '#e9ecef';
+        codeEl.style.cursor = 'not-allowed';
+    }
 }
 
+// ============================================================
+// ENREGISTREMENT
+// ============================================================
 async function saveArticle(e) {
     e.preventDefault();
     const editingId = document.getElementById('editingId').value;
+
+    // ⚠️ Le CODE n'est plus envoyé :
+    //    - à l'ajout → généré côté serveur (ART-PROJET-00001)
+    //    - en modification → immuable, non modifiable
     const data = {
         id: editingId || null,
-        code: document.getElementById('articleCode').value.trim(),
         nom: document.getElementById('articleNom').value.trim(),
         description: document.getElementById('articleDescription').value.trim(),
         categorieId: document.getElementById('articleCategorie').value || null,
@@ -69,8 +104,7 @@ async function saveArticle(e) {
     };
 
     let valid = true;
-    clearFieldErrors(['articleCode','articleNom','articleUnite','articleEmplacement']);
-    if (!data.code) { showFieldError('articleCode', 'Le code est requis'); valid = false; }
+    clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
     if (!data.nom) { showFieldError('articleNom', 'Le nom est requis'); valid = false; }
     if (!data.uniteId) { showFieldError('articleUnite', 'L\'unité est requise'); valid = false; }
     if (!data.emplacementId) { showFieldError('articleEmplacement', 'L\'emplacement est requis'); valid = false; }
@@ -78,6 +112,7 @@ async function saveArticle(e) {
 
     const isEdit = !!editingId;
     const url = API.BASE + API.HANDLERS_PATH + (isEdit ? API.EDIT : API.ADD);
+
     try {
         showSpinner();
         const resp = await fetch(url, {
@@ -86,8 +121,11 @@ async function saveArticle(e) {
             body: JSON.stringify(data)
         });
         const result = await resp.json();
+
         if (result.success) {
-            showToast('Succès', result.message || (isEdit ? 'Modifié' : 'Ajouté') + ' avec succès', 'success');
+            let msg = result.message || (isEdit ? 'Article modifié' : 'Article ajouté');
+            if (result.code && !isEdit) msg = 'Article ajouté avec succès (' + result.code + ').';
+            showToast('Succès', msg, 'success');
             closeArticleModal();
             loadArticles();
             loadStats();
@@ -101,6 +139,9 @@ async function saveArticle(e) {
     }
 }
 
+// ============================================================
+// SUPPRESSION
+// ============================================================
 async function deleteArticle(id) {
     const confirm = await Swal.fire({
         title: 'Supprimer ?',
@@ -136,7 +177,9 @@ async function deleteArticle(id) {
     }
 }
 
-// ---- AJUSTEMENT ----
+// ============================================================
+// AJUSTEMENT DE STOCK
+// ============================================================
 function openAdjustModal(e) {
     if (e) e.preventDefault();
     document.getElementById('adjustArticle').value = '';
@@ -203,7 +246,9 @@ function closeAdjustModal() {
     document.getElementById('adjustModal').style.display = 'none';
 }
 
-// ---- HISTORIQUE ----
+// ============================================================
+// HISTORIQUE
+// ============================================================
 let historyArticleId = null;
 let historyEmplacementId = null;
 let historyPage = 1;
@@ -287,11 +332,14 @@ function closeHistoryModal() {
     historyPage = 1;
 }
 
-// Utilitaires
+// ============================================================
+// GESTION DES ERREURS DE CHAMP
+// ============================================================
 function showFieldError(fieldId, msg) {
     const err = document.getElementById('err-' + fieldId);
     if (err) { err.textContent = msg; err.style.display = 'block'; }
 }
+
 function clearFieldErrors(ids) {
     (ids || []).forEach(id => {
         const err = document.getElementById('err-' + id);
@@ -299,7 +347,9 @@ function clearFieldErrors(ids) {
     });
 }
 
-// Expositions globales
+// ============================================================
+// EXPOSITIONS GLOBALES
+// ============================================================
 window.openAddArticleModal = openAddArticleModal;
 window.editArticle = editArticle;
 window.closeArticleModal = closeArticleModal;

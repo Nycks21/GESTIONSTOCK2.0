@@ -15,8 +15,10 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, 1))
+        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+        if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
+            ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
@@ -30,10 +32,6 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
             string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
                 throw new Exception("ID manquant");
-
-            string numero = GetString(data, "numero");
-            if (string.IsNullOrEmpty(numero))
-                throw new Exception("Numéro manquant");
 
             string dateEntreeStr = GetString(data, "dateEntree");
             DateTime dateEntree;
@@ -67,13 +65,12 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
                     {
                         // Mettre à jour l'entête
                         string sqlEntete = @"
-                            UPDATE SENTREE SET NUMERO = @numero, DATE_ENTREE = @date, FOURNISSEUR_ID = @four,
+                            UPDATE SENTREE SET DATE_ENTREE = @date, FOURNISSEUR_ID = @four,
                                 REFERENCE = @ref, NOTES = @notes, UPDATED_BY = @userId, UPDATED_AT = GETDATE()
                             WHERE ID = @id AND STATUT = 'BROUILLON' AND DELETION_AT IS NULL";
                         using (var cmd = new SqlCommand(sqlEntete, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", id);
-                            cmd.Parameters.AddWithValue("@numero", numero);
                             cmd.Parameters.AddWithValue("@date", dateEntree);
                             cmd.Parameters.AddWithValue("@four", fournisseurId);
                             cmd.Parameters.AddWithValue("@ref", reference);
