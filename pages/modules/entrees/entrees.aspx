@@ -143,11 +143,11 @@
                         style="table-layout:fixed; width:1200px; min-width:100%; border-collapse:collapse;">
                         <thead>
                           <tr style="background-color:#f8f9fa;">
-                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:120px; text-align:left;">N° <i
+                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:160px; text-align:left;">N° <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DATE_ENTREE')" style="cursor:pointer; width:130px; text-align:left;">
                               Date <i class="fas fa-sort ml-1"></i></th>
-                            <th style="width:260px; text-align:left;">Articles</th>
+                            <th style="width:220px; text-align:left;">Articles</th>
                             <th style="width:110px; text-align:right;">Quantité</th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px; text-align:left;">
                               Statut <i class="fas fa-sort ml-1"></i></th>

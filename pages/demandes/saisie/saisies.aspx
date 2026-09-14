@@ -123,11 +123,11 @@
                         style="table-layout:fixed; width:1200px; min-width:100%; border-collapse:collapse;">
                         <thead>
                           <tr style="background-color:#f8f9fa; text-align:left;">
-                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:100px;">N° <i
+                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:120px;">N° <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:130px;">Date <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('ARTICLES')" style="cursor:pointer; width:180px;">Articles</th>
+                            <th onclick="sortData('ARTICLES')" style="cursor:pointer; width:160px;">Articles</th>
                             <th style="width:110px; text-align:right;">Qté demandée</th>
                             <th onclick="sortData('DESTINATION')" style="cursor:pointer; width:140px;">Destination <i
                                 class="fas fa-sort ml-1"></i></th>

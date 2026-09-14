@@ -201,15 +201,15 @@ function renderAccuseTable(sorties) {
         }
 
         html +=
-            "<tr>" +
-            "<td><strong>" + s.NUMERO + "</strong></td>" +
-            "<td>" + formatDateValue(s.DATE_SORTIE, true) + "</td>" +
-            "<td>" + dateReceptionHtml + "</td>" +
-            '<td class="bon-articles-cell">' + articlesHtml + "</td>" +
-            '<td class="bon-quantities-cell">' + quantitesHtml + "</td>" +
-            "<td>" + (s.DESTINATION || "") + "</td>" +
-            "<td>" + statutBadge + "</td>" +
-            "<td>" + actionsHtml + "</td></tr>";
+    "<tr>" +
+    "<td><strong><span class='badge bg-secondary' style='color:#333;font-weight:bold;background-color:#e9e9e9;padding:4px 10px;border-radius:20px;'>" + s.NUMERO + "</span></strong></td>" +
+    "<td>" + formatDateValue(s.DATE_SORTIE, true) + "</td>" +
+    "<td>" + dateReceptionHtml + "</td>" +
+    '<td class="bon-articles-cell">' + articlesHtml + "</td>" +
+    '<td class="bon-quantities-cell">' + quantitesHtml + "</td>" +
+    "<td>" + (s.NOM || "") + "</td>" +
+    "<td>" + statutBadge + "</td>" +
+    "<td>" + actionsHtml + "</td></tr>";
     });
 
     tbody.innerHTML = html;

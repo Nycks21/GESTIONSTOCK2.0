@@ -95,7 +95,8 @@ function renderSimpleTable() {
         row.insertCell(0).innerHTML = nameBadge;
         row.insertCell(1).innerHTML = escapeHtml(user.NOM || '-');
         row.insertCell(2).innerHTML = escapeHtml(user.EMAIL || '-');
-        row.insertCell(3).innerHTML = getUserRoleName(user.ROLEID);
+        row.insertCell(3).innerHTML = getUserRoleName(user.ROLEID)
+            '<span style="font-style:bold"></span>';
         row.insertCell(4).innerHTML = escapeHtml(user.TELEPHONE || '-');
         row.insertCell(5).innerHTML = formatDate(user.CREATED_AT);
         row.insertCell(6).innerHTML = (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true')

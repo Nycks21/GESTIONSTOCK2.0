@@ -141,9 +141,9 @@
                         style="table-layout:fixed; width:1300px; min-width:100%; border-collapse:collapse;">
                         <thead>
                           <tr style="background-color:#f8f9fa; text-align:left;">
-                            <th onclick="sortData('CODE')" style="cursor:pointer; width:100px;">CODE <i
+                            <th onclick="sortData('CODE')" style="cursor:pointer; width:140px;">CODE <i
                                 class="fas fa-sort ml-1"></i></th>
-                            <th onclick="sortData('NOM')" style="cursor:pointer; width:180px;">NOM <i
+                            <th onclick="sortData('NOM')" style="cursor:pointer; width:160px;">NOM <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('CATEGORIE_NOM')" style="cursor:pointer; width:130px;">CATÉGORIE <i
                                 class="fas fa-sort ml-1"></i></th>

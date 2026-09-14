@@ -139,7 +139,7 @@
                         style="table-layout:fixed; width:1450px; min-width:100%; border-collapse:collapse;">
                         <thead>
                           <tr style="background-color:#f8f9fa; text-align:left;">
-                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:100px;">N° <i
+                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:120px;">N° <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:90px;">Date sortie <i
                                 class="fas fa-sort ml-1"></i></th>
@@ -147,7 +147,7 @@
                               <i class="fas fa-sort ml-1"></i></th>
                             <th style="width:180px;">Articles</th>
                             <th style="width:110px; text-align:right;">Qté reçue</th>
-                            <th onclick="sortData('NOM')" style="cursor:pointer; width:180px;">Bénéficiaire <i
+                            <th onclick="sortData('NOM')" style="cursor:pointer; width:160px;">Bénéficiaire <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px;">Statut <i
                                 class="fas fa-sort ml-1"></i></th>

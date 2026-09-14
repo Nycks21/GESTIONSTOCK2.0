@@ -297,7 +297,7 @@ function renderEntreesTable(entrees) {
         actionsHtml += '</div>';
 
         html += '<tr>' +
-            '<td><strong>' + e.NUMERO + '</strong></td>' +
+            '<td><strong><span class="badge bg-secondary" style="color:#6c757d; font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">' + e.NUMERO + '</span></strong></td>' +
             '<td>' + formatDateValue(e.DATE_ENTREE, true) + '</td>' +
             '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +

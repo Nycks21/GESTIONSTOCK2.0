@@ -117,7 +117,7 @@
                         style="table-layout:fixed; width:1320px; min-width:100%; border-collapse:collapse;">
                         <thead>
                           <tr style="background-color:#f8f9fa;">
-                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:120px; text-align:left;">N° <i
+                            <th onclick="sortData('NUMERO')" style="cursor:pointer; width:140px; text-align:left;">N° <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DATE_SORTIE')" style="cursor:pointer; width:130px; text-align:left;">
                               Date sortie <i class="fas fa-sort ml-1"></i></th>

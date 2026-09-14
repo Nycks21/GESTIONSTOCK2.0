@@ -224,11 +224,11 @@ function renderDemandesTable(sorties) {
         }
 
         html += '<tr>' +
-            '<td><strong>' + s.NUMERO + '</strong></td>' +
+            '<td><strong><span class="badge bg-secondary" style="color:#6c757d; font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">' + s.NUMERO + '</span></strong></td>' +
             '<td>' + formatDateValue(s.DATE_SORTIE, false) + '</td>' +
             '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
-            '<td>' + (s.DESTINATION || '') + '</td>' +
+            '<td><strong>' + (s.DESTINATION || '') + '</strong></td>' +
             '<td>' + statutBadge + '</td>' +
             '<td>' + actionsHtml + '</td>' +
             '</tr>';
