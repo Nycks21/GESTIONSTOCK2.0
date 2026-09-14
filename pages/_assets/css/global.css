@@ -51,6 +51,12 @@
     --fs-h3:         17px;
 }
 
+.brand-image {
+                width: 33px;
+                height: 33px;
+                object-fit: contain;
+              }
+
 body.dark-mode {
     --dm-bg-body:       #0F172A;
     --dm-bg-topbar:     #111827;

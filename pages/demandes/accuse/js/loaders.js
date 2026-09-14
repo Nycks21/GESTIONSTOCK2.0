@@ -136,9 +136,9 @@ function renderAccuseTable(sorties) {
             var badges = {
                 VALIDE:
                     '<span style="' + baseStyle +
-                        'background:linear-gradient(135deg,#66bb6a,#4caf50);' +
+                        'background:linear-gradient(135deg,#66bb6b,#4caf50);' +
                         'color:#fff;box-shadow:0 2px 6px rgba(76,175,80,0.35);">' +
-                        '<i class="fas fa-check-circle" style="font-size:10px;"></i> Validé' +
+                        '<i class="fas fa-check-circle" style="font-size:10px;"></i> à valider' +
                     '</span>',
                 TERMINE:
                     '<span style="' + baseStyle +

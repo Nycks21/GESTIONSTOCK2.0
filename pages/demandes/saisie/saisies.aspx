@@ -14,13 +14,11 @@
 
   <body class="hold-transition" data-version="<%=AuthHelper.Version %>">
     <form id="saisieForm" runat="server">
+      <asp:HiddenField ID="hfUserRole" runat="server" />
+      <asp:HiddenField ID="hfUserNom" runat="server" /> <!-- ✅ NOUVEAU -->
       <div class="wrapper">
         <%= AuthHelper.RenderTopBarHTML() %>
           <aside class="main-sidebar" id="sidebar">
-            <a href="#" class="brand-link" onclick="loadDashboard()">
-              <img src="data:image/svg+xml,..." alt="Logo" class="brand-image" />
-              <span class="brand-text">Gestion de Stock</span>
-            </a>
             <div class="sidebar">
               <%= AuthHelper.RenderMenuHTML() %>
             </div>
@@ -98,7 +96,6 @@
                   <!-- Filtres (similaires aux sorties) -->
                   <div class="dash-card-toolbar">
                     <div class="toolbar-search">
-                      <i class="fas fa-search"></i>
                       <input type="text" id="search-filter" class="form-control"
                         placeholder="Rechercher par numéro, destination…" autocomplete="off" />
                     </div>
@@ -192,8 +189,31 @@
             <div class="row">
               <div class="col-md-4">
                 <div class="form-group">
-                  <label>Bénéficiaire</label>
-                  <input type="text" id="sortieNom" class="form-control" placeholder="Nom du bénéficiaire" />
+                  <label for="sortieNom">
+                    Bénéficiaire
+                    <i class="fas fa-lock" style="color:#6c757d;font-size:11px;margin-left:4px;"
+                      title="Rempli automatiquement avec votre nom"></i>
+                  </label>
+                  <div style="position:relative;">
+                    <input type="text" id="sortieNom" class="form-control" readonly placeholder="Rempli automatiquement"
+                      style="background-color:#e9ecef;
+                          cursor:not-allowed;
+                          font-weight:600;
+                          color:#495057;
+                          padding-right:38px;" />
+                    <i class="fas fa-user-check" style="position:absolute;
+                      right:12px;
+                      top:50%;
+                      transform:translateY(-50%);
+                      color:#28a745;
+                      font-size:14px;
+                      pointer-events:none;" title="Utilisateur connecté"></i>
+                  </div>
+                  <small style="display:block;margin-top:6px;font-size:12px;color:#17a2b8;line-height:1.4;">
+                    <i class="fas fa-info-circle"></i>
+                    Rempli automatiquement avec <strong>votre nom</strong>.
+                    Ce nom sera enregistré comme bénéficiaire de la demande.
+                  </small>
                 </div>
               </div>
               <div class="col-md-4">

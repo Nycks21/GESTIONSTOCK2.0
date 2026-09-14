@@ -25,15 +25,7 @@
 
           <!-- ═══ SIDEBAR ═══ -->
           <aside class="main-sidebar" id="sidebar">
-            <a href="#" class="brand-link">
-              <img
-                src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Ccircle cx='16.5' cy='16.5' r='16.5' fill='%23007bff'/%3E%3Ctext x='16.5' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EGS%3C/text%3E%3C/svg%3E"
-                alt="Logo" class="brand-image">
-              <span class="brand-text">Gestion de Stock</span>
-            </a>
-
             <div class="sidebar">
-              <!-- GÉNÉRATION AUTOMATIQUE DES MENUS -->
               <%= AuthHelper.RenderMenuHTML() %>
             </div>
           </aside>
@@ -89,7 +81,8 @@
                         <thead>
                           <tr style="background-color: #f8f9fa; text-align: left;">
                             <th onclick="sortData('USERNAME')" style="cursor:pointer; width: 100px;">Nom d'utilisateur
-                              <i class="fas fa-sort ml-1"></i></th>
+                              <i class="fas fa-sort ml-1"></i>
+                            </th>
                             <th onclick="sortData('NOM')" style="cursor:pointer; width: 180px;">Nom complet <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('EMAIL')" style="cursor:pointer; width: 180px;">Email <i
@@ -99,7 +92,8 @@
                             <th onclick="sortData('TELEPHONE')" style="cursor:pointer; width: 80px;">Téléphone <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DATECREATION')" style="cursor:pointer; width: 80px;">Date de création
-                              <i class="fas fa-sort ml-1"></i></th>
+                              <i class="fas fa-sort ml-1"></i>
+                            </th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width: 80px;">Statut <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th style="width: 80px;">Actions</th>
@@ -152,12 +146,12 @@
                   <label>Rôle</label>
                   <select id="userRole" class="form-control">
                     <% if (AuthHelper.IsSuperAdmin()) { %>
-                    <option value="0">SuperAdmin</option>
-                    <% }%>
-                    <option value="1">Administrateur</option>
-                    <option value="2">User</option>
-                    <option value="3">Logisticien</option>
-                    <option value="4">Comptable</option>
+                      <option value="0">SuperAdmin</option>
+                      <% }%>
+                        <option value="1">Administrateur</option>
+                        <option value="2">User</option>
+                        <option value="3">Logisticien</option>
+                        <option value="4">Comptable</option>
                   </select>
                 </div>
               </div>
@@ -259,11 +253,11 @@
                       <label for="permUser" style="margin: 0;">📖 Utilisateurs</label>
                     </div>
                     <% if (AuthHelper.IsSuperAdmin()) { %>
-                    <div style="display: flex; align-items: center;">
-                      <input type="checkbox" id="permRequetes" value="requetes" style="margin-right: 8px;">
-                      <label for="permRequetes" style="margin: 0;">💻 Requêtes SQL</label>
-                    <% } %>
-                    </div>
+                      <div style="display: flex; align-items: center;">
+                        <input type="checkbox" id="permRequetes" value="requetes" style="margin-right: 8px;">
+                        <label for="permRequetes" style="margin: 0;">💻 Requêtes SQL</label>
+                        <% } %>
+                      </div>
                   </div>
                 </div>
               </div>

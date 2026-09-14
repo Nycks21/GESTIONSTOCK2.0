@@ -82,11 +82,17 @@ public class GetDemandes : IHttpHandler, IRequiresSessionState
                     {
                         while (rdr.Read())
                         {
-                            // Utilisation de la syntaxe compatible C# 4.0
                             var s = new Dictionary<string, object>();
                             s["ID"] = rdr["ID"].ToString();
                             s["NUMERO"] = Convert.ToString(rdr["NUMERO"]);
-                            s["DATE_SORTIE"] = rdr["DATE_SORTIE"].ToString();
+
+                            // ✅ FIX CRITIQUE : format ISO explicite (yyyy-MM-ddTHH:mm:ss)
+                            //    → Non ambigu, parsable par tous les navigateurs
+                            //    → Empêche l'inversion jour/mois
+                            s["DATE_SORTIE"] = rdr["DATE_SORTIE"] == DBNull.Value
+                                ? null
+                                : ((DateTime)rdr["DATE_SORTIE"]).ToString("yyyy-MM-ddTHH:mm:ss");
+
                             s["DESTINATION"] = Convert.ToString(rdr["DESTINATION"]);
                             s["NOM"] = Convert.ToString(rdr["NOM"]);
                             s["FONCTION"] = Convert.ToString(rdr["FONCTION"]);
@@ -121,8 +127,8 @@ public class GetDemandes : IHttpHandler, IRequiresSessionState
                                     ARTICLE_ID = rdr["ARTICLE_ID"].ToString(),
                                     ARTICLE_CODE = Convert.ToString(rdr["ARTICLE_CODE"]),
                                     ARTICLE_NOM = Convert.ToString(rdr["ARTICLE_NOM"]),
-                                    QUANTITE_D = Convert.ToDecimal(rdr["QUANTITE_D"]),
-                                    QUANTITE_R = Convert.ToDecimal(rdr["QUANTITE_R"]),
+                                    QUANTITE_D = reader_DecimalOrZero(rdr["QUANTITE_D"]),
+                                    QUANTITE_R = reader_DecimalOrZero(rdr["QUANTITE_R"]),
                                     OBSERVATIONS = Convert.ToString(rdr["OBSERVATIONS"])
                                 });
                             }
@@ -139,8 +145,17 @@ public class GetDemandes : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(
+                new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
+    }
+
+    // ✅ Utilitaire : retourne 0m si DBNull, sinon Convert.ToDecimal
+    private decimal reader_DecimalOrZero(object value)
+    {
+        if (value == null || value == DBNull.Value) return 0m;
+        try { return Convert.ToDecimal(value); }
+        catch { return 0m; }
     }
 
     public bool IsReusable

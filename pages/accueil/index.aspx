@@ -23,18 +23,6 @@
         <%= AuthHelper.RenderTopBarHTML() %>
 
           <aside class="main-sidebar" id="sidebar">
-            <a href="#" class="brand-link" onclick="loadDashboard();return false;">
-              <img src="../../img/logo4.png" alt="Logo" class="brand-image">
-              <span class="brand-text">Gestion de Stock</span>
-            </a>
-
-            <style>
-              .brand-image {
-                width: 33px;
-                height: 33px;
-                object-fit: contain;
-              }
-            </style>
             <div class="sidebar">
               <%= AuthHelper.RenderMenuHTML() %>
             </div>
@@ -64,13 +52,16 @@
 
                   <!-- ═══ ZONE 1 : KPI ═══ -->
                   <div class="kpi-row">
+                    <% if (AuthHelper.HasPermission("articles")) { %>
                     <div class="kpi-card" onclick="location.href='../modules/articles/articles.aspx'">
                       <div class="kpi-accent" style="background:#007bff"></div>
                       <div class="kpi-label"><i class="fas fa-boxes"></i> Articles actifs</div>
                       <div class="kpi-val" id="valArticles">—</div>
                       <div class="kpi-sub"><span class="pill pill-neu" id="pillArticlesTotal">— total</span></div>
                     </div>
+                    <% } %>
 
+                    <% if (AuthHelper.HasPermission("stock")) { %>
                     <div class="kpi-card" onclick="location.href='../modules/stock/stock.aspx'">
                       <div class="kpi-accent" style="background:#dc3545"></div>
                       <div class="kpi-label"><i class="fas fa-exclamation-triangle"></i> Alertes stock</div>
@@ -80,7 +71,9 @@
                         <span class="pill pill-neu" id="pillAlertesCount">0 alerte(s)</span>
                       </div>
                     </div>
+                    <% } %>
 
+                    <% if (AuthHelper.HasPermission("entrees") || AuthHelper.HasPermission("sorties")) { %>
                     <div class="kpi-card" onclick="location.href='../modules/entrees/entrees.aspx'">
                       <div class="kpi-accent" style="background:#ffc107"></div>
                       <div class="kpi-label"><i class="fas fa-hourglass-half"></i> Bons en attente</div>
@@ -90,13 +83,67 @@
                         <span class="pill pill-neu" id="pillSortie">0 sortie(s)</span>
                       </div>
                     </div>
+                    <% } %>
 
+                    <% if (AuthHelper.HasPermission("stock")) { %>
                     <div class="kpi-card" onclick="location.href='../modules/stock/stock.aspx'">
                       <div class="kpi-accent" style="background:#28a745"></div>
                       <div class="kpi-label"><i class="fas fa-coins"></i> Valeur du stock</div>
                       <div class="kpi-val" id="valValeur">—</div>
                       <div class="kpi-sub">
                         <span class="pill pill-up" id="pillSousSeuil">0 article(s) sous seuil</span>
+                      </div>
+                    </div>
+                    <% } %>
+                  </div>
+
+
+                  <div class="col-lg-12">
+                    <div class="dash-card">
+                      <div class="dash-card-head">
+                        <span class="dash-card-title">
+                          <span class="dot-gold"></span> Accès rapides
+                        </span>
+                      </div>
+                      <div class="dash-card-body">
+                        <div class="quick-actions">
+                          <% if (AuthHelper.HasPermission("articles")) { %>
+                            <a href="../modules/articles/articles.aspx" class="quick-action">
+                              <i class="fas fa-boxes"></i> Articles
+                            </a>
+                            <% } %>
+                              <% if (AuthHelper.HasPermission("entrees")) { %>
+                                <a href="../modules/entrees/entrees.aspx" class="quick-action">
+                                  <i class="fas fa-arrow-down"></i> Entrées
+                                </a>
+                                <% } %>
+                                  <% if (AuthHelper.HasPermission("sorties")) { %>
+                                    <a href="../modules/sorties/sorties.aspx" class="quick-action">
+                                      <i class="fas fa-arrow-up"></i> Sorties
+                                    </a>
+                                    <% } %>
+                                      <% if (AuthHelper.HasPermission("stock")) { %>
+                                        <a href="../modules/stock/stock.aspx" class="quick-action">
+                                          <i class="fas fa-warehouse"></i> Stock
+                                        </a>
+                                        <% } %>
+                                          <% if (AuthHelper.HasPermission("inventaire")) { %>
+                                            <a href="../exploitations/inv/inventaires.aspx" class="quick-action">
+                                              <i class="fas fa-clipboard-list"></i> Inventaire
+                                            </a>
+                                            <% } %>
+                                              <% if (AuthHelper.HasPermission("exploitations")) { %>
+                                                <a href="../exploitations/exp/exploitations.aspx" class="quick-action">
+                                                  <i class="fas fa-clipboard-list"></i> Exploitations
+                                                </a>
+                                                <% } %>
+                                                  <% if (AuthHelper.HasPermission("fournisseurs")) { %>
+                                                    <a href="../parametres/fournisseurs/fournisseurs.aspx"
+                                                      class="quick-action">
+                                                      <i class="fas fa-truck"></i> Fournisseurs
+                                                    </a>
+                                                    <% } %>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -222,51 +269,6 @@
                           </div>
                           <% } %>
 
-                            <div class="col-lg-6">
-                              <div class="dash-card">
-                                <div class="dash-card-head">
-                                  <span class="dash-card-title">
-                                    <span class="dot-gold"></span> Accès rapides
-                                  </span>
-                                </div>
-                                <div class="dash-card-body">
-                                  <div class="quick-actions">
-                                    <% if (AuthHelper.HasPermission("entrees")) { %>
-                                      <a href="../modules/entrees/entrees.aspx" class="quick-action">
-                                        <i class="fas fa-arrow-down"></i> Entrées
-                                      </a>
-                                      <% } %>
-                                        <% if (AuthHelper.HasPermission("sorties")) { %>
-                                          <a href="../modules/sorties/sorties.aspx" class="quick-action">
-                                            <i class="fas fa-arrow-up"></i> Sorties
-                                          </a>
-                                          <% } %>
-                                            <% if (AuthHelper.HasPermission("articles")) { %>
-                                              <a href="../modules/articles/articles.aspx" class="quick-action">
-                                                <i class="fas fa-boxes"></i> Articles
-                                              </a>
-                                              <% } %>
-                                                <% if (AuthHelper.HasPermission("stock")) { %>
-                                                  <a href="../modules/stock/stock.aspx" class="quick-action">
-                                                    <i class="fas fa-warehouse"></i> Stock
-                                                  </a>
-                                                  <% } %>
-                                                    <% if (AuthHelper.HasPermission("inventaire")) { %>
-                                                      <a href="../modules/inventaire/inventaire.aspx"
-                                                        class="quick-action">
-                                                        <i class="fas fa-clipboard-list"></i> Inventaire
-                                                      </a>
-                                                      <% } %>
-                                                        <% if (AuthHelper.HasPermission("fournisseurs")) { %>
-                                                          <a href="../parametres/fournisseurs/fournisseurs.aspx"
-                                                            class="quick-action">
-                                                            <i class="fas fa-truck"></i> Fournisseurs
-                                                          </a>
-                                                          <% } %>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
                       </div>
 
                 </div>

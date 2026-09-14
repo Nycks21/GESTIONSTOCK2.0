@@ -97,27 +97,46 @@ function formatNumber(value, decimals) {
 }
 
 function formatDateValue(value, includeTime) {
-    if (value === null || value === undefined || value === '') return '-';
+    if (value === null || value === undefined || value === "") return "-";
+
+    var str = String(value).trim();
+    if (!str) return "-";
+
     var date = null;
-    if (typeof value === 'string') {
-        var str = value.trim();
-        if (!str) return '-';
-        var msMatch = str.match(/-?\d+/);
-        if (str.indexOf('/Date(') !== -1 && msMatch) {
-            date = new Date(parseInt(msMatch[0], 10));
-        } else {
-            date = new Date(str);
-        }
-    } else if (value instanceof Date) {
-        date = value;
-    } else {
-        date = new Date(value);
+
+    // 1) Format SQL Server : "2026-09-12 18:47:00.000"
+    var m1 = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m1) {
+        date = new Date(
+            parseInt(m1[1], 10),
+            parseInt(m1[2], 10) - 1,
+            parseInt(m1[3], 10),
+            parseInt(m1[4] || '0', 10),
+            parseInt(m1[5] || '0', 10),
+            parseInt(m1[6] || '0', 10)
+        );
     }
-    if (!date || isNaN(date.getTime())) return '-';
-    var options = includeTime
-        ? { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }
-        : { day: '2-digit', month: '2-digit', year: 'numeric' };
-    return date.toLocaleString('fr-FR', options);
+
+    // 2) Format .NET : "/Date(1234567890)/"
+    if (!date) {
+        var m2 = str.match(/^\/Date\((-?\d+)\)\/$/);
+        if (m2) date = new Date(parseInt(m2[1], 10));
+    }
+
+    // 3) Fallback
+    if (!date) date = new Date(str);
+
+    if (!date || isNaN(date.getTime())) return "-";
+
+    // Formatage manuel garanti : jj/mm/aaaa [hh:mm]
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    var result = pad(date.getDate()) + '/' + pad(date.getMonth() + 1) + '/' + date.getFullYear();
+
+    if (includeTime) {
+        result += ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+
+    return result;
 }
 
 // ============================================================
@@ -206,7 +225,7 @@ function renderDemandesTable(sorties) {
 
         html += '<tr>' +
             '<td><strong>' + s.NUMERO + '</strong></td>' +
-            '<td>' + formatDateValue(s.DATE_SORTIE, true) + '</td>' +
+            '<td>' + formatDateValue(s.DATE_SORTIE, false) + '</td>' +
             '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
             '<td>' + (s.DESTINATION || '') + '</td>' +

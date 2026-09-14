@@ -4,38 +4,95 @@
 
 var currentMode = 'add'; // 'add', 'edit', 'view'
 
-// Récupère le titre du modal de manière robuste
+// ─── Utilitaires ───────────────────────────────────────────
+function toLocalISO(date) {
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate())
+         + 'T' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+}
+
+function parseDateValue(value) {
+    if (!value) return null;
+    try {
+        var s = String(value).trim();
+        var m = s.match(/^\/Date\((-?\d+)\)\/$/);
+        var d = m ? new Date(Number(m[1])) : new Date(s);
+        return isNaN(d.getTime()) ? null : d;
+    } catch (e) { return null; }
+}
+
 function getModalTitle() {
     var title = document.getElementById('modalTitle');
-    if (!title) {
-        title = document.querySelector('#saisieModal .modal-header h3');
-    }
+    if (!title) title = document.querySelector('#saisieModal .modal-header h3');
     return title;
 }
 
-// ============================================================
-// ✅ Activer/désactiver les champs du modal
-//    ⚠️ Les boutons marqués data-keep-active="true" (ex: Annuler)
-//       ne sont JAMAIS désactivés.
-// ============================================================
+// ✅ Retourne le NOM de l'utilisateur connecté (injecté par le serveur)
+function getCurrentUserNom() {
+    var hf = document.getElementById('hfUserNom');
+    return (hf && hf.value) ? hf.value : '';
+}
+
+// ✅ Force le champ Bénéficiaire à rester readonly
+function lockBeneficiaire() {
+    var nomInput = document.getElementById('sortieNom');
+    if (!nomInput) return;
+    nomInput.readOnly = true;
+    nomInput.style.backgroundColor = '#e9ecef';
+    nomInput.style.cursor = 'not-allowed';
+}
+
+// ─── ReadOnly numéro ───────────────────────────────────────
+function setNumeroReadOnly() {
+    var numEl = document.getElementById('sortieNumero');
+    if (!numEl) return;
+    numEl.readOnly = true;
+    numEl.style.backgroundColor = '#e9ecef';
+    numEl.style.color = '#6c757d';
+    numEl.style.cursor = 'not-allowed';
+}
+
+// ─── Loading bouton ────────────────────────────────────────
+function setButtonLoading(btn, loading, loadingText) {
+    if (!btn) return;
+    if (loading) {
+        if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+        btn.disabled = true;
+        btn.style.opacity = '0.75';
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (loadingText || 'Traitement…');
+    } else {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        if (btn.dataset.originalHtml) {
+            btn.innerHTML = btn.dataset.originalHtml;
+            delete btn.dataset.originalHtml;
+        }
+    }
+}
+
+// ─── Activer/désactiver les champs ─────────────────────────
 function setFieldsEnabled(enabled) {
-    // ─── Champs de saisie ───
     var inputs = document.querySelectorAll('#saisieModal input, #saisieModal select, #saisieModal textarea');
     for (var i = 0; i < inputs.length; i++) {
+        // Le numéro ET le bénéficiaire restent readonly (jamais disabled)
+        if (inputs[i].id === 'sortieNumero' || inputs[i].id === 'sortieNom') continue;
+
         inputs[i].disabled = !enabled;
         if (!enabled) {
             inputs[i].style.backgroundColor = '#e9ecef';
+            inputs[i].style.color = '#6c757d';
             inputs[i].style.cursor = 'not-allowed';
+            inputs[i].style.borderColor = '#dee2e6';
         } else {
             inputs[i].style.backgroundColor = '';
+            inputs[i].style.color = '';
             inputs[i].style.cursor = '';
+            inputs[i].style.borderColor = '';
         }
     }
 
-    // ─── Boutons de ligne (btn-success, btn-danger) ───
-    var ligneBtns = document.querySelectorAll('#saisieModal .btn-success, #saisieModal .btn-danger');
+    var ligneBtns = document.querySelectorAll('#saisieModal .btn-ligne-action');
     for (var j = 0; j < ligneBtns.length; j++) {
-        // ⚠️ NE PAS désactiver les boutons marqués "data-keep-active"
         if (ligneBtns[j].getAttribute('data-keep-active') === 'true') {
             ligneBtns[j].disabled = false;
             continue;
@@ -44,14 +101,13 @@ function setFieldsEnabled(enabled) {
     }
 }
 
-// Masque/affiche les boutons d'action (Enregistrer, Réinitialiser)
+// ─── Visibilité des boutons d'action ───────────────────────
 function setActionButtonsVisible(visible) {
     var btnSave = document.getElementById('btnSaveSaisie');
     if (btnSave) btnSave.style.display = visible ? '' : 'none';
     var btnReset = document.getElementById('btnResetSaisie');
     if (btnReset) btnReset.style.display = visible ? '' : 'none';
 
-    // ✅ Le bouton Annuler reste TOUJOURS visible ET actif
     var btnAnnuler = document.getElementById('btnAnnulerDemande');
     if (btnAnnuler) {
         btnAnnuler.style.display = '';
@@ -62,7 +118,7 @@ function setActionButtonsVisible(visible) {
 }
 
 // ============================================================
-// OUVERTURE DU MODAL (AJOUT)
+// AJOUT
 // ============================================================
 function openModalSaisie(e) {
     if (e) e.preventDefault();
@@ -72,12 +128,20 @@ function openModalSaisie(e) {
     if (title) title.innerHTML = '<i class="fas fa-plus"></i> Nouvelle demande';
     resetFormSaisie();
     setFieldsEnabled(true);
+    setNumeroReadOnly();
+    lockBeneficiaire();
     setActionButtonsVisible(true);
     document.getElementById('saisieModal').style.display = 'flex';
+
+    // ✅ Rappel discret
+    var nomConnecte = getCurrentUserNom();
+    if (nomConnecte) {
+        showToast('Info', 'Bénéficiaire automatique : ' + nomConnecte, 'info', 2500);
+    }
 }
 
 // ============================================================
-// FERMETURE DU MODAL
+// FERMETURE
 // ============================================================
 function closeModalSaisie() {
     document.getElementById('saisieModal').style.display = 'none';
@@ -89,17 +153,23 @@ function closeModalSaisie() {
 }
 
 // ============================================================
-// RÉINITIALISATION DU FORMULAIRE
+// RÉINITIALISATION
 // ============================================================
 function resetFormSaisie() {
     var numero = document.getElementById('sortieNumero');
-    if (numero) numero.value = '';
+    if (numero) {
+        numero.value = '';
+        numero.placeholder = 'Sera généré automatiquement';
+    }
     var date = document.getElementById('sortieDate');
-    if (date) date.value = new Date().toISOString().slice(0, 16);
+    if (date) date.value = toLocalISO(new Date());
     var dest = document.getElementById('sortieDestination');
     if (dest) dest.value = '';
+
+    // ✅ Bénéficiaire : rempli automatiquement avec l'utilisateur connecté
     var nom = document.getElementById('sortieNom');
-    if (nom) nom.value = '';
+    if (nom) nom.value = getCurrentUserNom();
+
     var fonction = document.getElementById('sortieFonction');
     if (fonction) fonction.value = '';
     var notes = document.getElementById('sortieNotes');
@@ -107,30 +177,31 @@ function resetFormSaisie() {
     var lignesBody = document.getElementById('lignesBody');
     if (lignesBody) lignesBody.innerHTML = '';
     ajouterLigne();
+    setNumeroReadOnly();
+    lockBeneficiaire();
     clearErrors();
 }
 
-// Charge les données d'une demande dans le modal
+// ============================================================
+// CHARGEMENT DANS LE MODAL
+// ============================================================
 function chargerDemandeDansModal(demande) {
     var numero = document.getElementById('sortieNumero');
     if (numero) numero.value = demande.NUMERO || '';
+    setNumeroReadOnly();
+
     var date = document.getElementById('sortieDate');
     if (date) {
-        var dateStr = '';
-        if (demande.DATE_SORTIE) {
-            try {
-                var d = new Date(demande.DATE_SORTIE);
-                if (!isNaN(d.getTime())) {
-                    dateStr = d.toISOString().slice(0, 16);
-                }
-            } catch (e) { /* ignore */ }
-        }
-        date.value = dateStr;
+        var d = parseDateValue(demande.DATE_SORTIE);
+        date.value = d ? toLocalISO(d) : '';
     }
     var dest = document.getElementById('sortieDestination');
     if (dest) dest.value = demande.DESTINATION || '';
+
+    // ✅ Bénéficiaire : valeur historique (VIEW/EDIT)
     var nom = document.getElementById('sortieNom');
-    if (nom) nom.value = demande.NOM || '';
+    if (nom) nom.value = demande.NOM || getCurrentUserNom();
+
     var fonction = document.getElementById('sortieFonction');
     if (fonction) fonction.value = demande.FONCTION || '';
     var notes = document.getElementById('sortieNotes');
@@ -146,10 +217,11 @@ function chargerDemandeDansModal(demande) {
     } else {
         ajouterLigne();
     }
+    lockBeneficiaire();
 }
 
 // ============================================================
-// SAUVEGARDE (création ou modification)
+// SAUVEGARDE
 // ============================================================
 async function saveSaisie(e) {
     e.preventDefault();
@@ -157,20 +229,27 @@ async function saveSaisie(e) {
         showToast('Info', 'Vous êtes en consultation, aucune modification possible.', 'info');
         return;
     }
+
     var id = AppState.editingId;
     var data = {
-        numero: document.getElementById('sortieNumero').value.trim(),
         dateSortie: document.getElementById('sortieDate').value,
         destination: document.getElementById('sortieDestination').value.trim(),
-        nom: document.getElementById('sortieNom').value.trim(),
+        // ✅ Envoie le nom de la session (le serveur le revérifie de toute façon)
+        nom: getCurrentUserNom(),
         fonction: document.getElementById('sortieFonction').value.trim(),
         notes: document.getElementById('sortieNotes').value.trim(),
-        lignes: getLignesFromModal()
+        lignes: getLignesFromModal(),
+        // ✅ Marqueur : le serveur doit utiliser AuthHelper.GetUserFullName()
+        source: 'saisie'
     };
+
+    if (id) {
+        var numEl = document.getElementById('sortieNumero');
+        data.numero = numEl ? numEl.value.trim() : '';
+    }
 
     var valid = true;
     clearErrors();
-    if (!data.numero) { showError('sortieNumero', 'Le numéro est requis'); valid = false; }
     if (!data.dateSortie) { showError('sortieDate', 'La date est requise'); valid = false; }
     if (!data.destination) { showError('sortieDestination', 'La destination est requise'); valid = false; }
     if (!data.lignes.length) { showToast('Erreur', 'Ajoutez au moins une ligne d\'article', 'error'); valid = false; }
@@ -178,18 +257,24 @@ async function saveSaisie(e) {
 
     var endpoint = id ? API.EDIT : API.ADD;
     var payload = id ? Object.assign({}, data, { id: id }) : data;
+    var btnSave = document.getElementById('btnSaveSaisie');
 
     try {
         showSpinner();
-        var url = API.BASE + endpoint;
+        setButtonLoading(btnSave, true, 'Enregistrement…');
+
+        var url = API.BASE + API.HANDLERS_PATH + endpoint;
         var resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
         var result = await resp.json();
+
         if (result.success) {
-            showToast('Succès', result.message || (id ? 'Demande modifiée' : 'Demande créée'), 'success');
+            var msg = result.message || (id ? 'Demande modifiée' : 'Demande créée');
+            if (result.numero && !id) msg = 'Demande créée avec succès (' + result.numero + ').';
+            showToast('Succès', msg, 'success');
             closeModalSaisie();
             loadDemandes();
             loadDemandesStats();
@@ -199,13 +284,13 @@ async function saveSaisie(e) {
     } catch (err) {
         showToast('Erreur', err.message, 'error');
     } finally {
+        setButtonLoading(btnSave, false);
         hideSpinner();
     }
 }
 
 // ============================================================
-// VISUALISATION (VIEW)
-//    ⚠️ Le bouton Annuler doit rester ACTIF et VISIBLE
+// VISUALISATION
 // ============================================================
 function viewDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
@@ -217,14 +302,11 @@ function viewDemande(id) {
     if (title) title.innerHTML = '<i class="fas fa-eye"></i> Détails de la demande';
 
     chargerDemandeDansModal(demande);
-
-    // Désactive tous les champs SAUF les boutons data-keep-active="true"
     setFieldsEnabled(false);
-
-    // Masque Enregistrer et Réinitialiser (mais PAS Annuler)
+    setNumeroReadOnly();
+    lockBeneficiaire();
     setActionButtonsVisible(false);
 
-    // ✅ Sécurité supplémentaire : s'assurer que le bouton Annuler est actif
     var btnAnnuler = document.getElementById('btnAnnulerDemande');
     if (btnAnnuler) {
         btnAnnuler.disabled = false;
@@ -238,7 +320,7 @@ function viewDemande(id) {
 }
 
 // ============================================================
-// MODIFICATION (EDIT)
+// MODIFICATION
 // ============================================================
 function editDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
@@ -253,13 +335,15 @@ function editDemande(id) {
     if (title) title.innerHTML = '<i class="fas fa-edit"></i> Modifier la demande';
     chargerDemandeDansModal(demande);
     setFieldsEnabled(true);
+    setNumeroReadOnly();
+    lockBeneficiaire();
     setActionButtonsVisible(true);
     clearErrors();
     document.getElementById('saisieModal').style.display = 'flex';
 }
 
 // ============================================================
-// SUPPRESSION
+// SUPPRESSION (avec mot de passe)
 // ============================================================
 async function deleteDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
@@ -267,43 +351,82 @@ async function deleteDemande(id) {
         showToast('Attention', 'Impossible de supprimer une demande validée.', 'warning');
         return;
     }
-    var confirm = await Swal.fire({
+
+    var confirmResult = await Swal.fire({
         title: 'Confirmer la suppression',
-        text: 'Voulez-vous vraiment supprimer cette demande ?',
+        html:
+            '<p style="margin-bottom:14px;color:#495057;">' +
+                'Voulez-vous vraiment supprimer cette demande ?' +
+            '</p>' +
+            '<div style="text-align:left;">' +
+                '<label for="swalDeletePwd" style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;color:#212529;">' +
+                    'Mot de passe de suppression <span style="color:#dc3545;">*</span>' +
+                '</label>' +
+                '<input type="password" id="swalDeletePwd" class="swal2-input" autocomplete="off" ' +
+                    'placeholder="Saisissez le mot de passe" style="width:100%;margin:0;box-sizing:border-box;" />' +
+                '<div id="swalDeletePwdError" style="color:#dc3545;font-size:12.5px;margin-top:6px;display:none;font-weight:600;"></div>' +
+            '</div>',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
-    });
-    if (!confirm.isConfirmed) return;
+        cancelButtonColor: '#6c757d',
+        confirmButtonText: '<i class="fas fa-trash"></i> Confirmer la suppression',
+        cancelButtonText: 'Annuler',
+        reverseButtons: true,
+        focusConfirm: false,
+        didOpen: function () {
+            var pwd = document.getElementById('swalDeletePwd');
+            if (pwd) pwd.focus();
+        },
+        preConfirm: async function () {
+            var pwdInput = document.getElementById('swalDeletePwd');
+            var errEl = document.getElementById('swalDeletePwdError');
+            var pwd = pwdInput ? pwdInput.value : '';
 
-    try {
-        showSpinner();
-        var url = API.BASE + API.DELETE;
-        var resp = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: id })
-        });
-        var result = await resp.json();
-        if (result.success) {
-            showToast('Succès', 'Demande supprimée', 'success');
-            loadDemandes();
-            loadDemandesStats();
-        } else {
-            showToast('Erreur', result.message || 'Échec de la suppression', 'error');
+            if (!pwd) {
+                if (errEl) {
+                    errEl.textContent = 'Veuillez saisir le mot de passe.';
+                    errEl.style.display = 'block';
+                }
+                return false;
+            }
+
+            try {
+                var url = API.BASE + API.HANDLERS_PATH + API.DELETE;
+                var resp = await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: id, password: pwd })
+                });
+                var result = await resp.json();
+                if (result && result.success) {
+                    return { message: result.message || 'Demande supprimée' };
+                }
+                if (errEl) {
+                    errEl.textContent = result.message || 'Mot de passe incorrect.';
+                    errEl.style.display = 'block';
+                }
+                if (pwdInput) { pwdInput.value = ''; pwdInput.focus(); }
+                return false;
+            } catch (err) {
+                if (errEl) {
+                    errEl.textContent = 'Erreur de communication avec le serveur.';
+                    errEl.style.display = 'block';
+                }
+                return false;
+            }
         }
-    } catch (err) {
-        showToast('Erreur', err.message, 'error');
-    } finally {
-        hideSpinner();
-    }
+    });
+
+    if (!confirmResult.isConfirmed || !confirmResult.value) return;
+
+    showToast('Succès', confirmResult.value.message || 'Demande supprimée', 'success');
+    loadDemandes();
+    loadDemandesStats();
 }
 
 // ============================================================
-// UTILITAIRES D'ERREURS
+// ERREURS
 // ============================================================
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
@@ -318,7 +441,7 @@ function clearErrors() {
 }
 
 // ============================================================
-// EXPOSITIONS GLOBALES
+// EXPOSITIONS
 // ============================================================
 window.openModalSaisie = openModalSaisie;
 window.closeModalSaisie = closeModalSaisie;
@@ -332,3 +455,7 @@ window.clearErrors = clearErrors;
 window.setFieldsEnabled = setFieldsEnabled;
 window.setActionButtonsVisible = setActionButtonsVisible;
 window.getModalTitle = getModalTitle;
+window.setNumeroReadOnly = setNumeroReadOnly;
+window.setButtonLoading = setButtonLoading;
+window.getCurrentUserNom = getCurrentUserNom;
+window.lockBeneficiaire = lockBeneficiaire;

@@ -1,13 +1,29 @@
 // ============================================================
-// EXPORT DES DONNÉES (EXCEL / PDF)
+// EXPORT DES DONNÉES (EXCEL / PDF) — SAISIE
 // ============================================================
+
+// ✅ Formate une date en jj/mm/aaaa [hh:mm] (indépendant de la locale navigateur)
+function formatDateExport(value) {
+    if (!value) return '';
+    var d = null;
+    try {
+        var s = String(value).trim();
+        var m = s.match(/^\/Date\((-?\d+)\)\/$/);
+        d = m ? new Date(Number(m[1])) : new Date(s);
+    } catch (e) { return ''; }
+    if (!d || isNaN(d.getTime())) return '';
+
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear()
+         + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
 
 function buildSortieExportRows() {
     var rows = [['N°', 'Date', 'Destination', 'Bénéficiaire', 'Fonction', 'Statut', 'Notes']];
     AppState.sorties.forEach(function (s) {
         rows.push([
             s.NUMERO || '',
-            s.DATE_SORTIE ? new Date(s.DATE_SORTIE).toLocaleString() : '',
+            formatDateExport(s.DATE_SORTIE),   // ✅
             s.DESTINATION || '',
             s.NOM || '',
             s.FONCTION || '',
@@ -41,7 +57,7 @@ function exportSortiesPDF() {
         var body = AppState.sorties.map(function (s) {
             return [
                 s.NUMERO || '',
-                s.DATE_SORTIE ? new Date(s.DATE_SORTIE).toLocaleString() : '',
+                formatDateExport(s.DATE_SORTIE),   // ✅
                 s.DESTINATION || '',
                 s.NOM || '',
                 s.FONCTION || '',
@@ -66,3 +82,4 @@ function exportSortiesPDF() {
 
 window.exportSortiesToExcelOnly = exportSortiesToExcelOnly;
 window.exportSortiesPDF = exportSortiesPDF;
+window.formatDateExport = formatDateExport;

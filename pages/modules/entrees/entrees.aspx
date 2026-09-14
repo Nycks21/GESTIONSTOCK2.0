@@ -20,10 +20,6 @@
 
           <!-- Sidebar -->
           <aside class="main-sidebar" id="sidebar">
-            <a href="#" class="brand-link" onclick="loadDashboard()">
-              <img src="data:image/svg+xml,..." alt="Logo" class="brand-image" />
-              <span class="brand-text">Gestion de Stock</span>
-            </a>
             <div class="sidebar">
               <%= AuthHelper.RenderMenuHTML() %>
             </div>

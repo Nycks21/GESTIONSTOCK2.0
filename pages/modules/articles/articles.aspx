@@ -19,12 +19,6 @@
         <%= AuthHelper.RenderTopBarHTML() %>
 
           <aside class="main-sidebar" id="sidebar">
-            <a href="#" class="brand-link" onclick="loadDashboard()">
-              <img
-                src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='33' height='33' viewBox='0 0 33 33'%3E%3Ccircle cx='16.5' cy='16.5' r='16.5' fill='%23007bff'/%3E%3Ctext x='16.5' y='22' font-size='16' font-weight='bold' text-anchor='middle' fill='white'%3EGS%3C/text%3E%3C/svg%3E"
-                alt="Logo" class="brand-image" />
-              <span class="brand-text">Gestion de Stock</span>
-            </a>
             <div class="sidebar">
               <%= AuthHelper.RenderMenuHTML() %>
             </div>
@@ -159,7 +153,8 @@
                             <th onclick="sortData('UNITE_SYMBOLE')" style="cursor:pointer; width:80px;">UNITÉ <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('STOCK_TOTAL')" style="cursor:pointer; width:100px;">STOCK DISPONIBLE
-                              <i class="fas fa-sort ml-1"></i></th>
+                              <i class="fas fa-sort ml-1"></i>
+                            </th>
                             <th onclick="sortData('SEUIL_MIN')" style="cursor:pointer; width:90px;">SEUIL MIN <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('SEUIL_ALERTE')" style="cursor:pointer; width:90px;">SEUIL ALERTE <i
