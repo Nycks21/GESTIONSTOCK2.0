@@ -91,11 +91,8 @@
                                 <% if (AuthHelper.HasPermission("stock")) { %>
                                   <div class="kpi-card" onclick="location.href='../modules/stock/stock.aspx'">
                                     <div class="kpi-accent" style="background:#28a745"></div>
-                                    <div class="kpi-label"><i class="fas fa-coins"></i> Valeur du stock</div>
+                                    <div class="kpi-label"><i class="fas fa-coins"></i> Valeur du stock d'entrée</div>
                                     <div class="kpi-val" id="valValeur">—</div>
-                                    <div class="kpi-sub">
-                                      <span class="pill pill-up" id="pillSousSeuil">0 article(s) sous seuil</span>
-                                    </div>
                                   </div>
                                   <% } %>
 
