@@ -67,10 +67,15 @@ async function loadEntreeStats() {
         var resp = await fetch(url);
         var data = await resp.json();
         if (data.success) {
-            document.getElementById('statTotal').textContent = data.total ?? 0;
-            document.getElementById('statValide').textContent = data.valide ?? 0;
-            document.getElementById('statBrouillon').textContent = data.brouillon ?? 0;
-            document.getElementById('statAnnule').textContent = data.annule ?? 0;
+            var elTotal = document.getElementById('statTotal');
+            var elValide = document.getElementById('statValide');
+            var elBrouillon = document.getElementById('statBrouillon');
+            var elAnnule = document.getElementById('statAnnule');
+
+            if (elTotal) elTotal.textContent = data.total ?? 0;
+            if (elValide) elValide.textContent = data.valide ?? 0;
+            if (elBrouillon) elBrouillon.textContent = data.brouillon ?? 0;
+            if (elAnnule) elAnnule.textContent = data.annule ?? 0;
         }
     } catch (e) {
         console.warn('Erreur stats:', e);
@@ -141,32 +146,29 @@ function formatDateValue(value, includeTime) {
     if (value === null || value === undefined || value === '') return '-';
 
     var date = null;
-    if (typeof value === 'string') {
-        var str = value.trim();
-        if (!str) return '-';
+    var str = String(value).trim();
+    if (!str) return '-';
 
-        var msMatch = str.match(/-?\d+/);
-        if (str.indexOf('/Date(') !== -1 && msMatch) {
-            date = new Date(parseInt(msMatch[0], 10));
-        } else {
-            date = new Date(str);
-        }
-    } else if (value instanceof Date) {
-        date = value;
+    // 1) Format SQL Server / ISO : "2026-09-12 18:47:00.000" ou "2026-09-12T18:47:00"
+    var m1 = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
+    if (m1) {
+        date = new Date(+m1[1], +m1[2] - 1, +m1[3], +(m1[4] || 0), +(m1[5] || 0), +(m1[6] || 0));
     } else {
-        date = new Date(value);
+        // 2) Format .NET : "/Date(1234567890)/"
+        var m2 = str.match(/^\/Date\((-?\d+)\)\/$/);
+        if (m2) date = new Date(+m2[1]);
+        else date = new Date(str);
     }
 
     if (!date || isNaN(date.getTime())) return '-';
 
-    var options = includeTime ? {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-    } : {
-        day: '2-digit', month: '2-digit', year: 'numeric'
-    };
-
-    return date.toLocaleString('fr-FR', options);
+    // ✅ Formatage manuel garanti : jj/mm/aaaa [hh:mm]
+    var pad = function (n) { return String(n).padStart(2, '0'); };
+    var result = pad(date.getDate()) + '/' + pad(date.getMonth() + 1) + '/' + date.getFullYear();
+    if (includeTime) {
+        result += ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+    }
+    return result;
 }
 
 function formatNumber(value, decimals) {
@@ -175,7 +177,7 @@ function formatNumber(value, decimals) {
 }
 
 // ============================================================
-// ✅ BADGE DE STATUT MODERNE (dégradé + icône)
+// BADGE DE STATUT MODERNE (dégradé + icône)
 // ============================================================
 function getEntreeStatusBadge(statut) {
     var baseStyle =
@@ -210,7 +212,7 @@ function getEntreeStatusBadge(statut) {
 }
 
 // ============================================================
-// ✅ UTILITAIRE : formatage monétaire avec séparateur de milliers
+// UTILITAIRE : formatage monétaire avec séparateur de milliers
 //    Exemple : 1234567.89 → "1 234 567,89"
 // ============================================================
 function formatCurrency(value, decimals) {
@@ -224,14 +226,16 @@ function formatCurrency(value, decimals) {
 }
 
 // ============================================================
-// ✅ RENDU DU TABLEAU
+// RENDU DU TABLEAU
 // ============================================================
 function renderEntreesTable(entrees) {
     var tbody = document.getElementById('entreesTableBody');
     if (!tbody) return;
 
+    // ✅ Le tableau a 9 colonnes : N°, Date, Articles, Référence, Fournisseur,
+    //    Quantités, Statut, Total TTC, Actions
     if (!entrees.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun bon d\'entrée trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucun bon d\'entrée trouvé</td></tr>';
         document.getElementById('resultsCounter').textContent = '0 bon(s)';
         return;
     }
@@ -245,6 +249,7 @@ function renderEntreesTable(entrees) {
 
         var lignes = e.Lignes || [];
 
+        // ─── ARTICLES (issus des lignes) ───
         var articlesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-article-item">' +
@@ -254,6 +259,17 @@ function renderEntreesTable(entrees) {
             }).join('')
             : '<span class="text-muted">Aucun article</span>';
 
+        // ✅ FIX : Référence vient du BON (e.REFERENCE), pas des lignes
+        var refHtml = e.REFERENCE
+            ? '<span style="font-weight:600;color:#495057;">' + e.REFERENCE + '</span>'
+            : '<span class="text-muted">—</span>';
+
+        // ✅ FIX : Fournisseur vient du BON (e.FOURNISSEUR), pas des lignes
+        var frnsHtml = e.FOURNISSEUR
+            ? '<span style="font-weight:600;color:#495057;">' + e.FOURNISSEUR + '</span>'
+            : '<span class="text-muted">—</span>';
+
+        // ─── QUANTITÉS (issus des lignes) ───
         var quantitesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE, 2) + '</div>';
@@ -269,7 +285,7 @@ function renderEntreesTable(entrees) {
         actionsHtml +=
             '<button type="button" class="btn-icon btn-info" ' +
             'onclick="viewEntree(\'' + e.ID + '\')" title="Voir détails">' +
-            '<i class="fas fa-eye"></i><span></span></button>';
+            '<i class="fas fa-eye"></i></button>';
 
         // 2. Actions si statut != VALIDE
         if (statut !== 'VALIDE') {
@@ -277,33 +293,41 @@ function renderEntreesTable(entrees) {
             actionsHtml +=
                 '<button type="button" class="btn-icon btn-primary" ' +
                 'onclick="editEntree(\'' + e.ID + '\')" title="Modifier">' +
-                '<i class="fas fa-edit"></i><span></span></button>';
+                '<i class="fas fa-edit"></i></button>';
 
             // 2.2 Supprimer
             actionsHtml +=
                 '<button type="button" class="btn-icon btn-danger" ' +
                 'onclick="deleteEntree(\'' + e.ID + '\')" title="Supprimer">' +
-                '<i class="fas fa-trash"></i><span></span></button>';
+                '<i class="fas fa-trash"></i></button>';
 
             // 2.3 Valider (uniquement pour BROUILLON)
             if (statut === 'BROUILLON') {
                 actionsHtml +=
                     '<button type="button" class="btn-icon btn-success btn-pulse" ' +
                     'onclick="validerEntree(\'' + e.ID + '\')" title="Valider le bon">' +
-                    '<i class="fas fa-check"></i><span></span></button>';
+                    '<i class="fas fa-check"></i></button>';
             }
         }
 
         actionsHtml += '</div>';
 
-        html += '<tr>' +
-            '<td><strong><span class="badge bg-secondary" style="color:#6c757d; font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">' + e.NUMERO + '</span></strong></td>' +
-            '<td>' + formatDateValue(e.DATE_ENTREE, true) + '</td>' +
-            '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
-            '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
-            '<td>' + statutBadge + '</td>' +
-            '<td style="text-align:right;"><strong>' + formatCurrency(e.TOTAL_TTC, 2) + '</strong></td>' +
-            '<td>' + actionsHtml + '</td>' +
+        // ─── LIGNE HTML FINALE ───
+        html +=
+            '<tr>' +
+                '<td><strong><span class="badge bg-secondary" ' +
+                    'style="color:#333;font-weight:bold;background-color:#e9e9e9;' +
+                    'padding:4px 10px;border-radius:20px;">' +
+                    (e.NUMERO || '') +
+                '</span></strong></td>' +
+                '<td>' + formatDateValue(e.DATE_ENTREE, true) + '</td>' +
+                '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
+                '<td class="bon-ref-cell">' + refHtml + '</td>' +
+                '<td class="bon-frns-cell"><strong>' + frnsHtml + '</strong></td>' +
+                '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
+                '<td>' + statutBadge + '</td>' +
+                '<td style="text-align:right;"><strong>' + formatCurrency(e.TOTAL_TTC, 2) + '</strong></td>' +
+                '<td>' + actionsHtml + '</td>' +
             '</tr>';
     });
 
@@ -316,6 +340,7 @@ function renderEntreesTable(entrees) {
 // ============================================================
 window.formatDateValue = formatDateValue;
 window.formatNumber = formatNumber;
+window.formatCurrency = formatCurrency;
 window.loadEntrees = loadEntrees;
 window.loadEntreeStats = loadEntreeStats;
 window.loadDropdownsEntree = loadDropdownsEntree;

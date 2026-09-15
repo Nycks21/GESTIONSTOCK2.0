@@ -40,7 +40,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             string uniteId = GetString(data, "uniteId");
             string emplacementId = GetString(data, "emplacementId");
             decimal seuilAlerte = GetDecimal(data, "seuilAlerte", 0);
-            decimal seuilMin = GetDecimal(data, "seuilMin", 0);
             bool actif = GetBool(data, "actif", true);
             bool estService = GetBool(data, "estService", false);
 
@@ -65,7 +64,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                         UNITE_MESURE_ID = @unite,
                         EMPLACEMENT_ID = @empl,
                         SEUIL_ALERTE = @seuilAlerte,
-                        SEUIL_MIN = @seuilMin,
                         ACTIVE = @active,
                         EST_SERVICE = @service,
                         UPDATED_BY = @userId,
@@ -82,7 +80,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@unite", uniteId);
                     cmd.Parameters.AddWithValue("@empl", string.IsNullOrEmpty(emplacementId) ? (object)DBNull.Value : emplacementId);
                     cmd.Parameters.AddWithValue("@seuilAlerte", seuilAlerte);
-                    cmd.Parameters.AddWithValue("@seuilMin", seuilMin);
                     cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                     cmd.Parameters.AddWithValue("@service", estService ? 1 : 0);
                     cmd.Parameters.AddWithValue("@userId", userId);

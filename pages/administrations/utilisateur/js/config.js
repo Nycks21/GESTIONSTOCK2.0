@@ -53,7 +53,7 @@ var DEFAULT_ROLE_PERMISSIONS = {
     1: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'utilisateurs'],          // Admin
     2: ['accueil','saisies', 'accuses'],                                                                                                                                                                       // User
     3: ['accueil','unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'inventaire', 'exploitation'],                                                           // Logisticien
-    4: ['accueil','entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation']                                                                                                          // Comptable
+    4: ['accueil', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation']                                                                                                          // Comptable
 };
 
 var CURRENT_VERSION = document.querySelector('[data-version]')?.getAttribute('data-version') || '2.1.17';

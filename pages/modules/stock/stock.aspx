@@ -115,6 +115,12 @@
                     <select id="emplacement-filter" class="form-control toolbar-select">
                       <option value="">Tous emplacements</option>
                     </select>
+                    <select id="statut-filter" class="form-control toolbar-select">
+                      <option value="">Tous les statuts</option>
+                      <option value="NORMAL">Normal</option>
+                      <option value="ALERTE">Alerte</option>
+                      <option value="RUPTURE">Rupture</option>
+                    </select>
                     <select id="rows-per-page-top" class="form-control toolbar-select">
                       <option value="10">10 par page</option>
                       <option value="25">25 par page</option>
@@ -143,6 +149,7 @@
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('DISPONIBLE')" style="cursor:pointer; width:120px;">DISPONIBLE <i
                                 class="fas fa-sort ml-1"></i></th>
+                            <th style="width:120px;">SEUIL D'ALERTE</th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:150px;">STATUT <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th style="width:150px;">ACTIONS</th>
@@ -150,7 +157,7 @@
                         </thead>
                         <tbody id="stockTableBody">
                           <tr>
-                            <td colspan="6" style="text-align:center;padding:40px;">
+                            <td colspan="7" style="text-align:center;padding:40px;">
                               <i class="fas fa-spinner fa-spin" style="font-size:24px;color:#ccc;"></i>
                             </td>
                           </tr>

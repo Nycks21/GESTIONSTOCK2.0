@@ -148,6 +148,8 @@
                             <th onclick="sortData('DATE_ENTREE')" style="cursor:pointer; width:130px; text-align:left;">
                               Date <i class="fas fa-sort ml-1"></i></th>
                             <th style="width:220px; text-align:left;">Articles</th>
+                            <th style="width:220px; text-align:left;">Référence facture</th>
+                            <th style="width:220px; text-align:left;">Fournisseur</th>
                             <th style="width:110px; text-align:right;">Quantité</th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px; text-align:left;">
                               Statut <i class="fas fa-sort ml-1"></i></th>

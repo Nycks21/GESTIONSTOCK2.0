@@ -301,7 +301,6 @@ function renderArticlesTable(articles) {
             "<td>" + (a.FOURNISSEUR_NOM || "") + "</td>" +
             "<td>" + (a.UNITE_SYMBOLE || a.UNITE || "") + "</td>" +
             '<td style="text-align:center;">' + stockTotalHtml + "</td>" +
-            '<td style="text-align:center;">' + seuilMinHtml + "</td>" +
             '<td style="text-align:center;">' + seuilAlerteHtml + "</td>" +
             "<td>" + statutBadge + "</td>" +
             "<td>" + actionsHtml + "</td></tr>";

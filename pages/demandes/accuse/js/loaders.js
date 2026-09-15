@@ -114,8 +114,10 @@ function formatDateValue(value, includeTime) {
 function renderAccuseTable(sorties) {
     var tbody = document.getElementById("accuseTableBody");
     if (!tbody) return;
+
+    // ✅ 9 colonnes : N° | Date sortie | Date réception | Articles | Qté reçue | Destination | Bénéficiaire | Statut | Actions
     if (!sorties.length) {
-        tbody.innerHTML = '<tr><td colspan="8" class="text-center">Aucun bon validé trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">Aucun bon validé trouvé</td></tr>';
         document.getElementById("resultsCounter").textContent = "0 bon(s)";
         return;
     }
@@ -125,7 +127,7 @@ function renderAccuseTable(sorties) {
         var lignes = s.Lignes || [];
         var statut = s.STATUT;
 
-        // ─── BADGES DE STATUT MODERNES (identiques à SORTIE) ───
+        // ─── BADGES DE STATUT MODERNES ───
         var statutBadge = (function () {
             var baseStyle =
                 'display:inline-flex;align-items:center;gap:5px;' +
@@ -175,14 +177,14 @@ function renderAccuseTable(sorties) {
             }).join("")
             : '<span class="text-muted">-</span>';
 
-        // Cellule "Date réception" — cohérente avec SORTIE
+        // Cellule "Date réception"
         var dateReceptionHtml = s.DATE_RECEPTION
             ? '<span style="color:#009688;font-weight:600;font-size:12.5px;">' +
                   '<i class="fas fa-calendar-check" style="margin-right:4px;opacity:0.7;"></i>' +
                   formatDateValue(s.DATE_RECEPTION, false) + '</span>'
             : '<span class="text-muted" style="font-size:12px;">—</span>';
 
-        // ─── ACTIONS (boutons icônes modernes, identiques à SORTIE) ───
+        // ─── ACTIONS ───
         var actionsHtml = "";
 
         // 1. Visualiser (toujours présent)
@@ -200,16 +202,28 @@ function renderAccuseTable(sorties) {
                 '<i class="fas fa-check-double"></i></button>';
         }
 
+        // ✅ ORDRE ALIGNÉ SUR LE <thead> :
+        //   1. N°
+        //   2. Date sortie
+        //   3. Date réception
+        //   4. Articles
+        //   5. Qté reçue
+        //   6. Destination
+        //   7. Bénéficiaire
+        //   8. Statut
+        //   9. Actions
         html +=
-    "<tr>" +
-    "<td><strong><span class='badge bg-secondary' style='color:#333;font-weight:bold;background-color:#e9e9e9;padding:4px 10px;border-radius:20px;'>" + s.NUMERO + "</span></strong></td>" +
-    "<td>" + formatDateValue(s.DATE_SORTIE, true) + "</td>" +
-    "<td>" + dateReceptionHtml + "</td>" +
-    '<td class="bon-articles-cell">' + articlesHtml + "</td>" +
-    '<td class="bon-quantities-cell">' + quantitesHtml + "</td>" +
-    "<td>" + (s.NOM || "") + "</td>" +
-    "<td>" + statutBadge + "</td>" +
-    "<td>" + actionsHtml + "</td></tr>";
+            "<tr>" +
+                "<td><strong><span class='badge bg-secondary' style='color:#333;font-weight:bold;background-color:#e9e9e9;padding:4px 10px;border-radius:20px;'>" + s.NUMERO + "</span></strong></td>" +
+                "<td>" + formatDateValue(s.DATE_SORTIE, true) + "</td>" +
+                "<td>" + dateReceptionHtml + "</td>" +
+                '<td class="bon-articles-cell">' + articlesHtml + "</td>" +
+                '<td class="bon-quantities-cell">' + quantitesHtml + "</td>" +
+                "<td>" + (s.DESTINATION || "") + "</td>" +        // ✅ NOUVEAU
+                "<td><strong>" + (s.NOM || "") + "</strong></td>" +                // Bénéficiaire
+                "<td>" + statutBadge + "</td>" +
+                "<td>" + actionsHtml + "</td>" +
+            "</tr>";
     });
 
     tbody.innerHTML = html;

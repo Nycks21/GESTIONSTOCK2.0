@@ -128,6 +128,8 @@
                             <th style="width:100px; text-align:right;">Qté reçue</th>
                             <th onclick="sortData('DESTINATION')" style="cursor:pointer; width:150px; text-align:left;">
                               Destination <i class="fas fa-sort ml-1"></i></th>
+                            <th onclick="sortData('BENEFICIAIRE')" style="cursor:pointer; width:150px; text-align:left;">
+                              Bénéficiaire <i class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('STATUT')" style="cursor:pointer; width:100px; text-align:left;">
                               Statut <i class="fas fa-sort ml-1"></i></th>
                             <th style="width:80px; text-align:left;">Actions</th>

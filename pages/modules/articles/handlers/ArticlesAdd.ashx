@@ -36,7 +36,6 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
             string uniteId = GetString(data, "uniteId");
             string emplacementId = GetString(data, "emplacementId");
             decimal seuilAlerte = GetDecimal(data, "seuilAlerte", 0);
-            decimal seuilMin = GetDecimal(data, "seuilMin", 0);
             decimal stockInitial = GetDecimal(data, "stockInitial", 0);
             bool actif = GetBool(data, "actif", true);
             bool estService = GetBool(data, "estService", false);
@@ -113,8 +112,8 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                         // -----------------------------------------------------------
                         string articleSql = @"
                             INSERT INTO MARTICLE (ID, CODE, NOM, DESCRIPTION, CATEGORIE_ID, FOURNISSEUR_PREFERE_ID, UNITE_MESURE_ID, EMPLACEMENT_ID,
-                                                 SEUIL_ALERTE, SEUIL_MIN, ACTIVE, EST_SERVICE, CREATED_BY, CREATED_AT)
-                            VALUES (@id, @code, @nom, @desc, @cat, @four, @unite, @empl, @seuil, @seuilMin, @active, @service, @userId, GETDATE())";
+                                                 SEUIL_ALERTE, ACTIVE, EST_SERVICE, CREATED_BY, CREATED_AT)
+                            VALUES (@id, @code, @nom, @desc, @cat, @four, @unite, @empl, @seuil, @active, @service, @userId, GETDATE())";
                         using (var cmd = new SqlCommand(articleSql, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", newId);
@@ -126,7 +125,6 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                             cmd.Parameters.AddWithValue("@unite", uniteId);
                             cmd.Parameters.AddWithValue("@empl", string.IsNullOrEmpty(emplacementId) ? (object)DBNull.Value : emplacementId);
                             cmd.Parameters.AddWithValue("@seuil", seuilAlerte);
-                            cmd.Parameters.AddWithValue("@seuilMin", seuilMin);
                             cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                             cmd.Parameters.AddWithValue("@service", estService ? 1 : 0);
                             cmd.Parameters.AddWithValue("@userId", userId);

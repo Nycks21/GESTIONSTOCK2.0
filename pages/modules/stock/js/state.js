@@ -21,7 +21,8 @@ window.AppState = {
     filters: {
         search: '',
         article: '',
-        emplacement: ''
+        emplacement: '',
+        statut: ''
     },
     editingId: null,
     articles: [],

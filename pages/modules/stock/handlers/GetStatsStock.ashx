@@ -1,5 +1,4 @@
 ﻿<%@ WebHandler Language="C#" Class="GetStatsStock" %>
-
 using System;
 using System.Data.SqlClient;
 using System.Web;
@@ -14,7 +13,6 @@ public class GetStatsStock : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
         if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
@@ -33,56 +31,62 @@ public class GetStatsStock : IHttpHandler, IRequiresSessionState
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                string totalsFromMovements = @"
-                    FROM MARTICLE a
-                    INNER JOIN (
-                        SELECT le.ARTICLE_ID, SUM(le.QUANTITE) AS ENTREE
-                        FROM MLENTREE le
-                        INNER JOIN SENTREE be ON be.ID = le.BON_ENTREE_ID
-                        WHERE le.DELETION_AT IS NULL AND be.STATUT = 'VALIDE' AND be.DELETION_AT IS NULL
-                        GROUP BY le.ARTICLE_ID
-                    ) ent ON ent.ARTICLE_ID = a.ID
-                    LEFT JOIN (
-                        SELECT ls.ARTICLE_ID, SUM(ls.QUANTITE_R) AS SORTIE
-                        FROM MLSORTIE ls
-                        INNER JOIN SSORTIE bs ON bs.ID = ls.BON_SORTIE_ID
-                        WHERE ls.DELETION_AT IS NULL AND bs.STATUT = 'VALIDE' AND bs.DELETION_AT IS NULL
-                        GROUP BY ls.ARTICLE_ID
-                    ) sor ON sor.ARTICLE_ID = a.ID
-                    WHERE a.DELETION_AT IS NULL";
 
-                // Les cartes utilisent la même formule que le tableau.
-                string sqlTotalArticles = "SELECT COUNT(*) " + totalsFromMovements + " AND ent.ENTREE - ISNULL(sor.SORTIE, 0) > 0";
-                using (var cmd = new SqlCommand(sqlTotalArticles, conn))
-                    totalArticles = (int)cmd.ExecuteScalar();
+                // ✅ Même logique que GetStock.ashx :
+                //    - Article retenu : EXISTS (SSTOCK) — cohérent avec le tableau
+                //    - DISPONIBLE   = SUM(SSTOCK.QUANTITE_ACTUELLE)
+                //    - SEUIL_ALERTE = MARTICLE.SEUIL_ALERTE
+                string sql = @"
+                    SELECT
+                        SUM(CASE WHEN DISPONIBLE > 0 THEN 1 ELSE 0 END) AS TotalArticles,
+                        ISNULL(SUM(DISPONIBLE), 0) AS TotalQuantite,
+                        SUM(CASE WHEN DISPONIBLE > 0 AND SEUIL_ALERTE > 0 AND DISPONIBLE <= SEUIL_ALERTE THEN 1 ELSE 0 END) AS SousSeuil,
+                        SUM(CASE WHEN DISPONIBLE <= 0 THEN 1 ELSE 0 END) AS Rupture
+                    FROM (
+                        SELECT
+                            a.ID,
+                            a.SEUIL_ALERTE,
+                            ISNULL((
+                                SELECT SUM(s.QUANTITE_ACTUELLE)
+                                FROM SSTOCK s
+                                WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL
+                            ), 0) AS DISPONIBLE
+                        FROM MARTICLE a
+                        WHERE a.DELETION_AT IS NULL
+                          AND EXISTS (
+                              SELECT 1 FROM SSTOCK s
+                              WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL
+                          )
+                    ) t";
 
-                string sqlTotalQuantite = "SELECT ISNULL(SUM(ent.ENTREE - ISNULL(sor.SORTIE, 0)), 0) " + totalsFromMovements;
-                using (var cmd = new SqlCommand(sqlTotalQuantite, conn))
-                    totalQuantite = (decimal)cmd.ExecuteScalar();
-
-                string sqlSousSeuil = "SELECT COUNT(*) " + totalsFromMovements + " AND ent.ENTREE - ISNULL(sor.SORTIE, 0) <= a.SEUIL_ALERTE AND ent.ENTREE - ISNULL(sor.SORTIE, 0) > 0";
-                using (var cmd = new SqlCommand(sqlSousSeuil, conn))
-                    sousSeuil = (int)cmd.ExecuteScalar();
-
-                string sqlRupture = "SELECT COUNT(*) " + totalsFromMovements + " AND ent.ENTREE - ISNULL(sor.SORTIE, 0) = 0";
-                using (var cmd = new SqlCommand(sqlRupture, conn))
-                    rupture = (int)cmd.ExecuteScalar();
+                using (var cmd = new SqlCommand(sql, conn))
+                using (var rdr = cmd.ExecuteReader())
+                {
+                    if (rdr.Read())
+                    {
+                        totalArticles = rdr["TotalArticles"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["TotalArticles"]);
+                        totalQuantite = rdr["TotalQuantite"] == DBNull.Value ? 0m : Convert.ToDecimal(rdr["TotalQuantite"]);
+                        sousSeuil = rdr["SousSeuil"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["SousSeuil"]);
+                        rupture = rdr["Rupture"] == DBNull.Value ? 0 : Convert.ToInt32(rdr["Rupture"]);
+                    }
+                }
             }
 
             var result = new
             {
                 success = true,
-                totalArticles,
-                totalQuantite,
-                sousSeuil,
-                rupture
+                totalArticles = totalArticles,
+                totalQuantite = totalQuantite,
+                sousSeuil = sousSeuil,
+                rupture = rupture
             };
             ctx.Response.Write(new JavaScriptSerializer().Serialize(result));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(
+                new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
     }
 

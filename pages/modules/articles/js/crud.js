@@ -24,7 +24,6 @@ function openAddArticleModal(e) {
     document.getElementById('articleUnite').value = '';
     document.getElementById('articleEmplacement').value = '';
     document.getElementById('articleSeuilAlerte').value = '0';
-    document.getElementById('articleSeuilMin').value = '0';
     document.getElementById('articleActif').value = '1';
     document.getElementById('articleEstService').value = '0';
 
@@ -56,7 +55,6 @@ function editArticle(id) {
     document.getElementById('articleUnite').value = article.UNITE_MESURE_ID || '';
     document.getElementById('articleEmplacement').value = article.EMPLACEMENT_ID || '';
     document.getElementById('articleSeuilAlerte').value = article.SEUIL_ALERTE || 0;
-    document.getElementById('articleSeuilMin').value = article.SEUIL_MIN || 0;
     document.getElementById('articleActif').value = article.ACTIVE ? '1' : '0';
     document.getElementById('articleEstService').value = article.EST_SERVICE ? '1' : '0';
 
@@ -98,7 +96,6 @@ async function saveArticle(e) {
         uniteId: document.getElementById('articleUnite').value || null,
         emplacementId: document.getElementById('articleEmplacement').value || null,
         seuilAlerte: parseFloat(document.getElementById('articleSeuilAlerte').value) || 0,
-        seuilMin: parseFloat(document.getElementById('articleSeuilMin').value) || 0,
         actif: document.getElementById('articleActif').value === '1',
         estService: document.getElementById('articleEstService').value === '1'
     };

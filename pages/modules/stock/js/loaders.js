@@ -3,6 +3,8 @@
 // ============================================================
 
 // ✅ Sécurité : garantir que AppState existe avant tout usage
+//   ⚠️ FIX : suppression du doublon "filters" — un seul objet conservé,
+//   avec la clé "statut" incluse.
 if (typeof window.AppState === "undefined") {
     window.AppState = {
         stock: [],
@@ -12,36 +14,49 @@ if (typeof window.AppState === "undefined") {
         totalPages: 0,
         sortField: "ARTICLE_NOM",
         sortOrder: "ASC",
-        filters: { search: "", article: "", emplacement: "" },
+        filters: {
+            search: "",
+            article: "",
+            emplacement: "",
+            statut: ""
+        },
         editingId: null,
         articles: [],
         emplacements: []
     };
 }
 
+// ============================================================
+// CHARGEMENT DU STOCK
+// ============================================================
 async function loadStock(options) {
     var silent = !!(options && options.silent);
     if (!silent) showSpinner();
+
     try {
         var params = new URLSearchParams({
             page: AppState.page,
             pageSize: AppState.pageSize,
-            search: AppState.filters.search,
-            article: AppState.filters.article,
-            emplacement: AppState.filters.emplacement,
+            search: AppState.filters.search || '',
+            article: AppState.filters.article || '',
+            emplacement: AppState.filters.emplacement || '',
+            statut: AppState.filters.statut || '',
             sort: AppState.sortField,
             order: AppState.sortOrder
         });
         var url = API.BASE + API.HANDLERS_PATH + API.LIST + '?' + params;
         var resp = await fetch(url);
         var data = await resp.json();
+
         if (data.success) {
             AppState.stock = data.Stock || [];
             AppState.total = Number(data.total || 0);
             AppState.totalPages = Number(data.totalPages || Math.ceil(AppState.total / AppState.pageSize) || 0);
+
             if (AppState.page < 1) AppState.page = 1;
             if (AppState.totalPages > 0 && AppState.page > AppState.totalPages)
                 AppState.page = AppState.totalPages;
+
             renderTable(AppState.stock);
             createPaginationControls(AppState.totalPages);
         } else {
@@ -54,16 +69,25 @@ async function loadStock(options) {
     }
 }
 
+// ============================================================
+// CHARGEMENT DES STATISTIQUES (cartes de synthèse)
+// ============================================================
 async function loadStats() {
     try {
         var url = API.BASE + API.HANDLERS_PATH + API.STATS;
         var resp = await fetch(url);
         var data = await resp.json();
+
         if (data.success) {
-            document.getElementById('statTotalArticles').textContent = data.totalArticles ?? 0;
-            document.getElementById('statTotalQuantite').textContent = data.totalQuantite ?? 0;
-            document.getElementById('statSousSeuil').textContent = data.sousSeuil ?? 0;
-            document.getElementById('statRupture').textContent = data.rupture ?? 0;
+            var elTotalArticles = document.getElementById('statTotalArticles');
+            var elTotalQuantite = document.getElementById('statTotalQuantite');
+            var elSousSeuil     = document.getElementById('statSousSeuil');
+            var elRupture       = document.getElementById('statRupture');
+
+            if (elTotalArticles) elTotalArticles.textContent = data.totalArticles ?? 0;
+            if (elTotalQuantite) elTotalQuantite.textContent = data.totalQuantite ?? 0;
+            if (elSousSeuil)     elSousSeuil.textContent     = data.sousSeuil ?? 0;
+            if (elRupture)       elRupture.textContent       = data.rupture ?? 0;
         } else {
             console.warn('Stats API returned success=false:', data.message);
         }
@@ -72,6 +96,9 @@ async function loadStats() {
     }
 }
 
+// ============================================================
+// CHARGEMENT DES LISTES DÉROULANTES (filtres)
+// ============================================================
 async function loadDropdowns() {
     // Articles
     try {
@@ -101,18 +128,21 @@ function populateSelect(selectId, data, valueKey, textKey, addEmpty, emptyText) 
     if (!select) return;
     var currentValue = select.value;
     select.innerHTML = '';
+
     if (addEmpty) {
         var opt = document.createElement('option');
         opt.value = '';
         opt.textContent = emptyText || '-- Sélectionner --';
         select.appendChild(opt);
     }
+
     data.forEach(function (item) {
         var opt = document.createElement('option');
         opt.value = item[valueKey];
         opt.textContent = item[textKey];
         select.appendChild(opt);
     });
+
     if (currentValue) {
         var exists = false;
         for (var i = 0; i < select.options.length; i++) {
@@ -163,12 +193,12 @@ function getStockStatusBadge(statut) {
 // ============================================================
 // AFFICHAGE DU TABLEAU
 // ============================================================
-
 function renderTable(stock) {
     var tbody = document.getElementById('stockTableBody');
     if (!tbody) return;
+
     if (!stock || !stock.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Aucun stock trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center">Aucun stock trouvé</td></tr>';
         document.getElementById('resultsCounter').textContent = '0 ligne(s)';
         return;
     }
@@ -185,26 +215,21 @@ function renderTable(stock) {
         var emplacementId = s.EMPLACEMENT_ID || '';
 
         // ─────────────────────────────────────────────────────────
-        // ✅ FIX : calcul du statut À PARTIR DE DISPONIBLE et SEUIL_ALERTE
-        //    Variables :
-        //      - statut      → clé technique (NORMALE / ALERTE / RUPTURE)
-        //      - statutLabel → libellé français affiché si besoin
+        // ✅ Règle unique de statut (alignée sur GetStatsStock.ashx et
+        //    sur le filtre serveur de GetStock.ashx) :
+        //    - RUPTURE : disponible <= 0
+        //    - ALERTE  : disponible > 0 ET seuil > 0 ET disponible <= seuil
+        //    - NORMALE : sinon (disponible > 0 et (seuil = 0 OU disponible > seuil))
         // ─────────────────────────────────────────────────────────
         var statut;
-        var statutLabel;
-
         if (disponible <= 0) {
             statut = 'RUPTURE';
-            statutLabel = 'Rupture';
         } else if (seuil > 0 && disponible <= seuil) {
             statut = 'ALERTE';
-            statutLabel = 'Alerte';
         } else {
             statut = 'NORMALE';
-            statutLabel = 'Normale';
         }
 
-        // ✅ Badge généré via la fonction utilitaire
         var statusHtml = getStockStatusBadge(statut);
 
         var articleHtml = '<span style="font-weight:bold;">' +
@@ -216,14 +241,18 @@ function renderTable(stock) {
             '<td>' + entree + '</td>' +
             '<td>' + sortie + '</td>' +
             '<td><strong>' + disponible + '</strong></td>' +
+            '<td>' + seuil + '</td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' +
-            '<button type="button" class="btn btn-sm btn-info" ' +
-            'onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" ' +
-            'title="Historique"><i class="fas fa-history"></i></button>' +
+                '<button type="button" class="btn btn-sm btn-info" ' +
+                    'onclick="viewHistory(\'' + articleId + '\', \'' + emplacementId + '\')" ' +
+                    'title="Historique">' +
+                    '<i class="fas fa-history"></i>' +
+                '</button>' +
             '</td>' +
             '</tr>';
     });
+
     tbody.innerHTML = html;
     document.getElementById('resultsCounter').textContent = AppState.total + ' ligne(s)';
 }

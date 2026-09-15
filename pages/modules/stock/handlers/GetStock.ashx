@@ -1,5 +1,4 @@
 ﻿<%@ WebHandler Language="C#" Class="GetStock" %>
-
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -27,11 +26,12 @@ public class GetStock : IHttpHandler, IRequiresSessionState
         try
         {
             int page = 1, pageSize = 10;
-            string search = ctx.Request.QueryString["search"] ?? "";
-            string article = ctx.Request.QueryString["article"] ?? "";
+            string search      = ctx.Request.QueryString["search"]      ?? "";
+            string article     = ctx.Request.QueryString["article"]     ?? "";
             string emplacement = ctx.Request.QueryString["emplacement"] ?? "";
-            string sortField = ctx.Request.QueryString["sort"] ?? "ARTICLE_NOM";
-            string sortOrder = ctx.Request.QueryString["order"] ?? "ASC";
+            string statut      = ctx.Request.QueryString["statut"]      ?? "";
+            string sortField   = ctx.Request.QueryString["sort"]        ?? "ARTICLE_NOM";
+            string sortOrder   = ctx.Request.QueryString["order"]       ?? "ASC";
 
             int.TryParse(ctx.Request.QueryString["page"], out page);
             int.TryParse(ctx.Request.QueryString["pageSize"], out pageSize);
@@ -47,7 +47,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                // ✅ Filtre : tous les articles ayant du stock réel (SSTOCK)
+                // ─── Construction du WHERE ───
                 string whereClause = @"
                     WHERE a.DELETION_AT IS NULL
                       AND EXISTS (
@@ -55,6 +55,7 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                           WHERE s.ARTICLE_ID = a.ID
                             AND s.DELETION_AT IS NULL
                       )";
+
                 if (!string.IsNullOrEmpty(search))
                     whereClause += " AND (a.CODE LIKE @search OR a.NOM LIKE @search)";
                 if (!string.IsNullOrEmpty(article))
@@ -66,21 +67,45 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                           AND sf.EMPLACEMENT_ID = @emplacement
                           AND sf.DELETION_AT IS NULL)";
 
+                // ─── Filtre STATUT (mêmes règles que le client) ───
+                if (!string.IsNullOrEmpty(statut))
+                {
+                    string disponibleExpr =
+                        @"ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE)
+                                  FROM SSTOCK s
+                                  WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0)";
+
+                    if (statut == "RUPTURE")
+                    {
+                        whereClause += " AND " + disponibleExpr + " <= 0";
+                    }
+                    else if (statut == "ALERTE")
+                    {
+                        whereClause += " AND " + disponibleExpr + " > 0";
+                        whereClause += " AND a.SEUIL_ALERTE > 0";
+                        whereClause += " AND " + disponibleExpr + " <= a.SEUIL_ALERTE";
+                    }
+                    else if (statut == "NORMAL")
+                    {
+                        whereClause += " AND " + disponibleExpr + " > 0";
+                        whereClause += " AND (a.SEUIL_ALERTE = 0 OR " + disponibleExpr + " > a.SEUIL_ALERTE)";
+                    }
+                }
+
+                // ─── Tri ───
                 string sortColumn = "ARTICLE_NOM";
                 switch (sortField.ToUpperInvariant())
                 {
                     case "ARTICLE_CODE": sortColumn = "ARTICLE_CODE"; break;
-                    case "ENTREE": sortColumn = "ENTREE"; break;
-                    case "SORTIE": sortColumn = "SORTIE"; break;
-                    case "DISPONIBLE": sortColumn = "DISPONIBLE"; break;
-                    case "STATUT": sortColumn = "STATUT"; break;
+                    case "ENTREE":       sortColumn = "ENTREE"; break;
+                    case "SORTIE":       sortColumn = "SORTIE"; break;
+                    case "DISPONIBLE":   sortColumn = "DISPONIBLE"; break;
+                    case "STATUT":       sortColumn = "STATUT"; break;
                 }
-                string orderBy = "ORDER BY " + sortColumn + " " + (sortOrder.ToUpperInvariant() == "DESC" ? "DESC" : "ASC");
+                string orderBy = "ORDER BY " + sortColumn + " " +
+                    (sortOrder.ToUpperInvariant() == "DESC" ? "DESC" : "ASC");
 
-                // ✅ FIX :
-                //   - ENTREE / SORTIE : lus depuis MSTOCK (tous mouvements : bons + ajustements)
-                //   - DISPONIBLE : lu directement depuis SSTOCK (source de vérité)
-                //   - Emplacement : le plus grand porteur de stock (OUTER APPLY)
+                // ─── FROM + calculs ───
                 string fromSql = @"
                     FROM MARTICLE a
                     LEFT JOIN (
@@ -114,75 +139,56 @@ public class GetStock : IHttpHandler, IRequiresSessionState
                             WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) AS DISPONIBLE,
                     emp.STATUT AS STATUT";
 
+                // ─── Comptage ───
                 string countSql = "SELECT COUNT(*) " + fromSql + " " + whereClause;
-
-                string selectSql = "SELECT " + calculatedColumns + " " + fromSql + " " + whereClause + @"
-                    " + orderBy + @"
-                    OFFSET @offset ROWS FETCH NEXT @fetch ROWS ONLY";
-
                 using (var cmd = new SqlCommand(countSql, conn))
                 {
                     AddParameters(cmd, search, article, emplacement);
                     total = (int)cmd.ExecuteScalar();
                 }
 
+                // ─── Données ───
                 if (!getAll && pageSize > 0)
                 {
                     int offset = (page - 1) * pageSize;
+                    string selectSql = "SELECT " + calculatedColumns + " " + fromSql + " " + whereClause + @"
+                        " + orderBy + @"
+                        OFFSET @offset ROWS FETCH NEXT @fetch ROWS ONLY";
+
                     using (var cmd = new SqlCommand(selectSql, conn))
                     {
                         AddParameters(cmd, search, article, emplacement);
                         cmd.Parameters.AddWithValue("@offset", offset);
                         cmd.Parameters.AddWithValue("@fetch", pageSize);
+
                         using (var reader = cmd.ExecuteReader())
                         {
                             while (reader.Read())
-                            {
-                                var d = new Dictionary<string, object>();
-                                d["ARTICLE_ID"] = reader["ARTICLE_ID"].ToString();
-                                d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString();
-                                d["ARTICLE_CODE"] = reader["ARTICLE_CODE"];
-                                d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
-                                d["SEUIL_ALERTE"] = reader["SEUIL_ALERTE"];
-                                d["EMPLACEMENT_NOM"] = reader["EMPLACEMENT_NOM"];
-                                d["ENTREE"] = reader["ENTREE"];
-                                d["SORTIE"] = reader["SORTIE"];
-                                d["DISPONIBLE"] = reader["DISPONIBLE"];
-                                d["STATUT"] = reader["STATUT"] == DBNull.Value ? "NORMALE" : reader["STATUT"].ToString();
-                                list.Add(d);
-                            }
+                                list.Add(MapRow(reader));
                         }
                     }
                 }
                 else
                 {
                     string allSql = "SELECT " + calculatedColumns + " " + fromSql + " " + whereClause + " " + orderBy;
+
                     using (var cmd = new SqlCommand(allSql, conn))
                     {
                         AddParameters(cmd, search, article, emplacement);
+
                         using (var reader = cmd.ExecuteReader())
                         {
                             while (reader.Read())
-                            {
-                                var d = new Dictionary<string, object>();
-                                d["ARTICLE_ID"] = reader["ARTICLE_ID"].ToString();
-                                d["EMPLACEMENT_ID"] = reader["EMPLACEMENT_ID"] == DBNull.Value ? null : reader["EMPLACEMENT_ID"].ToString();
-                                d["ARTICLE_CODE"] = reader["ARTICLE_CODE"];
-                                d["ARTICLE_NOM"] = reader["ARTICLE_NOM"];
-                                d["SEUIL_ALERTE"] = reader["SEUIL_ALERTE"];
-                                d["EMPLACEMENT_NOM"] = reader["EMPLACEMENT_NOM"];
-                                d["ENTREE"] = reader["ENTREE"];
-                                d["SORTIE"] = reader["SORTIE"];
-                                d["DISPONIBLE"] = reader["DISPONIBLE"];
-                                d["STATUT"] = reader["STATUT"] == DBNull.Value ? "NORMALE" : reader["STATUT"].ToString();
-                                list.Add(d);
-                            }
+                                list.Add(MapRow(reader));
                         }
                     }
                 }
             }
 
-            int totalPages = (pageSize > 0 && pageSize < 999999) ? (int)Math.Ceiling((double)total / pageSize) : 1;
+            int totalPages = (pageSize > 0 && pageSize < 999999)
+                ? (int)Math.Ceiling((double)total / pageSize)
+                : 1;
+
             var result = new Dictionary<string, object>();
             result["success"] = true;
             result["Stock"] = list;
@@ -194,10 +200,31 @@ public class GetStock : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(
+                new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
         }
     }
 
+    // ─── Lecture d'une ligne (DBNull-safe) ───
+    private Dictionary<string, object> MapRow(SqlDataReader reader)
+    {
+        var d = new Dictionary<string, object>();
+        d["ARTICLE_ID"]      = reader["ARTICLE_ID"].ToString();
+        d["EMPLACEMENT_ID"]  = reader["EMPLACEMENT_ID"] == DBNull.Value
+                                ? null
+                                : reader["EMPLACEMENT_ID"].ToString();
+        d["ARTICLE_CODE"]    = reader["ARTICLE_CODE"];
+        d["ARTICLE_NOM"]     = reader["ARTICLE_NOM"];
+        d["SEUIL_ALERTE"]    = reader["SEUIL_ALERTE"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["SEUIL_ALERTE"]);
+        d["EMPLACEMENT_NOM"] = reader["EMPLACEMENT_NOM"] == DBNull.Value ? "" : reader["EMPLACEMENT_NOM"].ToString();
+        d["ENTREE"]          = reader["ENTREE"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["ENTREE"]);
+        d["SORTIE"]          = reader["SORTIE"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["SORTIE"]);
+        d["DISPONIBLE"]      = reader["DISPONIBLE"] == DBNull.Value ? 0m : Convert.ToDecimal(reader["DISPONIBLE"]);
+        d["STATUT"]          = reader["STATUT"] == DBNull.Value ? "NORMALE" : reader["STATUT"].ToString();
+        return d;
+    }
+
+    // ─── Ajout des paramètres SQL ───
     private void AddParameters(SqlCommand cmd, string search, string article, string emplacement)
     {
         if (!string.IsNullOrEmpty(search))

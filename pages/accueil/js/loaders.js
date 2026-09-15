@@ -7,6 +7,7 @@ function loadDashboard() {
     Promise.all([
         loadKpi(),
         loadAlerts(),
+        loadStockAlerts(),
         loadMovements(),
         loadStockByCategory(),
         loadRecentMovements(),
@@ -85,6 +86,57 @@ async function loadAlerts() {
         document.getElementById('tbodyAlerts').innerHTML = html;
     } catch (e) {
         console.error('Alerts:', e);
+    }
+}
+
+// ═══ STOCK EN ALERTE ═══
+async function loadStockAlerts() {
+    var card = document.getElementById('stockAlertCard');
+    if (!card) return;
+
+    try {
+        var data = await fetchJson(DASHBOARD_API.STOCK_ALERTS);
+        var items = (data && data.data) ? data.data : [];
+
+        // ✅ Règle métier identique à la page STOCK :
+        //    Un article est "en alerte" si seuil > 0 ET 0 < disponible <= seuil
+        var alerts = items.filter(function (a) {
+            var dispo = Number(a.DISPONIBLE || 0);
+            var seuil = Number(a.SEUIL_ALERTE || 0);
+            return seuil > 0 && dispo > 0 && dispo <= seuil;
+        });
+
+        if (!alerts.length) {
+            // Aucun article en alerte → masquer la carte
+            card.style.display = 'none';
+            document.getElementById('stockAlertCount').textContent = '0';
+            document.getElementById('tbodyStockAlerts').innerHTML = '';
+            return;
+        }
+
+        // Afficher + remplir
+        card.style.display = 'block';
+        document.getElementById('stockAlertCount').textContent = alerts.length;
+
+        var html = '';
+        for (var i = 0; i < alerts.length; i++) {
+            var a = alerts[i];
+            html += '<tr>'
+                + '<td><strong>' + escapeHtml(a.ARTICLE_CODE) + '</strong></td>'
+                + '<td>' + escapeHtml(a.ARTICLE_NOM) + '</td>'
+                + '<td>' + escapeHtml(a.CATEGORIE_NOM || '—') + '</td>'
+                + '<td>' + escapeHtml(a.EMPLACEMENT_NOM || '—') + '</td>'
+                + '<td><strong>' + formatNumber(a.DISPONIBLE, 0) + '</strong>'
+                    + (a.UNITE_NOM ? ' <small>' + escapeHtml(a.UNITE_NOM) + '</small>' : '') + '</td>'
+                + '<td>' + formatNumber(a.SEUIL_ALERTE, 0) + '</td>'
+                + '<td>' + statutBadge('ALERTE') + '</td>'
+                + '</tr>';
+        }
+        document.getElementById('tbodyStockAlerts').innerHTML = html;
+    } catch (e) {
+        console.error('Stock alerts:', e);
+        // En cas d'erreur, on masque la carte pour ne pas afficher un bloc vide
+        card.style.display = 'none';
     }
 }
 

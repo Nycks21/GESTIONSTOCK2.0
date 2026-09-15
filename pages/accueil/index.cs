@@ -29,6 +29,7 @@ public partial class index : Page
             {
                 case "kpi":                WriteKpi();                break;
                 case "alerts":             WriteAlerts();             break;
+                case "stockAlerts":        WriteStockAlerts();        break;   // ✅ AJOUT
                 case "movements":          WriteMovementsChart();     break;
                 case "stockByCategory":    WriteStockByCategory();    break;
                 case "recentMovements":    WriteRecentMovements();    break;
@@ -125,6 +126,8 @@ public partial class index : Page
                   FROM MARTICLE a
                   INNER JOIN SSTOCK s ON s.ARTICLE_ID = a.ID
                   WHERE a.DELETION_AT IS NULL AND s.DELETION_AT IS NULL
+                    AND a.SEUIL_ALERTE > 0
+                    AND s.QUANTITE_ACTUELLE > 0
                     AND s.QUANTITE_ACTUELLE <= a.SEUIL_ALERTE", conn))
                 result["articlesSousSeuil"] = Convert.ToInt32(cmd.ExecuteScalar());
         }
@@ -186,6 +189,66 @@ public partial class index : Page
                         { "seuilAlerte",   Convert.ToDecimal(r["SEUIL_ALERTE"]) },
                         { "seuilMin",      Convert.ToDecimal(r["SEUIL_MIN"]) },
                         { "statut",        r["STATUT"].ToString() }
+                    });
+                }
+            }
+        }
+        Response.Write(new JavaScriptSerializer().Serialize(new { success = true, data = list }));
+    }
+
+    // ============================================================
+    // ✅ NOUVEAU — STOCK EN ALERTE
+    //    Règle métier (identique à la page STOCK) :
+    //    seuil > 0  ET  0 < disponible <= seuil
+    // ============================================================
+    private void WriteStockAlerts()
+    {
+        if (!AuthHelper.HasPermission("stock") && !AuthHelper.HasPermission("articles"))
+        {
+            Response.Write("{\"success\":true,\"data\":[]}");
+            return;
+        }
+
+        var list = new List<Dictionary<string, object>>();
+        using (SqlConnection conn = new SqlConnection(AuthHelper.ConnectionString))
+        {
+            conn.Open();
+            string sql = @"
+                SELECT
+                    a.CODE              AS ARTICLE_CODE,
+                    a.NOM               AS ARTICLE_NOM,
+                    c.NOM               AS CATEGORIE_NOM,
+                    e.NOM               AS EMPLACEMENT_NOM,
+                    u.NOM               AS UNITE_NOM,
+                    s.QUANTITE_ACTUELLE AS DISPONIBLE,
+                    a.SEUIL_ALERTE      AS SEUIL_ALERTE
+                FROM SSTOCK s
+                INNER JOIN MARTICLE a ON a.ID = s.ARTICLE_ID
+                LEFT JOIN SCATEGORIE c ON c.ID = a.CATEGORIE_ID
+                LEFT JOIN SEMPLACEMENT e ON e.ID = s.EMPLACEMENT_ID
+                LEFT JOIN SUNITE u ON u.ID = a.UNITE_MESURE_ID
+                WHERE s.DELETION_AT IS NULL
+                  AND a.DELETION_AT IS NULL
+                  AND a.SEUIL_ALERTE IS NOT NULL
+                  AND a.SEUIL_ALERTE > 0
+                  AND s.QUANTITE_ACTUELLE > 0
+                  AND s.QUANTITE_ACTUELLE <= a.SEUIL_ALERTE
+                ORDER BY s.QUANTITE_ACTUELLE ASC";
+
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
+            using (SqlDataReader r = cmd.ExecuteReader())
+            {
+                while (r.Read())
+                {
+                    list.Add(new Dictionary<string, object>
+                    {
+                        { "ARTICLE_CODE",    r["ARTICLE_CODE"].ToString() },
+                        { "ARTICLE_NOM",     r["ARTICLE_NOM"].ToString() },
+                        { "CATEGORIE_NOM",   r["CATEGORIE_NOM"]    == DBNull.Value ? "" : r["CATEGORIE_NOM"].ToString() },
+                        { "EMPLACEMENT_NOM", r["EMPLACEMENT_NOM"]  == DBNull.Value ? "" : r["EMPLACEMENT_NOM"].ToString() },
+                        { "UNITE_NOM",       r["UNITE_NOM"]        == DBNull.Value ? "" : r["UNITE_NOM"].ToString() },
+                        { "DISPONIBLE",      Convert.ToDecimal(r["DISPONIBLE"]) },
+                        { "SEUIL_ALERTE",    Convert.ToDecimal(r["SEUIL_ALERTE"]) }
                     });
                 }
             }

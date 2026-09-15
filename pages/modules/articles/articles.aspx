@@ -155,8 +155,6 @@
                             <th onclick="sortData('STOCK_TOTAL')" style="cursor:pointer; width:100px;">STOCK DISPONIBLE
                               <i class="fas fa-sort ml-1"></i>
                             </th>
-                            <th onclick="sortData('SEUIL_MIN')" style="cursor:pointer; width:90px;">SEUIL MIN <i
-                                class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('SEUIL_ALERTE')" style="cursor:pointer; width:90px;">SEUIL ALERTE <i
                                 class="fas fa-sort ml-1"></i></th>
                             <th onclick="sortData('STATUT_STOCK')" style="cursor:pointer; width:100px;">STATUT <i
@@ -248,13 +246,7 @@
               </div>
             </div>
             <div class="row">
-              <div class="col-md-6">
-                <div class="form-group">
-                  <label>Seuil minimum</label>
-                  <input type="number" id="articleSeuilMin" class="form-control" step="0.01" value="0" />
-                </div>
-              </div>
-              <div class="col-md-6">
+              <div class="col-md-12">
                 <div class="form-group">
                   <label>Seuil d'alerte</label>
                   <input type="number" id="articleSeuilAlerte" class="form-control" step="0.01" value="0" />

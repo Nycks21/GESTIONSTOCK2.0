@@ -646,7 +646,7 @@ public static class AuthHelper
                 </li>");
 
       // NOTIFICATIONS
-      if (HasPermission("accueil"))
+      if (HasPermission("requetes"))
       {
         html.Append(@"
                 <li class=""nav-item"">
