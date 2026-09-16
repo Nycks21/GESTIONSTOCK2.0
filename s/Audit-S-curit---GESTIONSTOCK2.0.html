@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rapport d'Audit Sécurité</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 16px; font-size: 13px; color: var(--content-color-primary, #333); }
+  h1 { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; opacity: 0.6; margin-bottom: 16px; }
+  .summary { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+  .badge { padding: 8px 14px; border-radius: 8px; font-weight: 700; font-size: 13px; text-align: center; min-width: 80px; }
+  .badge.critical { background: #ff4d4f22; color: #ff4d4f; border: 1.5px solid #ff4d4f; }
+  .badge.high { background: #ff7a0022; color: #ff7a00; border: 1.5px solid #ff7a00; }
+  .badge.medium { background: #faad1422; color: #d48806; border: 1.5px solid #faad14; }
+  .badge.low { background: #52c41a22; color: #389e0d; border: 1.5px solid #52c41a; }
+  .badge.ok { background: #1890ff22; color: #096dd9; border: 1.5px solid #1890ff; }
+  .badge span { display: block; font-size: 20px; font-weight: 800; }
+  .section { margin-bottom: 14px; }
+  .section-title { font-size: 13px; font-weight: 700; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1.5px solid var(--border-color-default, #e0e0e0); display: flex; align-items: center; gap: 6px; }
+  .vuln { border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; border-left: 4px solid; }
+  .vuln.critical { background: #ff4d4f11; border-color: #ff4d4f; }
+  .vuln.high { background: #ff7a0011; border-color: #ff7a00; }
+  .vuln.medium { background: #faad1411; border-color: #faad14; }
+  .vuln.low { background: #52c41a11; border-color: #52c41a; }
+  .vuln.ok { background: #1890ff11; border-color: #1890ff; }
+  .vuln-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .vuln-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 4px; text-transform: uppercase; }
+  .tag-critical { background: #ff4d4f; color: white; }
+  .tag-high { background: #ff7a00; color: white; }
+  .tag-medium { background: #faad14; color: #333; }
+  .tag-low { background: #52c41a; color: white; }
+  .tag-ok { background: #1890ff; color: white; }
+  .vuln-title { font-weight: 700; font-size: 13px; }
+  .vuln-desc { font-size: 12px; opacity: 0.85; margin-bottom: 4px; }
+  .vuln-fix { font-size: 11px; background: var(--background-color-secondary, #f5f5f5); padding: 5px 8px; border-radius: 4px; font-family: monospace; }
+  .fix-label { font-weight: 700; font-size: 11px; margin-bottom: 2px; color: #389e0d; }
+  .score-bar { height: 10px; border-radius: 5px; background: #e0e0e0; margin-top: 8px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 5px; background: linear-gradient(90deg, #ff4d4f, #faad14, #52c41a); }
+  .score-label { font-size: 11px; margin-top: 3px; opacity: 0.7; }
+</style>
+</head>
+<body>
+
+<h1>🔐 Rapport d'Audit Sécurité</h1>
+<p class="subtitle">GESTIONSTOCK2.0 — ASP.NET WebForms — Analyse statique du code source</p>
+
+<div class="summary">
+  <div class="badge critical"><span>2</span>CRITIQUE</div>
+  <div class="badge high"><span>3</span>ÉLEVÉ</div>
+  <div class="badge medium"><span>4</span>MOYEN</div>
+  <div class="badge low"><span>2</span>FAIBLE</div>
+  <div class="badge ok"><span>5</span>OK ✅</div>
+</div>
+
+<!-- CRITIQUES -->
+<div class="section">
+  <div class="section-title">🔴 Vulnérabilités CRITIQUES</div>
+
+  <div class="vuln critical">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-critical">CRITIQUE</span>
+      <span class="vuln-title">Fichiers de sauvegarde SQL accessibles publiquement</span>
+    </div>
+    <div class="vuln-desc">
+      <b>Fichier trouvé :</b> <code>s/backup_20260901_095659.bak</code> et <code>s/files.zip</code> dans un dossier web accessible.<br>
+      Un hacker peut télécharger directement la base de données complète via <code>http://site/s/backup_20260901_095659.bak</code> — sans aucune authentification. Cela expose TOUS les mots de passe, utilisateurs et données métier.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Déplacer les backups HORS du dossier web (ex: C:\Backups\) ou bloquer l'accès dans web.config avec &lt;location path="s"&gt;&lt;system.web&gt;&lt;authorization&gt;&lt;deny users="*"/&gt;</div>
+  </div>
+
+  <div class="vuln critical">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-critical">CRITIQUE</span>
+      <span class="vuln-title">Clés SSH exposées à la racine du projet web</span>
+    </div>
+    <div class="vuln-desc">
+      <b>Fichiers trouvés :</b> <code>ssh</code> et <code>ssh.pub</code> à la racine du projet.<br>
+      Si ces fichiers sont accessibles via le serveur web, un attaquant peut récupérer la clé privée SSH et accéder au serveur sans mot de passe.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Supprimer ces fichiers du projet web immédiatement. Ne jamais stocker de clés SSH dans un dossier web. Révoquer et régénérer les clés compromises.</div>
+  </div>
+</div>
+
+<!-- ÉLEVÉES -->
+<div class="section">
+  <div class="section-title">🟠 Vulnérabilités ÉLEVÉES</div>
+
+  <div class="vuln high">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-high">ÉLEVÉ</span>
+      <span class="vuln-title">Lockout côté Session uniquement — Contournable</span>
+    </div>
+    <div class="vuln-desc">
+      Le blocage après 5 tentatives (<code>MAX_ATTEMPTS=5, LOCKOUT_SECONDS=60</code>) est stocké en <b>Session ASP.NET</b>, pas en base de données.<br>
+      Un hacker peut contourner en ouvrant un <b>nouvel onglet / navigateur / IP différente</b> — la session repart à zéro. Brute-force illimité possible.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Stocker les tentatives en base (table USERS, colonne FAILED_ATTEMPTS + LOCKED_UNTIL) et bloquer par USERNAME, pas par session.</div>
+  </div>
+
+  <div class="vuln high">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-high">ÉLEVÉ</span>
+      <span class="vuln-title">ArticleHandler.ashx — Vérification de session incohérente</span>
+    </div>
+    <div class="vuln-desc">
+      <code>s/files/ArticleHandler.ashx.cs</code> vérifie <code>Session["IDUser"]</code> (minuscule "d") alors que la session est initialisée avec <code>Session["IDUSER"]</code> (majuscule).<br>
+      Cette incohérence peut rendre le handler <b>accessible sans authentification valide</b> selon la casse du serveur.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Remplacer Session["IDUser"] par AuthHelper.RequireApiAuth(context) pour une vérification centralisée et cohérente.</div>
+  </div>
+
+  <div class="vuln high">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-high">ÉLEVÉ</span>
+      <span class="vuln-title">Erreurs SQL exposées à l'utilisateur</span>
+    </div>
+    <div class="vuln-desc">
+      Dans <code>Login.aspx.cs</code>, les erreurs SQL sont affichées directement : <code>ShowError("❌ Erreur SQL: " + sqlEx.Message)</code>.<br>
+      Un attaquant peut obtenir le nom du serveur SQL, la structure de la base, les noms de tables via des messages d'erreur.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Afficher un message générique ("Erreur de connexion") et logger l'erreur détaillée côté serveur uniquement.</div>
+  </div>
+</div>
+
+<!-- MOYENNES -->
+<div class="section">
+  <div class="section-title">🟡 Vulnérabilités MOYENNES</div>
+
+  <div class="vuln medium">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-medium">MOYEN</span>
+      <span class="vuln-title">Absence de protection CSRF sur les formulaires</span>
+    </div>
+    <div class="vuln-desc">
+      Aucun token CSRF explicite n'est vérifié dans les handlers <code>.ashx</code>. Un attaquant peut forger des requêtes depuis un site tiers pour déclencher des actions (ajout/suppression d'articles) au nom d'un utilisateur connecté.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Ajouter un token CSRF dans chaque requête AJAX et le valider côté serveur dans les handlers.</div>
+  </div>
+
+  <div class="vuln medium">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-medium">MOYEN</span>
+      <span class="vuln-title">Fichier test.aspx à la racine</span>
+    </div>
+    <div class="vuln-desc">
+      Le fichier <code>test.aspx</code> est présent à la racine. Les pages de test laissées en production exposent souvent des informations système, des diagnostics ou des fonctionnalités non sécurisées.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Supprimer test.aspx en production ou le protéger avec une restriction d'accès IP.</div>
+  </div>
+
+  <div class="vuln medium">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-medium">MOYEN</span>
+      <span class="vuln-title">Logs d'erreur accessibles dans App_Data</span>
+    </div>
+    <div class="vuln-desc">
+      Les fichiers <code>authmodule_error.log</code>, <code>authmodule_errors.log</code>, <code>security.log</code> sont dans <code>App_Data/</code>. Si IIS est mal configuré, ces logs peuvent être téléchargés et révèlent des stack traces, IPs, usernames.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Vérifier que App_Data est bien protégé dans web.config. Idéalement, stocker les logs hors du dossier web.</div>
+  </div>
+
+  <div class="vuln medium">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-medium">MOYEN</span>
+      <span class="vuln-title">Redirection ouverte via Query String</span>
+    </div>
+    <div class="vuln-desc">
+      <code>Request.QueryString["msg"]</code> est utilisé pour afficher des messages. Bien que non redirigé directement, ce pattern peut être exploité pour du phishing si une redirection est ajoutée plus tard.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Valider strictement les valeurs acceptées (whitelist) et ne jamais utiliser un paramètre URL comme URL de redirection.</div>
+  </div>
+</div>
+
+<!-- FAIBLES -->
+<div class="section">
+  <div class="section-title">🟢 Vulnérabilités FAIBLES</div>
+
+  <div class="vuln low">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-low">FAIBLE</span>
+      <span class="vuln-title">Mots de passe legacy en texte clair en base</span>
+    </div>
+    <div class="vuln-desc">
+      <code>PasswordHelper.cs</code> accepte encore les mots de passe en <b>texte clair</b> (<code>if (storedHash == password)</code>) pour la compatibilité legacy. Si la base est compromise, ces comptes sont immédiatement exposés.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Forcer la migration de TOUS les mots de passe legacy vers PBKDF2 et supprimer la vérification en texte clair.</div>
+  </div>
+
+  <div class="vuln low">
+    <div class="vuln-header">
+      <span class="vuln-tag tag-low">FAIBLE</span>
+      <span class="vuln-title">Absence d'en-têtes de sécurité HTTP</span>
+    </div>
+    <div class="vuln-desc">
+      Aucun en-tête de sécurité visible : pas de <code>X-Frame-Options</code>, <code>Content-Security-Policy</code>, <code>X-Content-Type-Options</code>. Risque de clickjacking et XSS.
+    </div>
+    <div class="fix-label">🔧 CORRECTION :</div>
+    <div class="vuln-fix">Ajouter dans web.config : X-Frame-Options: DENY, X-Content-Type-Options: nosniff, Content-Security-Policy.</div>
+  </div>
+</div>
+
+<!-- CE QUI EST BIEN -->
+<div class="section">
+  <div class="section-title">✅ Points positifs (bien sécurisés)</div>
+  <div class="vuln ok"><div class="vuln-header"><span class="vuln-tag tag-ok">OK</span><span class="vuln-title">Requêtes SQL paramétrées — Protection contre l'injection SQL</span></div><div class="vuln-desc">Toutes les requêtes utilisent <code>cmd.Parameters.AddWithValue()</code>. Aucune concaténation de chaîne SQL détectée. ✅</div></div>
+  <div class="vuln ok"><div class="vuln-header"><span class="vuln-tag tag-ok">OK</span><span class="vuln-title">Hachage PBKDF2 avec sel aléatoire (100 000 itérations)</span></div><div class="vuln-desc">Les nouveaux mots de passe utilisent PBKDF2 avec sel cryptographique. Comparaison en temps constant (FixedTimeEquals). ✅</div></div>
+  <div class="vuln ok"><div class="vuln-header"><span class="vuln-tag tag-ok">OK</span><span class="vuln-title">Token de session validé en base de données</span></div><div class="vuln-desc">Chaque requête vérifie le SESSION_TOKEN en base via <code>ValidateSessionToken()</code>. Empêche la réutilisation de sessions volées. ✅</div></div>
+  <div class="vuln ok"><div class="vuln-header"><span class="vuln-tag tag-ok">OK</span><span class="vuln-title">Module d'authentification centralisé (AuthModule.cs)</span></div><div class="vuln-desc">Toutes les pages .aspx et handlers .ashx passent par AuthModule. Pas de page oubliée sans protection. ✅</div></div>
+  <div class="vuln ok"><div class="vuln-header"><span class="vuln-tag tag-ok">OK</span><span class="vuln-title">Vérification des permissions par rôle</span></div><div class="vuln-desc">Les handlers vérifient les permissions via <code>RequirePermission()</code> et <code>RequireApiAuth()</code>. ✅</div></div>
+</div>
+
+</body>
+</html>

@@ -25,7 +25,7 @@ public class GetSortieStats : IHttpHandler, IRequiresSessionState
         try
         {
             string connStr = AuthHelper.ConnectionString;
-            int total = 0, valide = 0, brouillon = 0, annule = 0, pending = 0;
+            int total = 0, valide = 0, brouillon = 0, annule = 0, recu = 0, pending = 0;
 
             using (var conn = new SqlConnection(connStr))
             {
@@ -36,7 +36,7 @@ public class GetSortieStats : IHttpHandler, IRequiresSessionState
                         SUM(CASE WHEN STATUT = 'VALIDE' THEN 1 ELSE 0 END) AS Valide,
                         SUM(CASE WHEN STATUT = 'BROUILLON' THEN 1 ELSE 0 END) AS Brouillon,
                         SUM(CASE WHEN STATUT = 'ANNULE' THEN 1 ELSE 0 END) AS Annule,
-                        SUM(CASE WHEN ISNULL(STATUT, '') <> 'VALIDE' THEN 1 ELSE 0 END) AS Pending
+                        SUM(CASE WHEN STATUT IN ('BROUILLON', 'PENDING') THEN 1 ELSE 0 END) AS Pending
                     FROM SSORTIE WHERE DELETION_AT IS NULL";
                 using (var cmd = new SqlCommand(sql, conn))
                 using (var reader = cmd.ExecuteReader())

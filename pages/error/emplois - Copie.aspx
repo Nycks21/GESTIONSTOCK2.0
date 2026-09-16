@@ -160,7 +160,8 @@
 
         <script src="../../_assets/js/jquery-3.6.0.min.js?v=<%=AuthHelper.Version %>"></script>
         <script src="../../_assets/js/sweetalert2@11.js?v=<%=AuthHelper.Version %>"></script>
-        <script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
+        <script src="../../_assets/js/i18n.js?v=<%=AuthHelper.Version %>"></script>
+<script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
         <script src="js/emplois-config.js?v=<%=AuthHelper.Version %>"></script>
         <script src="js/emplois.js?v=<%=AuthHelper.Version %>"></script>
     </form>

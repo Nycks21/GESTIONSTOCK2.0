@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.Data.SqlClient;
@@ -184,24 +184,25 @@ public static class AuthHelper
 
   // ============================================================
   // DÉFINITION DES MENUS
+  // (Text et Section = clés i18n, résolues par LocalizationHelper)
   // ============================================================
   public static readonly List<MenuItem> AllMenus = new List<MenuItem>
     {
-        new MenuItem { Code = "accueil", Text = "Accueil", Url = "/pages/accueil/index.aspx", Icon = "fas fa-chalkboard", Section = "Accueil", Order = 1 },
-        new MenuItem { Code = "unites", Text = "Unité", Url = "/pages/parametres/unites/unites.aspx", Icon = "fas fa-ruler", Section = "Paramètres", Order = 2 },
-        new MenuItem { Code = "categories", Text = "Catégories", Url = "/pages/parametres/categories/categories.aspx", Icon = "fas fa-tags", Section = "Paramètres", Order = 3 },
-        new MenuItem { Code = "fournisseurs", Text = "Fournisseurs", Url = "/pages/parametres/fournisseurs/fournisseurs.aspx", Icon = "fas fa-truck", Section = "Paramètres", Order = 4 },
-        new MenuItem { Code = "emplacements", Text = "Emplacements", Url = "/pages/parametres/emplacements/emplacements.aspx", Icon = "fas fa-map-marker-alt", Section = "Paramètres", Order = 5 },
-        new MenuItem { Code = "articles", Text = "Articles", Url = "/pages/modules/articles/articles.aspx", Icon = "fas fa-boxes", Section = "Mouvements", Order = 6 },
-        new MenuItem { Code = "entrees", Text = "Entrées", Url = "/pages/modules/entrees/entrees.aspx", Icon = "fas fa-arrow-down", Section = "Mouvements", Order = 7 },
-        new MenuItem { Code = "sorties", Text = "Sorties", Url = "/pages/modules/sorties/sorties.aspx", Icon = "fas fa-arrow-up", Section = "Mouvements", Order = 8 },
-        new MenuItem { Code = "stock", Text = "Stock", Url = "/pages/modules/stock/stock.aspx", Icon = "fas fa-warehouse", Section = "Mouvements", Order = 9 },
-        new MenuItem { Code = "saisies", Text = "Saisies", Url = "/pages/demandes/saisie/saisies.aspx", Icon = "fas fa-file-alt", Section = "Demandes", Order = 10 },
-        new MenuItem { Code = "accuses", Text = "Accusés de réception", Url = "/pages/demandes/accuse/accuses.aspx", Icon = "fas fa-check-circle", Section = "Demandes", Order = 11 },
-        new MenuItem { Code = "inventaire", Text = "Inventaire", Url = "/pages/exploitations/inv/inventaires.aspx", Icon = "fas fa-clipboard-list", Section = "Rapports", Order = 13 },
-        new MenuItem { Code = "exploitation", Text = "Exploitations", Url = "/pages/exploitations/exp/exploitations.aspx", Icon = "fas fa-chart-bar", Section = "Rapports", Order = 14 },
-        new MenuItem { Code = "utilisateurs", Text = "Utilisateurs", Url = "/pages/administrations/utilisateur/utilisateur.aspx", Icon = "fas fa-user-cog", Section = "Administration", Order = 15 },
-        new MenuItem { Code = "requetes", Text = "Requêtes SQL", Url = "/pages/administrations/requete/requetes.aspx", Icon = "fas fa-terminal", Section = "Administration", Order = 16 },
+        new MenuItem { Code = "accueil",      Text = "menu.accueil",      Url = "/pages/accueil/index.aspx",                                 Icon = "fas fa-chalkboard",     Section = "section.accueil",        Order = 1  },
+        new MenuItem { Code = "unites",       Text = "menu.unites",       Url = "/pages/parametres/unites/unites.aspx",                      Icon = "fas fa-ruler",          Section = "section.parametres",     Order = 2  },
+        new MenuItem { Code = "categories",   Text = "menu.categories",   Url = "/pages/parametres/categories/categories.aspx",              Icon = "fas fa-tags",           Section = "section.parametres",     Order = 3  },
+        new MenuItem { Code = "fournisseurs", Text = "menu.fournisseurs", Url = "/pages/parametres/fournisseurs/fournisseurs.aspx",          Icon = "fas fa-truck",          Section = "section.parametres",     Order = 4  },
+        new MenuItem { Code = "emplacements", Text = "menu.emplacements", Url = "/pages/parametres/emplacements/emplacements.aspx",          Icon = "fas fa-map-marker-alt", Section = "section.parametres",     Order = 5  },
+        new MenuItem { Code = "articles",     Text = "menu.articles",     Url = "/pages/modules/articles/articles.aspx",                     Icon = "fas fa-boxes",          Section = "section.mouvements",     Order = 6  },
+        new MenuItem { Code = "entrees",      Text = "menu.entrees",      Url = "/pages/modules/entrees/entrees.aspx",                       Icon = "fas fa-arrow-down",     Section = "section.mouvements",     Order = 7  },
+        new MenuItem { Code = "sorties",      Text = "menu.sorties",      Url = "/pages/modules/sorties/sorties.aspx",                       Icon = "fas fa-arrow-up",       Section = "section.mouvements",     Order = 8  },
+        new MenuItem { Code = "stock",        Text = "menu.stock",        Url = "/pages/modules/stock/stock.aspx",                           Icon = "fas fa-warehouse",      Section = "section.mouvements",     Order = 9  },
+        new MenuItem { Code = "saisies",      Text = "menu.saisies",      Url = "/pages/demandes/saisie/saisies.aspx",                       Icon = "fas fa-file-alt",       Section = "section.demandes",       Order = 10 },
+        new MenuItem { Code = "accuses",      Text = "menu.accuses",      Url = "/pages/demandes/accuse/accuses.aspx",                       Icon = "fas fa-check-circle",   Section = "section.demandes",       Order = 11 },
+        new MenuItem { Code = "exploitation", Text = "menu.exploitation", Url = "/pages/exploitations/exp/exploitations.aspx",               Icon = "fas fa-chart-bar",      Section = "section.rapports",       Order = 12 },
+        new MenuItem { Code = "resetpwd",     Text = "menu.resetpwd",     Url = "/pages/administrations/reset/resetpwd.aspx",                Icon = "fas fa-key",            Section = "section.administration", Order = 13 },
+        new MenuItem { Code = "utilisateurs", Text = "menu.utilisateurs", Url = "/pages/administrations/utilisateur/utilisateur.aspx",       Icon = "fas fa-user-cog",       Section = "section.administration", Order = 14 },
+        new MenuItem { Code = "requetes",     Text = "menu.requetes",     Url = "/pages/administrations/requete/requetes.aspx",              Icon = "fas fa-terminal",       Section = "section.administration", Order = 15 },
     };
 
   // ============================================================
@@ -480,7 +481,6 @@ public static class AuthHelper
       var html = new StringBuilder();
 
       // ✅ Brand link : logo + nom de l'application en tête du menu
-      //    Résolution du chemin absolu côté serveur (~/ → /GESTIONSTOCK2.0/img/Logo4.png)
       string logoUrl = "";
       try
       {
@@ -710,6 +710,9 @@ public static class AuthHelper
             </ul>
         </nav>");
 
+      // ✅ Injection du dictionnaire de la langue courante (window.__I18N__)
+      html.Append(LocalizationHelper.RenderDictionaryScript());
+
       return html.ToString();
     }
     catch (Exception ex)
@@ -937,7 +940,6 @@ public static class AuthHelper
 
   // ============================================================
   // ✅ NOUVEAU : Retourne le NOM complet de l'utilisateur connecté
-  //    (à partir de USERS.NOM et non de USERS.USERNAME)
   // ============================================================
   public static string GetUserFullName()
   {

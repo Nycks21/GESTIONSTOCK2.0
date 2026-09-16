@@ -401,7 +401,8 @@
       <script src="../../_assets/js/jspdf.plugin.autotable.min.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../../_assets/js/xlsx.full.min.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../../_assets/js/vfs_fonts.js?v=<%=AuthHelper.Version %>"></script>
-      <script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="../../_assets/js/i18n.js?v=<%=AuthHelper.Version %>"></script>
+<script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
       <script src="js/config.js?v=<%=AuthHelper.Version %>"></script>
       <script src="js/state.js?v=<%=AuthHelper.Version %>"></script>
       <script src="js/utils.js?v=<%=AuthHelper.Version %>"></script>

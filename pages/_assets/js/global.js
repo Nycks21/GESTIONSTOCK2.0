@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   global.js — Gestion Scolaire
+   global.js — Gestion Stock
    Version unifiée — conflits résolus, logiques préservées
    ═══════════════════════════════════════════════════════════════
 */
@@ -407,35 +407,22 @@ document.addEventListener("DOMContentLoaded", function () {
 })();
 
 /* ══════════════════════════════════════════════════
-   i18n — Exposé globalement
+   i18n — Délégué au module i18n.js
+   (le dictionnaire est injecté par le serveur via window.__I18N__)
 ══════════════════════════════════════════════════ */
-var i18n = {};
-
-function loadLang(lang) {
-  lang = lang || localStorage.getItem("appLang") || "fr";
-  fetch(apiUrl("/_assets/lang/" + lang + ".json"))
-    .then(function (r) {
-      return r.json();
-    })
-    .then(function (data) {
-      i18n = data;
-      localStorage.setItem("appLang", lang);
-      applyTranslations();
-    })
-    .catch(function () {});
-}
-
-function applyTranslations() {
-  document.querySelectorAll("[data-i18n]").forEach(function (el) {
-    var key = el.getAttribute("data-i18n");
-    var keys = key.split(".");
-    var val = i18n;
-    for (var i = 0; i < keys.length; i++) {
-      val = val && val[keys[i]];
+// Les fonctions t(), applyTranslations() et setLanguage() sont
+// désormais fournies par /_assets/js/i18n.js, chargé avant global.js.
+// On garde uniquement la restauration du sélecteur (si non présent serveur).
+(function initLangSelectorUI() {
+  var sel = document.getElementById("langSelect");
+  if (!sel) return;
+  // La valeur courante est déjà "selected" côté serveur.
+  sel.addEventListener("change", function () {
+    if (typeof window.setLanguage === "function") {
+      window.setLanguage(this.value);
     }
-    if (val) el.textContent = val;
   });
-}
+})();
 
 // ─────────────────────────────────────────────
 // SPINNER - Version unifiée
@@ -1362,7 +1349,7 @@ if (typeof window.applyFilters !== "function") {
 // ============================================================================
 // Fonctions existantes
 window.ajax = ajax;
-window.loadLang = loadLang;
+// ✅ SUPPRIMÉ : window.loadLang = loadLang;  (loadLang n'existe plus — i18n.js gère)
 window.initDarkMode = initDarkMode;
 window.openModal = openModal;
 window.closeModal = closeModal;

@@ -33,28 +33,32 @@ function formatDateFr(iso) {
     });
 }
 
+// ✅ TRADUIT : timeAgo utilise t() avec paramètres
 function timeAgo(iso) {
     if (!iso) return '';
     var d = new Date(iso);
     var diff = Math.floor((Date.now() - d.getTime()) / 1000);
-    if (diff < 60)        return 'à l\'instant';
-    if (diff < 3600)      return 'il y a ' + Math.floor(diff / 60) + ' min';
-    if (diff < 86400)     return 'il y a ' + Math.floor(diff / 3600) + ' h';
-    if (diff < 604800)    return 'il y a ' + Math.floor(diff / 86400) + ' j';
+    if (diff < 60)        return t('time.just_now');
+    if (diff < 3600)      return t('time.minutes_ago', { n: Math.floor(diff / 60) });
+    if (diff < 86400)     return t('time.hours_ago',   { n: Math.floor(diff / 3600) });
+    if (diff < 604800)    return t('time.days_ago',    { n: Math.floor(diff / 86400) });
     return formatDateFr(iso);
 }
 
+// ✅ TRADUIT : labels de statut via t()
 function statutLabel(statut) {
-    var labels = {
-        'BROUILLON': 'Brouillon',
-        'VALIDE':    'Validé',
-        'ANNULE':    'Annulé',
-        'TERMINE':   'Terminé',
-        'NORMALE':   'Normale',
-        'ALERTE':    'Alerte',
-        'RUPTURE':   'Rupture'
+    var keyMap = {
+        'BROUILLON': 'status.brouillon',
+        'VALIDE':    'status.valide',
+        'ANNULE':    'status.annule',
+        'TERMINE':   'status.termine',
+        'NORMALE':   'status.normale',
+        'ALERTE':    'status.alerte',
+        'RUPTURE':   'status.rupture'
     };
-    return labels[statut] || statut || '';
+    var key = keyMap[statut];
+    if (key) return t(key);
+    return statut || '';
 }
 
 function statutBadge(statut) {

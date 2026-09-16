@@ -1,18 +1,26 @@
 <%@ Application Language="C#" %>
 <script runat="server">
+
+    // ============================================================
+    // ACQUIRE REQUEST STATE : langue (Session disponible)
+    // ============================================================
+    protected void Application_AcquireRequestState(object sender, EventArgs e)
+    {
+        // ✅ Appel ici car Session est disponible (pas dans BeginRequest)
+        LocalizationHelper.HandleLanguage();
+    }
+
+    // ============================================================
+    // BEGIN REQUEST : headers, cache, mixed-content
+    // ============================================================
     protected void Application_BeginRequest(object sender, EventArgs e)
     {
-        var ctx = HttpContext.Current;
+        HttpContext ctx = HttpContext.Current;
+        if (ctx == null) return;
+
         string path = ctx.Request.Path ?? "";
 
-        // ════════════════════════════════════════════════════════════════
-        // GESTION DE LA LANGUE (MULTI-LANGAGE)
-        // ════════════════════════════════════════════════════════════════
-        LocalizationHelper.HandleLanguage();
-
-        // ════════════════════════════════════════════════════════════════
-        // ✅ BUG CORRIGÉ : CAUSE RACINE DU MIXED CONTENT DERRIÈRE NGROK
-        // ════════════════════════════════════════════════════════════════
+        // ✅ BUG CORRIGÉ : cause racine du mixed content derrière ngrok
         string forwardedProto = ctx.Request.Headers["X-Forwarded-Proto"];
         if (!string.IsNullOrEmpty(forwardedProto) &&
             forwardedProto.Equals("https", StringComparison.OrdinalIgnoreCase) &&
@@ -46,10 +54,15 @@
         }
     }
 
+    // ============================================================
+    // START : config JSON
+    // ============================================================
     protected void Application_Start(object sender, EventArgs e)
     {
         // Augmenter la limite de taille JSON dans le sérialiseur
-        var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
+        System.Web.Script.Serialization.JavaScriptSerializer serializer =
+            new System.Web.Script.Serialization.JavaScriptSerializer();
         serializer.MaxJsonLength = int.MaxValue;
     }
+
 </script>

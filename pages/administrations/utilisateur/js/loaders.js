@@ -61,7 +61,11 @@ function loadUsers() {
         })
         .catch(function(err) {
             console.error(err);
-            Swal.fire({ icon: 'error', title: 'Erreur', text: 'Impossible de charger les utilisateurs' });
+            Swal.fire({
+                icon: 'error',
+                title: t('message.error'),
+                text: t('message.load_users_error')
+            });
             hidePreloader();
         })
         .finally(function() {
@@ -79,14 +83,17 @@ function renderSimpleTable() {
     var totalPages = Math.ceil(filteredUsers.length / rowsPerPage);
 
     tbody.innerHTML = '';
+
     if (!pageUsers.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px;"><i class="fas fa-search" style="font-size:48px;color:#ccc;"></i><br>Aucun utilisateur trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px;">' +
+            '<i class="fas fa-search" style="font-size:48px;color:#ccc;"></i><br>' +
+            t('message.no_users_found') +
+            '</td></tr>';
         updateCounter();
         createPaginationControls(totalPages);
         return;
     }
 
-    // ✅ FIX : rôle de l'utilisateur connecté (récupéré une seule fois, hors boucle)
     var currentUserRole = parseInt(document.getElementById('hfUserRole')?.value || '-1', 10);
 
     pageUsers.forEach(function(user) {
@@ -95,30 +102,28 @@ function renderSimpleTable() {
         row.insertCell(0).innerHTML = nameBadge;
         row.insertCell(1).innerHTML = escapeHtml(user.NOM || '-');
         row.insertCell(2).innerHTML = escapeHtml(user.EMAIL || '-');
-        row.insertCell(3).innerHTML = getUserRoleName(user.ROLEID)
-            '<span style="font-style:bold"></span>';
+        row.insertCell(3).innerHTML = getUserRoleName(user.ROLEID);
         row.insertCell(4).innerHTML = escapeHtml(user.TELEPHONE || '-');
         row.insertCell(5).innerHTML = formatDate(user.CREATED_AT);
         row.insertCell(6).innerHTML = (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true')
-            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
-            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
+            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ ' + t('status.active') + '</span>'
+            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ ' + t('status.inactive') + '</span>';
 
-        // ✅ FIX : protection SuperAdmin (ROLEID = 0)
         var isProtected = (user.ROLEID === 0 && currentUserRole !== 0);
+        var editTitle = isProtected ? t('message.only_superadmin_edit') : t('button.edit');
+        var deleteTitle = isProtected ? t('message.only_superadmin_delete') : t('button.delete');
 
-        var editBtn = `<button type="button"
-                                class="btn btn-sm ${isProtected ? 'btn-secondary' : 'btn-primary'}"
-                                ${isProtected ? 'disabled title="Seul un SuperAdmin peut modifier un SuperAdmin"' : ''}
-                                onclick="openEditUserModal(${user.IDUSER}, event)">
-                            <i class="fas fa-edit"></i>
-                        </button>`;
+        var editBtn = '<button type="button" ' +
+            'class="btn btn-sm ' + (isProtected ? 'btn-secondary' : 'btn-primary') + '" ' +
+            (isProtected ? 'disabled title="' + editTitle + '"' : 'title="' + editTitle + '"') +
+            ' onclick="openEditUserModal(' + user.IDUSER + ', event)">' +
+            '<i class="fas fa-edit"></i></button>';
 
-        var deleteBtn = `<button type="button"
-                                  class="btn btn-sm ${isProtected ? 'btn-secondary' : 'btn-danger'}"
-                                  ${isProtected ? 'disabled title="Seul un SuperAdmin peut supprimer un SuperAdmin"' : ''}
-                                  onclick="supprimerContact(${user.IDUSER}, event)">
-                              <i class="fas fa-trash"></i>
-                          </button>`;
+        var deleteBtn = '<button type="button" ' +
+            'class="btn btn-sm ' + (isProtected ? 'btn-secondary' : 'btn-danger') + '" ' +
+            (isProtected ? 'disabled title="' + deleteTitle + '"' : 'title="' + deleteTitle + '"') +
+            ' onclick="supprimerContact(' + user.IDUSER + ', event)">' +
+            '<i class="fas fa-trash"></i></button>';
 
         row.insertCell(7).innerHTML = editBtn + ' ' + deleteBtn;
     });

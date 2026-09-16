@@ -25,7 +25,7 @@ var API_USERS = {
 var PERMISSIONS_LIST = [
     'accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs',
     'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire',
-    'exploitation', 'utilisateurs', 'requetes'
+    'exploitation','resetpwd', 'utilisateurs', 'requetes'
 ];
 
 // Mapping permission → ID de la checkbox HTML
@@ -43,17 +43,18 @@ var CHECKBOX_ID_MAP = {
     'accuses': 'permAccuses',
     'inventaire': 'permInventaire',
     'exploitation': 'permExploitation',
+    'resetpwd': 'permResetpwd',
     'utilisateurs': 'permUser',
     'requetes': 'permRequetes'
 };
 
 // ✅ Permissions par défaut par ROLEID (0 = SuperAdmin, 1 = Admin, 2 = User, 3 = Logisticien, 4 = Comptable)
 var DEFAULT_ROLE_PERMISSIONS = {
-    0: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'utilisateurs', 'requetes'], // SuperAdmin
+    0: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'resetpwd', 'utilisateurs', 'requetes'], // SuperAdmin
     1: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'utilisateurs'],          // Admin
-    2: ['accueil','saisies', 'accuses'],                                                                                                                                                                       // User
-    3: ['accueil','unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'inventaire', 'exploitation'],                                                           // Logisticien
-    4: ['accueil', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation']                                                                                                          // Comptable
+    2: ['accueil','saisies', 'accuses', 'resetpwd'],                                                                                                                                                                       // User
+    3: ['accueil','unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'inventaire', 'exploitation', 'resetpwd'],                                                           // Logisticien
+    4: ['accueil', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'resetpwd']                                                                                                          // Comptable
 };
 
 var CURRENT_VERSION = document.querySelector('[data-version]')?.getAttribute('data-version') || '2.1.17';

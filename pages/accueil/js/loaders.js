@@ -1,17 +1,13 @@
 "use strict";
 
 // ────────────────────────────────────────────────────────────
-// Formate un montant en chiffres COMPLETS :
-//   - pas d'abréviation (K / M / B)
-//   - pas de décimale
-//   - espace insécable comme séparateur de milliers
-// Ex : 5904000 → "5 904 000"
+// Formate un montant en chiffres COMPLETS (entier, espaces)
 // ────────────────────────────────────────────────────────────
 function formatMontantComplet(value) {
   var n = Number(value);
   if (!isFinite(n)) n = 0;
-  n = Math.round(n); // entier, pas de décimale
-  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0"); // espace insécable
+  n = Math.round(n);
+  return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
 }
 
 function loadDashboard() {
@@ -30,7 +26,7 @@ function loadDashboard() {
   ])
     .catch(function (err) {
       console.error("Dashboard load error:", err);
-      showToast("Erreur lors du chargement du tableau de bord", "error");
+      showToast(t('msg.dashboard_error'), "error");
     })
     .finally(function () {
       hideSpinner();
@@ -45,53 +41,49 @@ async function fetchJson(url) {
 }
 
 // ═══ KPI ═══
-// ═══ KPI ═══
 async function loadKpi() {
   try {
     var data = await fetchJson(DASHBOARD_API.KPI);
     if (!data.success) return;
     DashboardState.kpi = data;
 
-    // ── Articles ──
     var el;
 
+    // ── Articles ──
     el = document.getElementById("valArticles");
     if (el) el.textContent = formatNumber(data.articlesActifs);
+
     el = document.getElementById("pillArticlesTotal");
-    if (el) el.textContent = formatNumber(data.articlesTotal) + " total";
+    if (el) el.textContent = t('pill.total', { n: formatNumber(data.articlesTotal) });
 
     // ── Alertes stock ──
-    //   valAlertes = alertes + ruptures (total)
-    //   pillRuptures / pillAlertesCount = valeurs calculées par le backend
     el = document.getElementById("valAlertes");
     if (el) el.textContent = formatNumber(data.alertesStock);
 
     el = document.getElementById("pillRuptures");
-    if (el) el.textContent = formatNumber(data.ruptures) + " rupture(s)";
+    if (el) el.textContent = t('pill.ruptures', { n: formatNumber(data.ruptures) });
 
     el = document.getElementById("pillAlertesCount");
-    if (el) el.textContent = formatNumber(data.alertes) + " alerte(s)";
+    if (el) el.textContent = t('pill.alertes', { n: formatNumber(data.alertes) });
 
-    // ── Bons en attente (BROUILLON) — conservé ──
+    // ── Bons en attente ──
     el = document.getElementById("valBons");
     if (el) el.textContent = formatNumber(data.bonsAttente);
 
-    // ── ✅ FIX : total des MOUVEMENTS enregistrés dans MSTOCK ──
     el = document.getElementById("pillEntree");
-    if (el) el.textContent = formatNumber(data.entrees) + " entrée(s)";
+    if (el) el.textContent = t('pill.entrees', { n: formatNumber(data.entrees) });
 
     el = document.getElementById("pillSortie");
-    if (el) el.textContent = formatNumber(data.sorties) + " sortie(s)";
+    if (el) el.textContent = t('pill.sorties', { n: formatNumber(data.sorties) });
 
     // ── Valeur du stock ──
     el = document.getElementById("valValeur");
     if (el) el.textContent = formatMontantComplet(data.valeurStock) + '\u00A0Ar';
-    // → affiche "5 904 000" et JAMAIS "5.90", "5,90 M" ou "5.9M"
 
-    // ── Sous seuil (élément optionnel — ne plus planter si absent) ──
+    // ── Sous seuil (optionnel) ──
     el = document.getElementById("pillSousSeuil");
     if (el)
-      el.textContent = formatNumber(data.articlesSousSeuil) + " sous seuil";
+      el.textContent = t('pill.sous_seuil', { n: formatNumber(data.articlesSousSeuil) });
   } catch (e) {
     console.error("KPI:", e);
   }
@@ -119,29 +111,13 @@ async function loadAlerts() {
       var a = items[i];
       html +=
         "<tr>" +
-        "<td><strong>" +
-        escapeHtml(a.code) +
-        "</strong></td>" +
-        "<td>" +
-        escapeHtml(a.nom) +
-        "</td>" +
-        "<td>" +
-        escapeHtml(a.categorie || "—") +
-        "</td>" +
-        "<td>" +
-        escapeHtml(a.emplacement || "—") +
-        "</td>" +
-        "<td><strong>" +
-        formatNumber(a.quantite) +
-        "</strong> " +
-        escapeHtml(a.unite) +
-        "</td>" +
-        "<td>" +
-        formatNumber(a.seuilAlerte) +
-        "</td>" +
-        "<td>" +
-        statutBadge(a.statut) +
-        "</td>" +
+        "<td><strong>" + escapeHtml(a.code) + "</strong></td>" +
+        "<td>" + escapeHtml(a.nom) + "</td>" +
+        "<td>" + escapeHtml(a.categorie || "—") + "</td>" +
+        "<td>" + escapeHtml(a.emplacement || "—") + "</td>" +
+        "<td><strong>" + formatNumber(a.quantite) + "</strong> " + escapeHtml(a.unite) + "</td>" +
+        "<td>" + formatNumber(a.seuilAlerte) + "</td>" +
+        "<td>" + statutBadge(a.statut) + "</td>" +
         "</tr>";
     }
     document.getElementById("tbodyAlerts").innerHTML = html;
@@ -159,8 +135,6 @@ async function loadStockAlerts() {
     var data = await fetchJson(DASHBOARD_API.STOCK_ALERTS);
     var items = data && data.data ? data.data : [];
 
-    // ✅ Règle métier identique à la page STOCK :
-    //    Un article est "en alerte" si seuil > 0 ET 0 < disponible <= seuil
     var alerts = items.filter(function (a) {
       var dispo = Number(a.DISPONIBLE || 0);
       var seuil = Number(a.SEUIL_ALERTE || 0);
@@ -168,14 +142,12 @@ async function loadStockAlerts() {
     });
 
     if (!alerts.length) {
-      // Aucun article en alerte → masquer la carte
       card.style.display = "none";
       document.getElementById("stockAlertCount").textContent = "0";
       document.getElementById("tbodyStockAlerts").innerHTML = "";
       return;
     }
 
-    // Afficher + remplir
     card.style.display = "block";
     document.getElementById("stockAlertCount").textContent = alerts.length;
 
@@ -184,35 +156,19 @@ async function loadStockAlerts() {
       var a = alerts[i];
       html +=
         "<tr>" +
-        "<td><strong>" +
-        escapeHtml(a.ARTICLE_CODE) +
-        "</strong></td>" +
-        "<td>" +
-        escapeHtml(a.ARTICLE_NOM) +
-        "</td>" +
-        "<td>" +
-        escapeHtml(a.CATEGORIE_NOM || "—") +
-        "</td>" +
-        "<td>" +
-        escapeHtml(a.EMPLACEMENT_NOM || "—") +
-        "</td>" +
-        "<td><strong>" +
-        formatNumber(a.DISPONIBLE, 0) +
-        "</strong>" +
-        (a.UNITE_NOM ? " <small>" + escapeHtml(a.UNITE_NOM) + "</small>" : "") +
-        "</td>" +
-        "<td>" +
-        formatNumber(a.SEUIL_ALERTE, 0) +
-        "</td>" +
-        "<td>" +
-        statutBadge("ALERTE") +
-        "</td>" +
+        "<td><strong>" + escapeHtml(a.ARTICLE_CODE) + "</strong></td>" +
+        "<td>" + escapeHtml(a.ARTICLE_NOM) + "</td>" +
+        "<td>" + escapeHtml(a.CATEGORIE_NOM || "—") + "</td>" +
+        "<td>" + escapeHtml(a.EMPLACEMENT_NOM || "—") + "</td>" +
+        "<td><strong>" + formatNumber(a.DISPONIBLE, 0) + "</strong>" +
+          (a.UNITE_NOM ? " <small>" + escapeHtml(a.UNITE_NOM) + "</small>" : "") + "</td>" +
+        "<td>" + formatNumber(a.SEUIL_ALERTE, 0) + "</td>" +
+        "<td>" + statutBadge("ALERTE") + "</td>" +
         "</tr>";
     }
     document.getElementById("tbodyStockAlerts").innerHTML = html;
   } catch (e) {
     console.error("Stock alerts:", e);
-    // En cas d'erreur, on masque la carte pour ne pas afficher un bloc vide
     card.style.display = "none";
   }
 }
@@ -241,7 +197,7 @@ async function loadStockByCategory() {
   }
 }
 
-// ═══ ACTIVITÉ RÉCENTE (mouvements) ═══
+// ═══ ACTIVITÉ RÉCENTE ═══
 async function loadRecentMovements() {
   var feed = document.getElementById("activityFeed");
   if (!feed) return;
@@ -252,7 +208,7 @@ async function loadRecentMovements() {
     DashboardState.recentMovements = items;
 
     if (!items.length) {
-      feed.innerHTML = '<div class="loading-mini">Aucun mouvement récent</div>';
+      feed.innerHTML = '<div class="loading-mini">' + t('msg.no_recent_mvt') + '</div>';
       return;
     }
 
@@ -262,29 +218,16 @@ async function loadRecentMovements() {
       var isEntree = m.type === "ENTREE";
       html +=
         '<div class="activity-item">' +
-        '<div class="activity-icon ' +
-        (isEntree ? "entry" : "exit") +
-        '">' +
-        '<i class="fas fa-arrow-' +
-        (isEntree ? "down" : "up") +
-        '"></i>' +
+        '<div class="activity-icon ' + (isEntree ? "entry" : "exit") + '">' +
+        '<i class="fas fa-arrow-' + (isEntree ? "down" : "up") + '"></i>' +
         "</div>" +
         '<div class="activity-content">' +
         '<div class="activity-text">' +
-        "<strong>" +
-        (isEntree ? "+" : "-") +
-        formatNumber(m.quantite) +
-        " " +
-        escapeHtml(m.unite) +
-        "</strong>" +
-        " — " +
-        escapeHtml(m.code) +
-        " " +
-        escapeHtml(m.nom) +
+        "<strong>" + (isEntree ? "+" : "-") + formatNumber(m.quantite) + " " + escapeHtml(m.unite) + "</strong>" +
+        " — " + escapeHtml(m.code) + " " + escapeHtml(m.nom) +
         "</div>" +
         '<div class="activity-time">' +
-        timeAgo(m.date) +
-        (m.utilisateur ? " · " + escapeHtml(m.utilisateur) : "") +
+        timeAgo(m.date) + (m.utilisateur ? " · " + escapeHtml(m.utilisateur) : "") +
         "</div>" +
         "</div>" +
         "</div>";
@@ -292,7 +235,7 @@ async function loadRecentMovements() {
     feed.innerHTML = html;
   } catch (e) {
     console.error("Recent movements:", e);
-    feed.innerHTML = '<div class="loading-mini">Erreur de chargement</div>';
+    feed.innerHTML = '<div class="loading-mini">' + t('msg.load_error') + '</div>';
   }
 }
 
@@ -307,7 +250,7 @@ async function loadRecentDocuments() {
     DashboardState.recentDocuments = items;
 
     if (!items.length) {
-      feed.innerHTML = '<div class="loading-mini">Aucun document récent</div>';
+      feed.innerHTML = '<div class="loading-mini">' + t('msg.no_recent_docs') + '</div>';
       return;
     }
 
@@ -318,21 +261,14 @@ async function loadRecentDocuments() {
       html +=
         '<div class="activity-item">' +
         '<div class="activity-icon doc">' +
-        '<i class="fas fa-file-' +
-        (isEntree ? "import" : "export") +
-        '"></i>' +
+        '<i class="fas fa-file-' + (isEntree ? "import" : "export") + '"></i>' +
         "</div>" +
         '<div class="activity-content">' +
         '<div class="activity-text">' +
-        "<strong>" +
-        escapeHtml(d.numero) +
-        "</strong> " +
-        statutBadge(d.statut) +
+        "<strong>" + escapeHtml(d.numero) + "</strong> " + statutBadge(d.statut) +
         "</div>" +
         '<div class="activity-time">' +
-        (isEntree ? "Entrée" : "Sortie") +
-        " · " +
-        formatDateFr(d.date) +
+        (isEntree ? t('doc.entry') : t('doc.exit')) + " · " + formatDateFr(d.date) +
         "</div>" +
         "</div>" +
         "</div>";
@@ -340,7 +276,7 @@ async function loadRecentDocuments() {
     feed.innerHTML = html;
   } catch (e) {
     console.error("Recent documents:", e);
-    feed.innerHTML = '<div class="loading-mini">Erreur de chargement</div>';
+    feed.innerHTML = '<div class="loading-mini">' + t('msg.load_error') + '</div>';
   }
 }
 
@@ -355,8 +291,7 @@ async function loadTopArticles() {
     DashboardState.topArticles = items;
 
     if (!items.length) {
-      container.innerHTML =
-        '<div class="loading-mini">Aucune donnée sur 30 jours</div>';
+      container.innerHTML = '<div class="loading-mini">' + t('msg.no_data_30j') + '</div>';
       return;
     }
 
@@ -366,31 +301,18 @@ async function loadTopArticles() {
       var rankClass = i < 3 ? " rank-" + (i + 1) : "";
       html +=
         '<div class="top-article">' +
-        '<div class="top-rank' +
-        rankClass +
-        '">' +
-        (i + 1) +
-        "</div>" +
+        '<div class="top-rank' + rankClass + '">' + (i + 1) + "</div>" +
         '<div class="top-info">' +
-        '<div class="top-name">' +
-        escapeHtml(a.nom) +
+        '<div class="top-name">' + escapeHtml(a.nom) + "</div>" +
+        '<div class="top-code">' + escapeHtml(a.code) + "</div>" +
         "</div>" +
-        '<div class="top-code">' +
-        escapeHtml(a.code) +
-        "</div>" +
-        "</div>" +
-        '<div class="top-volume">' +
-        formatNumber(a.volume) +
-        " " +
-        escapeHtml(a.unite) +
-        "</div>" +
+        '<div class="top-volume">' + formatNumber(a.volume) + " " + escapeHtml(a.unite) + "</div>" +
         "</div>";
     }
     container.innerHTML = html;
   } catch (e) {
     console.error("Top articles:", e);
-    container.innerHTML =
-      '<div class="loading-mini">Erreur de chargement</div>';
+    container.innerHTML = '<div class="loading-mini">' + t('msg.load_error') + '</div>';
   }
 }
 

@@ -1,0 +1,152 @@
+/* Masquer la case Requêtes SQL par défaut */
+            #permRequetesContainer {
+                display: none !important;
+            }
+
+            /* Afficher la case Requêtes SQL uniquement pour SuperAdmin */
+            body.superadmin-mode #permRequetesContainer {
+                display: flex !important;
+            }
+
+            /* Aligner les permissions sur 3 colonnes */
+            #addUserModal .modal-body .row:last-child div[style*="display: flex; flex-wrap: wrap"] {
+                display: grid !important;
+                grid-template-columns: repeat(3, 1fr) !important;
+                gap: 12px 20px !important;
+            }
+
+            /* Style pour chaque élément */
+            #addUserModal .modal-body .row:last-child div[style*="display: flex; flex-wrap: wrap"]>div {
+                margin: 0 !important;
+            }
+
+            @media (max-width: 768px) {
+                #addUserModal .modal-body .row:last-child div[style*="display: flex; flex-wrap: wrap"] {
+                    grid-template-columns: repeat(2, 1fr) !important;
+                }
+            }
+
+            @media (max-width: 480px) {
+                #addUserModal .modal-body .row:last-child div[style*="display: flex; flex-wrap: wrap"] {
+                    grid-template-columns: 1fr !important;
+                }
+            }
+            /* Modal de restauration */
+#restoreModal .modal-content {
+    max-width: 550px;
+    border-radius: 10px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+}
+
+#restoreModal .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    border-bottom: 1px solid #dee2e6;
+    background: #f8f9fa;
+    border-radius: 10px 10px 0 0;
+}
+
+#restoreModal .modal-header h3 {
+    margin: 0;
+    color: #343a40;
+}
+
+#restoreModal .modal-body {
+    padding: 20px;
+}
+
+#restoreModal .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 15px 20px;
+    border-top: 1px solid #dee2e6;
+    background: #f8f9fa;
+    border-radius: 0 0 10px 10px;
+}
+
+#restoreModal .form-group {
+    margin-bottom: 15px;
+}
+
+#restoreModal .form-group label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #495057;
+}
+
+#restoreModal .form-control {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s;
+}
+
+#restoreModal .form-control:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 0 0.2rem rgba(0,123,255,0.25);
+}
+
+/* Styles pour la restauration */
+.restore-step {
+    padding: 10px;
+}
+
+.backup-item:hover {
+    background: #f8f9fa !important;
+}
+
+.backup-item.selected {
+    background: #e8f4fd !important;
+    border-left: 3px solid #007bff;
+}
+
+#restoreLogContent {
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+#restoreLogContent::-webkit-scrollbar {
+    width: 8px;
+}
+
+#restoreLogContent::-webkit-scrollbar-track {
+    background: #2d2d2d;
+}
+
+#restoreLogContent::-webkit-scrollbar-thumb {
+    background: #4a4a4a;
+    border-radius: 4px;
+}
+
+#restoreLogContent::-webkit-scrollbar-thumb:hover {
+    background: #5a5a5a;
+}
+
+.badge-name {
+    display: inline-block;
+    background: #eef2f5;
+    color: #1a2332;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    border: 1px solid #dee2e6;
+    white-space: nowrap;
+}
+
+body.dark-mode .badge-name {
+    background: #1e2d42;
+    color: #e8edf5;
+    border-color: rgba(255,255,255,0.06);
+}
+
+
+ 

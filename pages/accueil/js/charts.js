@@ -14,13 +14,13 @@ function initMovementsChart(labels, entrees, sorties) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Entrées',
+                    label: t('chart.entries'),       // ✅ TRADUIT
                     data: entrees,
                     backgroundColor: DASHBOARD_COLORS.success,
                     borderRadius: 4
                 },
                 {
-                    label: 'Sorties',
+                    label: t('chart.exits'),         // ✅ TRADUIT
                     data: sorties,
                     backgroundColor: DASHBOARD_COLORS.danger,
                     borderRadius: 4
