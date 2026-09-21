@@ -1,4 +1,10 @@
-// crud.js - Module Articles avec génération automatique du CODE
+// crud.js - Module Articles avec génération automatique du CODE + i18n
+
+// ─── Helper i18n défensif ───
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
 
 // ============================================================
 // OUVERTURE / FERMETURE MODAL ARTICLE
@@ -6,13 +12,14 @@
 function openAddArticleModal(e) {
     if (e) e.preventDefault();
     AppState.editingId = null;
-    document.getElementById('modalTitle').textContent = 'Ajouter un article';
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-box"></i> ' + _t('articles.modal.add_title');
     document.getElementById('editingId').value = '';
 
     // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
     var codeEl = document.getElementById('articleCode');
     codeEl.value = '';
-    codeEl.placeholder = 'Sera généré automatiquement (ART-XXX-00001)';
+    codeEl.placeholder = _t('articles.modal.code_auto_placeholder');
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
@@ -35,10 +42,11 @@ function editArticle(id) {
     AppState.editingId = id;
     const article = AppState.articles.find(a => a.ID === id);
     if (!article) {
-        showToast('Erreur', 'Article introuvable', 'error');
+        showToast(_t('message.error'), _t('articles.msg.not_found'), 'error');
         return;
     }
-    document.getElementById('modalTitle').textContent = 'Modifier l\'article';
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-edit"></i> ' + _t('articles.modal.edit_title');
     document.getElementById('editingId').value = id;
 
     // 🔒 Le CODE est immuable → readonly
@@ -66,11 +74,10 @@ function closeArticleModal() {
     document.getElementById('articleModal').style.display = 'none';
     AppState.editingId = null;
 
-    // Repasser le champ code en mode "généré auto"
     var codeEl = document.getElementById('articleCode');
     if (codeEl) {
         codeEl.value = '';
-        codeEl.placeholder = 'Sera généré automatiquement (ART-XXX-00001)';
+        codeEl.placeholder = _t('articles.modal.code_auto_placeholder');
         codeEl.readOnly = true;
         codeEl.style.backgroundColor = '#e9ecef';
         codeEl.style.cursor = 'not-allowed';
@@ -84,9 +91,6 @@ async function saveArticle(e) {
     e.preventDefault();
     const editingId = document.getElementById('editingId').value;
 
-    // ⚠️ Le CODE n'est plus envoyé :
-    //    - à l'ajout → généré côté serveur (ART-PROJET-00001)
-    //    - en modification → immuable, non modifiable
     const data = {
         id: editingId || null,
         nom: document.getElementById('articleNom').value.trim(),
@@ -102,9 +106,18 @@ async function saveArticle(e) {
 
     let valid = true;
     clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
-    if (!data.nom) { showFieldError('articleNom', 'Le nom est requis'); valid = false; }
-    if (!data.uniteId) { showFieldError('articleUnite', 'L\'unité est requise'); valid = false; }
-    if (!data.emplacementId) { showFieldError('articleEmplacement', 'L\'emplacement est requis'); valid = false; }
+    if (!data.nom) {
+        showFieldError('articleNom', _t('articles.msg.name_required'));
+        valid = false;
+    }
+    if (!data.uniteId) {
+        showFieldError('articleUnite', _t('articles.msg.unit_required'));
+        valid = false;
+    }
+    if (!data.emplacementId) {
+        showFieldError('articleEmplacement', _t('articles.msg.location_required'));
+        valid = false;
+    }
     if (!valid) return;
 
     const isEdit = !!editingId;
@@ -120,17 +133,19 @@ async function saveArticle(e) {
         const result = await resp.json();
 
         if (result.success) {
-            let msg = result.message || (isEdit ? 'Article modifié' : 'Article ajouté');
-            if (result.code && !isEdit) msg = 'Article ajouté avec succès (' + result.code + ').';
-            showToast('Succès', msg, 'success');
+            let msg = result.message || (isEdit ? _t('articles.msg.updated') : _t('articles.msg.added'));
+            if (result.code && !isEdit) {
+                msg = _t('articles.msg.added_with_code').replace('{code}', result.code);
+            }
+            showToast(_t('message.success'), msg, 'success');
             closeArticleModal();
             loadArticles();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Opération échouée', 'error');
+            showToast(_t('message.error'), result.message || _t('articles.msg.operation_failed'), 'error');
         }
     } catch (err) {
-        showToast('Erreur', err.message, 'error');
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -141,14 +156,14 @@ async function saveArticle(e) {
 // ============================================================
 async function deleteArticle(id) {
     const confirm = await Swal.fire({
-        title: 'Supprimer ?',
-        text: 'Cette action est irréversible (suppression logique).',
+        title: _t('articles.confirm.delete_title'),
+        text: _t('articles.confirm.delete_text'),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
+        confirmButtonText: _t('articles.confirm.delete_yes'),
+        cancelButtonText: _t('button.cancel')
     });
     if (!confirm.isConfirmed) return;
 
@@ -161,14 +176,14 @@ async function deleteArticle(id) {
         });
         const result = await resp.json();
         if (result.success) {
-            showToast('Succès', 'Article supprimé', 'success');
+            showToast(_t('message.success'), _t('articles.msg.deleted'), 'success');
             loadArticles();
             loadStats();
         } else {
-            showToast('Attention', result.message || 'Échec de la suppression', 'error');
+            showToast(_t('message.warning'), result.message || _t('articles.msg.delete_failed'), 'error');
         }
     } catch (err) {
-        showToast('Attention', err.message, 'error');
+        showToast(_t('message.warning'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -211,9 +226,18 @@ async function saveAdjust(e) {
 
     let valid = true;
     clearFieldErrors(['adjustQuantite']);
-    if (!data.articleId) { showToast('Erreur', 'Article non spécifié', 'error'); valid = false; }
-    if (!data.emplacementId) { showToast('Erreur', 'Emplacement non spécifié', 'error'); valid = false; }
-    if (data.quantite <= 0) { showFieldError('adjustQuantite', 'Quantité > 0 requise'); valid = false; }
+    if (!data.articleId) {
+        showToast(_t('message.error'), _t('articles.msg.article_unspecified'), 'error');
+        valid = false;
+    }
+    if (!data.emplacementId) {
+        showToast(_t('message.error'), _t('articles.msg.location_unspecified'), 'error');
+        valid = false;
+    }
+    if (data.quantite <= 0) {
+        showFieldError('adjustQuantite', _t('articles.msg.qty_positive'));
+        valid = false;
+    }
     if (!valid) return;
 
     try {
@@ -225,15 +249,15 @@ async function saveAdjust(e) {
         });
         const result = await resp.json();
         if (result.success) {
-            showToast('Succès', result.message || 'Ajustement effectué', 'success');
+            showToast(_t('message.success'), result.message || _t('articles.msg.adjusted'), 'success');
             closeAdjustModal();
             loadArticles();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Échec de l\'ajustement', 'error');
+            showToast(_t('message.error'), result.message || _t('articles.msg.adjust_failed'), 'error');
         }
     } catch (err) {
-        showToast('Erreur', err.message, 'error');
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -278,10 +302,10 @@ async function loadHistory() {
             historyTotalPages = data.totalPages || 1;
             renderHistoryPagination(historyTotalPages);
         } else {
-            showToast('Erreur', data.message || 'Impossible de charger l\'historique', 'error');
+            showToast(_t('message.error'), data.message || _t('articles.msg.history_load_error'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -290,21 +314,25 @@ async function loadHistory() {
 function renderHistoryTable(mouvements) {
     const tbody = document.getElementById('historyTableBody');
     if (!mouvements || !mouvements.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Aucun mouvement trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">' + _t('articles.history.no_data') + '</td></tr>';
         return;
     }
+
+    const labelEntry = _t('articles.history.entry');
+    const labelExit = _t('articles.history.exit');
+
     let html = '';
     mouvements.forEach(m => {
-        const typeLabel = m.TYPE === 'ENTREE' ? '✅ Entrée' : '📤 Sortie';
-        html += `<tr>
-            <td>${m.CREATED_AT || ''}</td>
-            <td>${typeLabel}</td>
-            <td>${m.QUANTITE}</td>
-            <td>${m.QUANTITE_AVANT}</td>
-            <td>${m.QUANTITE_APRES}</td>
-            <td>${m.MOTIF || ''}</td>
-            <td>${m.REFERENCE_TYPE || ''} ${m.REFERENCE_NUMERO || ''}</td>
-        </tr>`;
+        const typeLabel = m.TYPE === 'ENTREE' ? '✅ ' + labelEntry : '📤 ' + labelExit;
+        html += '<tr>'
+            + '<td>' + (m.CREATED_AT || '') + '</td>'
+            + '<td>' + typeLabel + '</td>'
+            + '<td>' + m.QUANTITE + '</td>'
+            + '<td>' + m.QUANTITE_AVANT + '</td>'
+            + '<td>' + m.QUANTITE_APRES + '</td>'
+            + '<td>' + (m.MOTIF || '') + '</td>'
+            + '<td>' + (m.REFERENCE_TYPE || '') + ' ' + (m.REFERENCE_NUMERO || '') + '</td>'
+            + '</tr>';
     });
     tbody.innerHTML = html;
 }
@@ -316,7 +344,8 @@ function renderHistoryPagination(totalPages) {
     let html = '<div style="display:flex;justify-content:center;gap:5px;margin-top:10px;">';
     for (let i = 1; i <= totalPages; i++) {
         const active = i === historyPage ? 'background:#007bff;color:white;' : '';
-        html += `<button type="button" style="padding:5px 12px;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;${active}" onclick="historyPage=${i};loadHistory();">${i}</button>`;
+        html += '<button type="button" style="padding:5px 12px;border:1px solid #dee2e6;border-radius:4px;cursor:pointer;'
+            + active + '" onclick="historyPage=' + i + ';loadHistory();">' + i + '</button>';
     }
     html += '</div>';
     wrapper.innerHTML = html;
@@ -334,13 +363,19 @@ function closeHistoryModal() {
 // ============================================================
 function showFieldError(fieldId, msg) {
     const err = document.getElementById('err-' + fieldId);
-    if (err) { err.textContent = msg; err.style.display = 'block'; }
+    if (err) {
+        err.textContent = msg;
+        err.style.display = 'block';
+    }
 }
 
 function clearFieldErrors(ids) {
     (ids || []).forEach(id => {
         const err = document.getElementById('err-' + id);
-        if (err) { err.textContent = ''; err.style.display = 'none'; }
+        if (err) {
+            err.textContent = '';
+            err.style.display = 'none';
+        }
     });
 }
 

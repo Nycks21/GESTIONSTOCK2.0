@@ -1,5 +1,6 @@
 <%@ Page Language="C#" %>
 <%@ Import Namespace="System" %>
+<%@ Import Namespace="System.Collections.Generic" %>
 <%@ Import Namespace="System.Data" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.IO" %>
@@ -11,7 +12,7 @@ protected void Page_Load(object sender, EventArgs e)
     Response.Clear();
     Response.ContentType = "application/json";
     Response.ContentEncoding = new System.Text.UTF8Encoding(false);
-    
+
     try
     {
         // ✅ Vérification d'authentification - SuperAdmin uniquement
@@ -21,133 +22,229 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // ✅ Lire le corps de la requête
+        // ============================================================
+        // ACTION SPÉCIALE : renvoyer le nom de la base au client
+        // (pour affichage uniquement — jamais utilisé pour la restauration)
+        // ============================================================
+        string requestedAction = Request.QueryString["action"];
+        if (requestedAction == "dbname")
+        {
+            string dbName = GetApplicationDatabaseName();
+            if (string.IsNullOrEmpty(dbName))
+            {
+                Response.Write("{\"success\":false,\"message\":\"Base de données introuvable\"}");
+            }
+            else
+            {
+                var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
+                Response.Write(ser.Serialize(new { success = true, database = dbName }));
+            }
+            return;
+        }
+
+        // ============================================================
+        // RESTAURATION
+        // ============================================================
+
+        // Lire le corps de la requête
         string jsonBody = "";
         using (var reader = new StreamReader(Request.InputStream))
         {
             jsonBody = reader.ReadToEnd();
         }
-        
+
         var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
         var data = serializer.Deserialize<Dictionary<string, object>>(jsonBody);
-        
+
         string filePath = data.ContainsKey("filePath") ? data["filePath"].ToString() : "";
-        string databaseName = data.ContainsKey("databaseName") ? data["databaseName"].ToString() : "MONAPPECOLE2";
-        
+
         if (string.IsNullOrEmpty(filePath))
         {
             Response.Write("{\"success\":false,\"message\":\"Chemin du fichier manquant\"}");
             return;
         }
-        
-        // ✅ Vérifier que le chemin est sécurisé
+
         if (!IsSecurePath(filePath))
         {
             Response.Write("{\"success\":false,\"message\":\"Chemin de fichier invalide\"}");
             return;
         }
-        
+
         string windowsPath = filePath.Replace("/", "\\");
-        
+
         if (!File.Exists(windowsPath))
         {
             Response.Write("{\"success\":false,\"message\":\"Le fichier n'existe pas\"}");
             return;
         }
-        
-        // ✅ Utiliser la chaîne de connexion depuis Web.config
-        string connectionString = ConfigurationManager.ConnectionStrings["MasterConnection"]?.ConnectionString;
-        if (string.IsNullOrEmpty(connectionString))
+
+        // ============================================================
+        // 1) Récupérer le NOM DE LA BASE dynamiquement
+        // ============================================================
+        string databaseName = GetApplicationDatabaseName();
+        if (string.IsNullOrEmpty(databaseName))
         {
-            Response.Write("{\"success\":false,\"message\":\"Erreur de configuration\"}");
+            Response.Write("{\"success\":false,\"message\":\"Impossible de déterminer le nom de la base de données\"}");
             return;
         }
-        
-        using (SqlConnection conn = new SqlConnection(connectionString))
+
+        // ============================================================
+        // 2) Chaîne de connexion MASTER (pour la restauration)
+        // ============================================================
+        string masterConnStr = null;
+        var masterCs = ConfigurationManager.ConnectionStrings["MasterConnection"];
+        if (masterCs != null) masterConnStr = masterCs.ConnectionString;
+
+        // Fallback : construire une connexion master à partir de MaConnexion
+        if (string.IsNullOrEmpty(masterConnStr))
+        {
+            var appCs = ConfigurationManager.ConnectionStrings["MaConnexion"];
+            if (appCs == null)
+            {
+                Response.Write("{\"success\":false,\"message\":\"Erreur de configuration (MaConnexion absente)\"}");
+                return;
+            }
+            masterConnStr = ReplaceDatabaseInConnectionString(appCs.ConnectionString, "master");
+        }
+
+        using (SqlConnection conn = new SqlConnection(masterConnStr))
         {
             conn.Open();
-            
-            // Journalisation
+
             LogRestoreAction(conn, databaseName, windowsPath);
-            
-            // ÉTAPE 1: Forcer la déconnexion
+
+            // ÉTAPE 1 : tuer les connexions
             string killUsersSql = @"
                 DECLARE @kill varchar(8000) = '';
                 SELECT @kill = @kill + 'KILL ' + CONVERT(varchar(5), spid) + ';'
                 FROM master..sysprocesses
-                WHERE dbid = DB_ID('" + databaseName + @"')
+                WHERE dbid = DB_ID('" + databaseName.Replace("'", "''") + @"')
                 AND spid > 50
                 AND spid != @@SPID;
-                
                 IF @kill != ''
                 BEGIN
                     EXEC(@kill);
                 END
             ";
-            
-            using (SqlCommand cmd = new SqlCommand(killUsersSql, conn))
+            using (SqlCommand cmd = new SqlCommand(killUsersSql, conn)) { cmd.ExecuteNonQuery(); }
+
+            // ÉTAPE 2 : SINGLE_USER
+            using (SqlCommand cmd = new SqlCommand(
+                "ALTER DATABASE [" + databaseName + "] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;", conn))
+            { cmd.ExecuteNonQuery(); }
+
+            try
             {
-                cmd.ExecuteNonQuery();
+                // ÉTAPE 3 : RESTORE
+                string restoreSql = "RESTORE DATABASE [" + databaseName + "] " +
+                                    "FROM DISK = N'" + windowsPath.Replace("'", "''") + "' " +
+                                    "WITH REPLACE, STATS = 10;";
+                using (SqlCommand cmd = new SqlCommand(restoreSql, conn))
+                {
+                    cmd.CommandTimeout = 3600;
+                    cmd.ExecuteNonQuery();
+                }
             }
-            
-            // ÉTAPE 2: Mode SINGLE_USER
-            string setSingleUserSql = @"
-                ALTER DATABASE [" + databaseName + @"]
-                SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
-            ";
-            
-            using (SqlCommand cmd = new SqlCommand(setSingleUserSql, conn))
+            finally
             {
-                cmd.ExecuteNonQuery();
+                // ÉTAPE 4 : MULTI_USER (toujours, même en cas d'échec)
+                try
+                {
+                    using (SqlCommand cmd = new SqlCommand(
+                        "ALTER DATABASE [" + databaseName + "] SET MULTI_USER;", conn))
+                    { cmd.ExecuteNonQuery(); }
+                }
+                catch { }
             }
-            
-            // ÉTAPE 3: Restaurer
-            string restoreSql = @"
-                RESTORE DATABASE [" + databaseName + @"]
-                FROM DISK = N'" + windowsPath.Replace("'", "''") + @"'
-                WITH REPLACE, STATS = 10;
-            ";
-            
-            using (SqlCommand cmd = new SqlCommand(restoreSql, conn))
+
+            var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
+            Response.Write(ser.Serialize(new
             {
-                cmd.CommandTimeout = 3600;
-                cmd.ExecuteNonQuery();
-            }
-            
-            // ÉTAPE 4: Mode MULTI_USER
-            string setMultiUserSql = @"
-                ALTER DATABASE [" + databaseName + @"]
-                SET MULTI_USER;
-            ";
-            
-            using (SqlCommand cmd = new SqlCommand(setMultiUserSql, conn))
-            {
-                cmd.ExecuteNonQuery();
-            }
-            
-            Response.Write("{\"success\":true,\"message\":\"Restauration réussie\"}");
+                success = true,
+                message = "Restauration réussie",
+                database = databaseName
+            }));
         }
     }
     catch (Exception ex)
     {
-        // ✅ Log sans exposer les détails
         LogError(ex);
         Response.Write("{\"success\":false,\"message\":\"Erreur lors de la restauration\"}");
     }
 }
 
-// ✅ Validation du chemin
+// ============================================================
+// RÉCUPÉRATION DYNAMIQUE DU NOM DE LA BASE
+// ============================================================
+private string GetApplicationDatabaseName()
+{
+    // 1) Tentative depuis la chaîne de connexion "MaConnexion"
+    var cs = ConfigurationManager.ConnectionStrings["MaConnexion"];
+    if (cs != null && !string.IsNullOrEmpty(cs.ConnectionString))
+    {
+        string name = ExtractDatabaseFromConnectionString(cs.ConnectionString);
+        if (!string.IsNullOrEmpty(name)) return name;
+    }
+
+    // 2) Fallback : interroger SQL directement
+    try
+    {
+        if (cs != null && !string.IsNullOrEmpty(cs.ConnectionString))
+        {
+            using (SqlConnection conn = new SqlConnection(cs.ConnectionString))
+            {
+                conn.Open();
+                using (SqlCommand cmd = new SqlCommand("SELECT DB_NAME()", conn))
+                {
+                    object result = cmd.ExecuteScalar();
+                    if (result != null && result != DBNull.Value)
+                        return result.ToString();
+                }
+            }
+        }
+    }
+    catch { }
+
+    return null;
+}
+
+private string ExtractDatabaseFromConnectionString(string connStr)
+{
+    if (string.IsNullOrEmpty(connStr)) return null;
+
+    try
+    {
+        var builder = new SqlConnectionStringBuilder(connStr);
+        if (!string.IsNullOrEmpty(builder.InitialCatalog))
+            return builder.InitialCatalog;
+    }
+    catch { }
+
+    return null;
+}
+
+private string ReplaceDatabaseInConnectionString(string connStr, string newDatabase)
+{
+    try
+    {
+        var builder = new SqlConnectionStringBuilder(connStr);
+        builder.InitialCatalog = newDatabase;
+        return builder.ConnectionString;
+    }
+    catch
+    {
+        return connStr;
+    }
+}
+
 private bool IsSecurePath(string path)
 {
     if (string.IsNullOrEmpty(path)) return false;
-    // Éviter les traversées de répertoires
     if (path.Contains("..")) return false;
-    // Vérifier l'extension
     string ext = Path.GetExtension(path).ToLower();
     return ext == ".bak" || ext == ".backup";
 }
 
-// ✅ Journalisation
 private void LogRestoreAction(SqlConnection conn, string databaseName, string filePath)
 {
     try
@@ -157,7 +254,8 @@ private void LogRestoreAction(SqlConnection conn, string databaseName, string fi
         using (SqlCommand cmd = new SqlCommand(sql, conn))
         {
             cmd.Parameters.AddWithValue("@UserId", AuthHelper.GetUserId(Context));
-            cmd.Parameters.AddWithValue("@Details", $"Restauration de {databaseName} depuis {filePath}");
+            cmd.Parameters.AddWithValue("@Details",
+                string.Format("Restauration de {0} depuis {1}", databaseName, filePath));
             cmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
             cmd.ExecuteNonQuery();
         }
@@ -170,7 +268,8 @@ private void LogError(Exception ex)
     try
     {
         string logFile = Server.MapPath("~/App_Data/restore_errors.log");
-        string entry = $"[{DateTime.Now}] {ex.Message}\n{ex.StackTrace}\n---\n";
+        string entry = string.Format("[{0}] {1}{2}{3}{2}---{2}",
+            DateTime.Now, ex.Message, Environment.NewLine, ex.StackTrace);
         File.AppendAllText(logFile, entry);
     }
     catch { }

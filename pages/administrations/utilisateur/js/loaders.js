@@ -1,8 +1,8 @@
 'use strict';
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================
 // LOADERS — Module Utilisateurs
-// ─────────────────────────────────────────────────────────────────────────────
+// ============================================================
 
 async function checkLicenceLimit() {
     try {
@@ -47,7 +47,7 @@ function loadUsers() {
     showPreloader();
     fetch(apiUrl(API_USERS.list))
         .then(safeJson)
-        .then(function(data) {
+        .then(function (data) {
             if (!Array.isArray(data)) {
                 console.error("Réponse invalide:", data);
                 return;
@@ -59,16 +59,16 @@ function loadUsers() {
             hidePreloader();
             checkLicenceLimit();
         })
-        .catch(function(err) {
+        .catch(function (err) {
             console.error(err);
             Swal.fire({
                 icon: 'error',
-                title: t('message.error'),
-                text: t('message.load_users_error')
+                title: T('message.error', 'Erreur'),
+                text:  T('message.load_users_error', 'Impossible de charger les utilisateurs')
             });
             hidePreloader();
         })
-        .finally(function() {
+        .finally(function () {
             hideSpinner();
         });
 }
@@ -78,8 +78,8 @@ function renderSimpleTable() {
     if (!tbody) return;
 
     var startIndex = (currentPage - 1) * rowsPerPage;
-    var endIndex = startIndex + rowsPerPage;
-    var pageUsers = filteredUsers.slice(startIndex, endIndex);
+    var endIndex   = startIndex + rowsPerPage;
+    var pageUsers  = filteredUsers.slice(startIndex, endIndex);
     var totalPages = Math.ceil(filteredUsers.length / rowsPerPage);
 
     tbody.innerHTML = '';
@@ -87,7 +87,7 @@ function renderSimpleTable() {
     if (!pageUsers.length) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:60px;">' +
             '<i class="fas fa-search" style="font-size:48px;color:#ccc;"></i><br>' +
-            t('message.no_users_found') +
+            T('message.no_users_found', 'Aucun utilisateur trouvé') +
             '</td></tr>';
         updateCounter();
         createPaginationControls(totalPages);
@@ -96,7 +96,7 @@ function renderSimpleTable() {
 
     var currentUserRole = parseInt(document.getElementById('hfUserRole')?.value || '-1', 10);
 
-    pageUsers.forEach(function(user) {
+    pageUsers.forEach(function (user) {
         var row = tbody.insertRow();
         var nameBadge = user.USERNAME ? '<span class="badge-name">' + escapeHtml(user.USERNAME) + '</span>' : '';
         row.insertCell(0).innerHTML = nameBadge;
@@ -105,24 +105,25 @@ function renderSimpleTable() {
         row.insertCell(3).innerHTML = getUserRoleName(user.ROLEID);
         row.insertCell(4).innerHTML = escapeHtml(user.TELEPHONE || '-');
         row.insertCell(5).innerHTML = formatDate(user.CREATED_AT);
-        row.insertCell(6).innerHTML = (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true')
-            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ ' + t('status.active') + '</span>'
-            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ ' + t('status.inactive') + '</span>';
+        row.insertCell(6).innerHTML =
+            (user.ACTIVE === true || user.ACTIVE === 1 || user.ACTIVE === 'true')
+                ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ ' +
+                      T('status.active', 'Actif') + '</span>'
+                : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ ' +
+                      T('status.inactive', 'Inactif') + '</span>';
 
         var isProtected = (user.ROLEID === 0 && currentUserRole !== 0);
-        var editTitle = isProtected ? t('message.only_superadmin_edit') : t('button.edit');
-        var deleteTitle = isProtected ? t('message.only_superadmin_delete') : t('button.delete');
+        var editTitle   = isProtected ? T('message.only_superadmin_edit',   'Seul un SuperAdmin peut modifier un SuperAdmin') : T('button.edit',   'Modifier');
+        var deleteTitle = isProtected ? T('message.only_superadmin_delete', 'Seul un SuperAdmin peut supprimer un SuperAdmin') : T('button.delete', 'Supprimer');
 
-        var editBtn = '<button type="button" ' +
-            'class="btn btn-sm ' + (isProtected ? 'btn-secondary' : 'btn-primary') + '" ' +
-            (isProtected ? 'disabled title="' + editTitle + '"' : 'title="' + editTitle + '"') +
-            ' onclick="openEditUserModal(' + user.IDUSER + ', event)">' +
+        var editBtn = '<button type="button" class="btn btn-sm ' + (isProtected ? 'btn-secondary' : 'btn-primary') + '" ' +
+            (isProtected ? 'disabled ' : '') + 'title="' + editTitle + '" ' +
+            'onclick="openEditUserModal(' + user.IDUSER + ', event)">' +
             '<i class="fas fa-edit"></i></button>';
 
-        var deleteBtn = '<button type="button" ' +
-            'class="btn btn-sm ' + (isProtected ? 'btn-secondary' : 'btn-danger') + '" ' +
-            (isProtected ? 'disabled title="' + deleteTitle + '"' : 'title="' + deleteTitle + '"') +
-            ' onclick="supprimerContact(' + user.IDUSER + ', event)">' +
+        var deleteBtn = '<button type="button" class="btn btn-sm ' + (isProtected ? 'btn-secondary' : 'btn-danger') + '" ' +
+            (isProtected ? 'disabled ' : '') + 'title="' + deleteTitle + '" ' +
+            'onclick="supprimerContact(' + user.IDUSER + ', event)">' +
             '<i class="fas fa-trash"></i></button>';
 
         row.insertCell(7).innerHTML = editBtn + ' ' + deleteBtn;
@@ -134,7 +135,7 @@ function renderSimpleTable() {
 
 function sortData(column) {
     sortDirection *= -1;
-    filteredUsers.sort(function(a, b) {
+    filteredUsers.sort(function (a, b) {
         var va = (a[column] || '').toString().toLowerCase();
         var vb = (b[column] || '').toString().toLowerCase();
         return va < vb ? -sortDirection : va > vb ? sortDirection : 0;
@@ -143,9 +144,8 @@ function sortData(column) {
     renderSimpleTable();
 }
 
-// Exposer globalement
 window.checkLicenceLimit = checkLicenceLimit;
-window.canActivateUser = canActivateUser;
-window.loadUsers = loadUsers;
+window.canActivateUser   = canActivateUser;
+window.loadUsers         = loadUsers;
 window.renderSimpleTable = renderSimpleTable;
-window.sortData = sortData;
+window.sortData          = sortData;

@@ -1,9 +1,13 @@
 'use strict';
 
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
+
 // ============================================================
 // SPINNER
 // ============================================================
-
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -23,19 +27,19 @@ function showSpinner() {
 function hideSpinner() { forceHideSpinner(); }
 
 // ============================================================
-// MODALES (ouverture/fermeture génériques)
+// MODALES
 // ============================================================
-
 function showModal(id) {
     var m = document.getElementById(id || 'categorieModal');
-    if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
+    if (m) {
+        m.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
 }
-// La fermeture est gérée par closeCategorieModal() dans crud.js
 
 // ============================================================
 // PAGINATION
 // ============================================================
-
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -73,8 +77,13 @@ function createPaginationControls(totalPages) {
         return btn;
     };
 
-    container.appendChild(createBtn('«', function () { if (AppState.page !== 1) { AppState.page = 1; loadCategories(); } }, AppState.page === 1));
-    container.appendChild(createBtn('‹', function () { if (AppState.page > 1) { AppState.page--; loadCategories(); } }, AppState.page === 1));
+    container.appendChild(createBtn('«', function () {
+        if (AppState.page !== 1) { AppState.page = 1; loadCategories(); }
+    }, AppState.page === 1));
+
+    container.appendChild(createBtn('‹', function () {
+        if (AppState.page > 1) { AppState.page--; loadCategories(); }
+    }, AppState.page === 1));
 
     var maxVisible = 5;
     var start = Math.max(1, AppState.page - Math.floor(maxVisible / 2));
@@ -95,12 +104,20 @@ function createPaginationControls(totalPages) {
     if (end < totalPages) {
         if (end < totalPages - 1) container.appendChild(createBtn('...', null, true, true));
         (function (tp) {
-            container.appendChild(createBtn(String(tp), function () { AppState.page = tp; loadCategories(); }));
+            container.appendChild(createBtn(String(tp), function () {
+                AppState.page = tp;
+                loadCategories();
+            }));
         })(totalPages);
     }
 
-    container.appendChild(createBtn('›', function () { if (AppState.page < totalPages) { AppState.page++; loadCategories(); } }, AppState.page === totalPages));
-    container.appendChild(createBtn('»', function () { if (AppState.page !== totalPages) { AppState.page = totalPages; loadCategories(); } }, AppState.page === totalPages));
+    container.appendChild(createBtn('›', function () {
+        if (AppState.page < totalPages) { AppState.page++; loadCategories(); }
+    }, AppState.page === totalPages));
+
+    container.appendChild(createBtn('»', function () {
+        if (AppState.page !== totalPages) { AppState.page = totalPages; loadCategories(); }
+    }, AppState.page === totalPages));
 
     wrapper.appendChild(container);
 }
@@ -108,27 +125,28 @@ function createPaginationControls(totalPages) {
 // ============================================================
 // FILTRES
 // ============================================================
-
 function applyFilters() {
-    const search = document.getElementById('search-filter')?.value || '';
-    const status = document.getElementById('status-filter')?.value || '';
-    AppState.filters.search = search;
-    AppState.filters.status = status;
+    var searchEl = document.getElementById('search-filter');
+    var statusEl = document.getElementById('status-filter');
+    AppState.filters.search = searchEl ? searchEl.value : '';
+    AppState.filters.status = statusEl ? statusEl.value : '';
     AppState.page = 1;
     loadCategories({ silent: true });
 }
+
 function resetFilters() {
-    document.getElementById('search-filter').value = '';
-    document.getElementById('status-filter').value = '';
+    var s = document.getElementById('search-filter');
+    var t2 = document.getElementById('status-filter');
+    if (s) s.value = '';
+    if (t2) t2.value = '';
     AppState.filters = { search: '', status: '' };
     AppState.page = 1;
     loadCategories({ silent: true });
 }
 
 // ============================================================
-// GESTION DU NOMBRE DE LIGNES PAR PAGE
+// LIGNES PAR PAGE
 // ============================================================
-
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
@@ -144,14 +162,17 @@ function initRowsPerPage() {
     if (!exists) {
         var opt = document.createElement('option');
         opt.value = currentSize;
-        opt.textContent = currentSize + ' par page';
+        opt.textContent = currentSize + ' / page';
         select.appendChild(opt);
         select.value = currentSize;
     }
     select.addEventListener('change', function () {
         var val = this.value;
         if (val === 'all') { AppState.pageSize = 999999; }
-        else { var newSize = parseInt(val, 10); if (!isNaN(newSize) && newSize > 0) AppState.pageSize = newSize; }
+        else {
+            var newSize = parseInt(val, 10);
+            if (!isNaN(newSize) && newSize > 0) AppState.pageSize = newSize;
+        }
         AppState.page = 1;
         loadCategories();
     });
@@ -160,7 +181,6 @@ function initRowsPerPage() {
 // ============================================================
 // ÉCOUTEURS DE FILTRES
 // ============================================================
-
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
     var statusSelect = document.getElementById('status-filter');
@@ -179,11 +199,9 @@ function initFilterListeners() {
 // ============================================================
 // INITIALISATION DES CONTRÔLES UI
 // ============================================================
-
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            // Utiliser closeCategorieModal défini dans crud.js
             if (typeof closeCategorieModal === 'function') {
                 closeCategorieModal();
             }
@@ -201,7 +219,6 @@ function initUIControls() {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
 
-    // Délégation pour la fermeture des modales par la croix
     document.addEventListener('click', function (e) {
         if (e.target && e.target.classList.contains('close')) {
             var modal = e.target.closest('.modal');
@@ -219,7 +236,6 @@ function initUIControls() {
 // ============================================================
 // EXPOSITIONS GLOBALES
 // ============================================================
-
 window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.forceHideSpinner = forceHideSpinner;

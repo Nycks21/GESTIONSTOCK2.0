@@ -1,18 +1,29 @@
+// utils.js — Helpers génériques ACCUSE
+
+function T(key, fallback, params) {
+    var v;
+    try {
+        if (typeof window.t === 'function') v = window.t(key, params);
+    } catch (e) { v = key; }
+    if (v && v !== key) return v;
+    return (fallback !== undefined) ? fallback : key;
+}
+
 function showToast(title, message, icon, timer) {
-    icon = icon || 'success';
+    icon  = icon  || 'success';
     timer = timer || 3000;
     if (typeof Swal === 'undefined') {
         console.warn('SweetAlert2 non chargé, fallback vers alert');
         alert((title || '') + (message ? '\n' + message : ''));
         return;
     }
-    var finalTitle = (title || '').toString();
+    var finalTitle   = (title   || '').toString();
     var finalMessage = (message || '').toString();
     if (!finalTitle && !finalMessage) {
-        finalTitle = 'Notification';
+        finalTitle = T('message.warning', 'Notification');
     }
     if (!finalTitle && finalMessage) {
-        finalTitle = finalMessage;
+        finalTitle   = finalMessage;
         finalMessage = '';
     }
     var Toast = Swal.mixin({
@@ -44,5 +55,6 @@ function debounce(fn, delay) {
     };
 }
 
+window.T         = T;
 window.showToast = showToast;
-window.debounce = debounce;
+window.debounce  = debounce;

@@ -1,5 +1,10 @@
 'use strict';
 
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
+
 // ============================================================
 // SPINNER
 // ============================================================
@@ -76,17 +81,11 @@ function createPaginationControls(totalPages) {
     };
 
     container.appendChild(createBtn('«', function () {
-        if (AppState.page !== 1) {
-            AppState.page = 1;
-            loadFournisseurs();
-        }
+        if (AppState.page !== 1) { AppState.page = 1; loadFournisseurs(); }
     }, AppState.page === 1));
 
     container.appendChild(createBtn('‹', function () {
-        if (AppState.page > 1) {
-            AppState.page--;
-            loadFournisseurs();
-        }
+        if (AppState.page > 1) { AppState.page--; loadFournisseurs(); }
     }, AppState.page === 1));
 
     var maxVisible = 5;
@@ -95,20 +94,14 @@ function createPaginationControls(totalPages) {
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
 
     if (start > 1) {
-        container.appendChild(createBtn('1', function () {
-            AppState.page = 1;
-            loadFournisseurs();
-        }));
+        container.appendChild(createBtn('1', function () { AppState.page = 1; loadFournisseurs(); }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
 
     for (var i = start; i <= end; i++) {
         (function (page) {
             container.appendChild(createBtn(String(page), function () {
-                if (page !== AppState.page) {
-                    AppState.page = page;
-                    loadFournisseurs();
-                }
+                if (page !== AppState.page) { AppState.page = page; loadFournisseurs(); }
             }));
         })(i);
     }
@@ -124,17 +117,11 @@ function createPaginationControls(totalPages) {
     }
 
     container.appendChild(createBtn('›', function () {
-        if (AppState.page < totalPages) {
-            AppState.page++;
-            loadFournisseurs();
-        }
+        if (AppState.page < totalPages) { AppState.page++; loadFournisseurs(); }
     }, AppState.page === totalPages));
 
     container.appendChild(createBtn('»', function () {
-        if (AppState.page !== totalPages) {
-            AppState.page = totalPages;
-            loadFournisseurs();
-        }
+        if (AppState.page !== totalPages) { AppState.page = totalPages; loadFournisseurs(); }
     }, AppState.page === totalPages));
 
     wrapper.appendChild(container);
@@ -144,24 +131,26 @@ function createPaginationControls(totalPages) {
 // FILTRES
 // ============================================================
 function applyFilters() {
-    const search = document.getElementById('search-filter')?.value || '';
-    const actif = document.getElementById('actif-filter')?.value || '';
-    AppState.filters.search = search;
-    AppState.filters.actif = actif;
+    var searchEl = document.getElementById('search-filter');
+    var actifEl = document.getElementById('actif-filter');
+    AppState.filters.search = searchEl ? searchEl.value : '';
+    AppState.filters.actif = actifEl ? actifEl.value : '';
     AppState.page = 1;
     loadFournisseurs({ silent: true });
 }
 
 function resetFilters() {
-    document.getElementById('search-filter').value = '';
-    document.getElementById('actif-filter').value = '';
+    var s = document.getElementById('search-filter');
+    var a = document.getElementById('actif-filter');
+    if (s) s.value = '';
+    if (a) a.value = '';
     AppState.filters = { search: '', actif: '' };
     AppState.page = 1;
     loadFournisseurs({ silent: true });
 }
 
 // ============================================================
-// GESTION DU NOMBRE DE LIGNES PAR PAGE
+// LIGNES PAR PAGE
 // ============================================================
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
@@ -178,7 +167,7 @@ function initRowsPerPage() {
     if (!optionExists) {
         var opt = document.createElement('option');
         opt.value = currentSize;
-        opt.textContent = currentSize + ' par page';
+        opt.textContent = currentSize + ' / page';
         select.appendChild(opt);
         select.value = currentSize;
     }
@@ -188,9 +177,7 @@ function initRowsPerPage() {
             AppState.pageSize = 999999;
         } else {
             var newSize = parseInt(val, 10);
-            if (!isNaN(newSize) && newSize > 0) {
-                AppState.pageSize = newSize;
-            }
+            if (!isNaN(newSize) && newSize > 0) AppState.pageSize = newSize;
         }
         AppState.page = 1;
         loadFournisseurs();
@@ -207,9 +194,7 @@ function initFilterListeners() {
         var timeoutId = null;
         searchInput.addEventListener('input', function () {
             clearTimeout(timeoutId);
-            timeoutId = setTimeout(function () {
-                applyFilters();
-            }, 300);
+            timeoutId = setTimeout(function () { applyFilters(); }, 300);
         });
     }
     if (actifSelect) {
@@ -223,7 +208,6 @@ function initFilterListeners() {
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            // Utiliser closeFournisseurModal défini dans crud.js
             if (typeof closeFournisseurModal === 'function') {
                 closeFournisseurModal();
             }
@@ -231,7 +215,6 @@ function initUIControls() {
     });
     initFilterListeners();
     initRowsPerPage();
-    // Sécuriser le formulaire
     var form = document.getElementById('fournisseurForm');
     if (form) {
         form.setAttribute('novalidate', 'novalidate');

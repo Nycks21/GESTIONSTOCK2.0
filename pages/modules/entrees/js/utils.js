@@ -1,20 +1,38 @@
+// utils.js — Helpers génériques
+
+// ============================================================
+// Helper i18n local : T(key, fallback, params)
+// ============================================================
+function T(key, fallback, params) {
+    var v;
+    try {
+        if (typeof window.t === 'function') v = window.t(key, params);
+    } catch (e) { v = key; }
+    if (v && v !== key) return v;
+    return (fallback !== undefined) ? fallback : key;
+}
+
 function showToast(title, message, icon, timer) {
-    icon = icon || 'success';
+    icon  = icon  || 'success';
     timer = timer || 3000;
+
     if (typeof Swal === 'undefined') {
         console.warn('SweetAlert2 non chargé, fallback vers alert');
         alert((title || '') + (message ? '\n' + message : ''));
         return;
     }
-    var finalTitle = (title || '').toString();
+
+    var finalTitle   = (title   || '').toString();
     var finalMessage = (message || '').toString();
+
     if (!finalTitle && !finalMessage) {
-        finalTitle = 'Notification';
+        finalTitle = T('message.warning', 'Notification');
     }
     if (!finalTitle && finalMessage) {
-        finalTitle = finalMessage;
+        finalTitle   = finalMessage;
         finalMessage = '';
     }
+
     var Toast = Swal.mixin({
         toast: true,
         position: 'top-end',
@@ -26,10 +44,11 @@ function showToast(title, message, icon, timer) {
             toast.addEventListener('mouseleave', Swal.resumeTimer);
         }
     });
+
     Toast.fire({
-        icon: icon,
+        icon:  icon,
         title: finalTitle,
-        text: finalMessage || undefined
+        text:  finalMessage || undefined
     });
 }
 
@@ -37,12 +56,12 @@ function debounce(fn, delay) {
     var timer;
     return function () {
         var args = arguments;
+        var ctx  = this;
         clearTimeout(timer);
-        timer = setTimeout(function () {
-            fn.apply(this, args);
-        }.bind(this), delay);
+        timer = setTimeout(function () { fn.apply(ctx, args); }, delay);
     };
 }
 
+window.T         = T;
 window.showToast = showToast;
-window.debounce = debounce;
+window.debounce  = debounce;

@@ -1,6 +1,12 @@
-// crud.js – Version avec génération automatique du CODE côté serveur
+// crud.js – Version avec génération automatique du CODE côté serveur + i18n
 var currentUniteId = null;
 var currentMode = 'add'; // 'add', 'edit', 'view'
+
+// ─── Helper i18n défensif (au cas où i18n.js n'est pas encore prêt) ───
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
 
 // ============================================================
 // UTILITAIRE : activer / désactiver les champs du modal
@@ -26,14 +32,17 @@ function openAddUniteModal(e) {
     if (e) e.preventDefault();
     currentUniteId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-ruler"></i> Ajouter une unité';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-ruler"></i> ' + _t('unites.modal.add_title');
+
     document.getElementById('uniteForm').reset();
     document.getElementById('uniteActif').value = '1';
 
     // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
     var codeEl = document.getElementById('uniteCode');
     codeEl.value = '';
-    codeEl.placeholder = 'Sera généré automatiquement (UNT-XXX-00001)';
+    codeEl.placeholder = _t('unites.modal.code_auto_placeholder');
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
@@ -58,7 +67,9 @@ function editUnite(id) {
     if (!unite) return;
     currentUniteId = id;
     currentMode = 'edit';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier une unité';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-edit"></i> ' + _t('unites.modal.edit_title');
 
     var codeEl = document.getElementById('uniteCode');
     codeEl.value = unite.CODE || '';
@@ -89,7 +100,9 @@ function viewUnite(id) {
     if (!unite) return;
     currentUniteId = id;
     currentMode = 'view';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails de l\'unité';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-eye"></i> ' + _t('unites.modal.view_title');
 
     var codeEl = document.getElementById('uniteCode');
     codeEl.value = unite.CODE || '';
@@ -114,7 +127,7 @@ async function saveUnite(e) {
     e.preventDefault();
 
     if (currentMode === 'view') {
-        showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
+        showToast(_t('unites.msg.info'), _t('unites.msg.view_mode'), 'info');
         return;
     }
 
@@ -131,7 +144,10 @@ async function saveUnite(e) {
     // Validation : seul le nom est requis
     var valid = true;
     clearErrors();
-    if (!data.nom) { showError('uniteNom', 'Le nom est requis'); valid = false; }
+    if (!data.nom) {
+        showError('uniteNom', _t('unites.msg.name_required'));
+        valid = false;
+    }
     if (!valid) return;
 
     var endpoint = id ? API.EDIT : API.ADD;
@@ -148,18 +164,19 @@ async function saveUnite(e) {
         var result = await resp.json();
 
         if (result.success) {
-            // Afficher le code généré s'il est renvoyé par le serveur
-            var msg = result.message || (id ? 'Unité modifiée' : 'Unité ajoutée');
-            if (result.code && !id) msg = 'Unité ajoutée avec succès (' + result.code + ').';
-            showToast('Succès', msg, 'success');
+            var msg = result.message || (id ? _t('unites.msg.updated') : _t('unites.msg.added'));
+            if (result.code && !id) {
+                msg = _t('unites.msg.added_with_code').replace('{code}', result.code);
+            }
+            showToast(_t('message.success'), msg, 'success');
             closeUniteModal();
             loadUnites();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Une erreur est survenue', 'error');
+            showToast(_t('message.error'), result.message || _t('message.error'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -170,14 +187,14 @@ async function saveUnite(e) {
 // ============================================================
 async function deleteUnite(id) {
     var confirmResult = await Swal.fire({
-        title: 'Confirmer la suppression',
-        text: 'Voulez-vous vraiment supprimer cette unité ?',
+        title: _t('unites.confirm.delete_title'),
+        text: _t('unites.confirm.delete_text'),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
+        confirmButtonText: _t('unites.confirm.delete_yes'),
+        cancelButtonText: _t('button.cancel')
     });
     if (!confirmResult.isConfirmed) return;
 
@@ -191,14 +208,14 @@ async function deleteUnite(id) {
         });
         var result = await resp.json();
         if (result.success) {
-            showToast('Succès', 'Unité supprimée', 'success');
+            showToast(_t('message.success'), _t('unites.msg.deleted'), 'success');
             loadUnites();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Échec de la suppression', 'error');
+            showToast(_t('message.error'), result.message || _t('unites.msg.delete_failed'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -213,7 +230,9 @@ function closeUniteModal() {
     // Réinitialiser l'état pour le prochain usage
     currentUniteId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-ruler"></i> Ajouter une unité';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-ruler"></i> ' + _t('unites.modal.add_title');
 
     setFieldsEnabled(true);
 
@@ -221,7 +240,7 @@ function closeUniteModal() {
     var codeEl = document.getElementById('uniteCode');
     if (codeEl) {
         codeEl.value = '';
-        codeEl.placeholder = 'Sera généré automatiquement (UNT-XXX-00001)';
+        codeEl.placeholder = _t('unites.modal.code_auto_placeholder');
         codeEl.readOnly = true;
         codeEl.style.backgroundColor = '#e9ecef';
         codeEl.style.cursor = 'not-allowed';
@@ -236,7 +255,10 @@ function closeUniteModal() {
 // ============================================================
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
-    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+    }
 }
 
 function clearErrors() {

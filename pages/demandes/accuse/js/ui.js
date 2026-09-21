@@ -22,20 +22,14 @@ function hideSpinner() { forceHideSpinner(); }
 
 function showModal(id) {
     var m = document.getElementById(id || 'accuseModal');
-    if (m) {
-        m.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    }
+    if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
 }
 function closeModal(id) {
     var m = document.getElementById(id || 'accuseModal');
-    if (m) {
-        m.style.display = 'none';
-        document.body.style.overflow = '';
-    }
+    if (m) { m.style.display = 'none'; document.body.style.overflow = ''; }
 }
 
-// Pagination
+// ─── Pagination ───
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -48,7 +42,7 @@ function createPaginationControls(totalPages) {
 
     var createBtn = function (text, onClick, disabled, isDots) {
         disabled = disabled || false;
-        isDots = isDots || false;
+        isDots   = isDots   || false;
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = text;
@@ -64,89 +58,64 @@ function createPaginationControls(totalPages) {
             + 'color:' + (isActive ? 'white' : (disabled ? '#6c757d' : '#007bff')) + ';'
             + 'cursor:' + (disabled || isActive ? 'default' : 'pointer') + ';border-radius:6px;font-weight:' + (isActive ? '700' : '500') + ';min-width:40px;';
         if (onClick && !disabled && !isActive) {
-            btn.addEventListener('click', function (e) {
-                e.preventDefault();
-                onClick();
-            });
+            btn.addEventListener('click', function (e) { e.preventDefault(); onClick(); });
         }
         if (disabled) btn.disabled = true;
         return btn;
     };
 
     container.appendChild(createBtn('«', function () {
-        if (AppState.page !== 1) {
-            AppState.page = 1;
-            loadAccuse();
-        }
+        if (AppState.page !== 1) { AppState.page = 1; loadAccuse(); }
     }, AppState.page === 1));
-
     container.appendChild(createBtn('‹', function () {
-        if (AppState.page > 1) {
-            AppState.page--;
-            loadAccuse();
-        }
+        if (AppState.page > 1) { AppState.page--; loadAccuse(); }
     }, AppState.page === 1));
 
     var maxVisible = 5;
     var start = Math.max(1, AppState.page - Math.floor(maxVisible / 2));
-    var end = Math.min(totalPages, start + maxVisible - 1);
+    var end   = Math.min(totalPages, start + maxVisible - 1);
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
 
     if (start > 1) {
-        container.appendChild(createBtn('1', function () {
-            AppState.page = 1;
-            loadAccuse();
-        }));
+        container.appendChild(createBtn('1', function () { AppState.page = 1; loadAccuse(); }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
-
     for (var i = start; i <= end; i++) {
         (function (page) {
             container.appendChild(createBtn(String(page), function () {
-                if (page !== AppState.page) {
-                    AppState.page = page;
-                    loadAccuse();
-                }
+                if (page !== AppState.page) { AppState.page = page; loadAccuse(); }
             }));
         })(i);
     }
-
     if (end < totalPages) {
         if (end < totalPages - 1) container.appendChild(createBtn('...', null, true, true));
         (function (tp) {
             container.appendChild(createBtn(String(tp), function () {
-                AppState.page = tp;
-                loadAccuse();
+                AppState.page = tp; loadAccuse();
             }));
         })(totalPages);
     }
 
     container.appendChild(createBtn('›', function () {
-        if (AppState.page < totalPages) {
-            AppState.page++;
-            loadAccuse();
-        }
+        if (AppState.page < totalPages) { AppState.page++; loadAccuse(); }
     }, AppState.page === totalPages));
-
     container.appendChild(createBtn('»', function () {
-        if (AppState.page !== totalPages) {
-            AppState.page = totalPages;
-            loadAccuse();
-        }
+        if (AppState.page !== totalPages) { AppState.page = totalPages; loadAccuse(); }
     }, AppState.page === totalPages));
 
     wrapper.appendChild(container);
 }
 
-// Filtres
+// ─── Filtres ───
 function applyFilters() {
-    var search = document.getElementById('search-filter')?.value || '';
+    var search      = document.getElementById('search-filter')?.value || '';
     var destination = document.getElementById('destination-filter')?.value || '';
     AppState.filters.search = search;
     AppState.filters.destination = destination;
     AppState.page = 1;
     loadAccuse({ silent: true });
 }
+
 function resetFilters() {
     document.getElementById('search-filter').value = '';
     document.getElementById('destination-filter').value = '';
@@ -155,7 +124,7 @@ function resetFilters() {
     loadAccuse({ silent: true });
 }
 
-// Lignes par page
+// ─── Lignes par page ───
 function initRowsPerPage() {
     var select = document.getElementById('rows-per-page-top');
     if (!select) return;
@@ -171,7 +140,7 @@ function initRowsPerPage() {
     if (!exists) {
         var opt = document.createElement('option');
         opt.value = currentSize;
-        opt.textContent = currentSize + ' par page';
+        opt.textContent = currentSize + ' ' + T('accuses.rows_per_page.suffix', 'par page');
         select.appendChild(opt);
         select.value = currentSize;
     }
@@ -189,12 +158,12 @@ function initRowsPerPage() {
 
 function initFilterListeners() {
     var searchInput = document.getElementById('search-filter');
-    var destSelect = document.getElementById('destination-filter');
+    var destSelect  = document.getElementById('destination-filter');
     var timeoutId = null;
     if (searchInput) {
         searchInput.addEventListener('input', function () {
             clearTimeout(timeoutId);
-            timeoutId = setTimeout(function() { applyFilters(); }, 300);
+            timeoutId = setTimeout(function () { applyFilters(); }, 300);
         });
     }
     if (destSelect) destSelect.addEventListener('change', applyFilters);
@@ -216,13 +185,25 @@ function initUIControls() {
     document.querySelectorAll('button').forEach(function (btn) {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
+
+    window.sortData = function (field) {
+        if (AppState.sortField === field) {
+            AppState.sortOrder = AppState.sortOrder === 'ASC' ? 'DESC' : 'ASC';
+        } else {
+            AppState.sortField = field;
+            AppState.sortOrder = 'ASC';
+        }
+        loadAccuse();
+    };
 }
 
-window.showSpinner = showSpinner;
-window.hideSpinner = hideSpinner;
-window.showModal = showModal;
-window.closeModal = closeModal;
+window.showSpinner              = showSpinner;
+window.hideSpinner              = hideSpinner;
+window.showModal                = showModal;
+window.closeModal               = closeModal;
 window.createPaginationControls = createPaginationControls;
-window.initUIControls = initUIControls;
-window.applyFilters = applyFilters;
-window.resetFilters = resetFilters;
+window.initUIControls           = initUIControls;
+window.applyFilters             = applyFilters;
+window.resetFilters             = resetFilters;
+window.initRowsPerPage          = initRowsPerPage;
+window.initFilterListeners      = initFilterListeners;

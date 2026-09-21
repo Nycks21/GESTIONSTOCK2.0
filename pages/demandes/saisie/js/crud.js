@@ -2,7 +2,7 @@
 // SAISIE - CRUD (ADD / EDIT / VIEW)
 // ============================================================
 
-var currentMode = 'add'; // 'add', 'edit', 'view'
+var currentMode = 'add';
 
 // ─── Utilitaires ───────────────────────────────────────────
 function toLocalISO(date) {
@@ -27,13 +27,11 @@ function getModalTitle() {
     return title;
 }
 
-// ✅ Retourne le NOM de l'utilisateur connecté (injecté par le serveur)
 function getCurrentUserNom() {
     var hf = document.getElementById('hfUserNom');
     return (hf && hf.value) ? hf.value : '';
 }
 
-// ✅ Force le champ Bénéficiaire à rester readonly
 function lockBeneficiaire() {
     var nomInput = document.getElementById('sortieNom');
     if (!nomInput) return;
@@ -42,7 +40,6 @@ function lockBeneficiaire() {
     nomInput.style.cursor = 'not-allowed';
 }
 
-// ─── ReadOnly numéro ───────────────────────────────────────
 function setNumeroReadOnly() {
     var numEl = document.getElementById('sortieNumero');
     if (!numEl) return;
@@ -52,14 +49,13 @@ function setNumeroReadOnly() {
     numEl.style.cursor = 'not-allowed';
 }
 
-// ─── Loading bouton ────────────────────────────────────────
 function setButtonLoading(btn, loading, loadingText) {
     if (!btn) return;
     if (loading) {
         if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
         btn.disabled = true;
         btn.style.opacity = '0.75';
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (loadingText || 'Traitement…');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' + (loadingText || '…');
     } else {
         btn.disabled = false;
         btn.style.opacity = '1';
@@ -70,13 +66,10 @@ function setButtonLoading(btn, loading, loadingText) {
     }
 }
 
-// ─── Activer/désactiver les champs ─────────────────────────
 function setFieldsEnabled(enabled) {
     var inputs = document.querySelectorAll('#saisieModal input, #saisieModal select, #saisieModal textarea');
     for (var i = 0; i < inputs.length; i++) {
-        // Le numéro ET le bénéficiaire restent readonly (jamais disabled)
         if (inputs[i].id === 'sortieNumero' || inputs[i].id === 'sortieNom') continue;
-
         inputs[i].disabled = !enabled;
         if (!enabled) {
             inputs[i].style.backgroundColor = '#e9ecef';
@@ -90,7 +83,6 @@ function setFieldsEnabled(enabled) {
             inputs[i].style.borderColor = '';
         }
     }
-
     var ligneBtns = document.querySelectorAll('#saisieModal .btn-ligne-action');
     for (var j = 0; j < ligneBtns.length; j++) {
         if (ligneBtns[j].getAttribute('data-keep-active') === 'true') {
@@ -101,7 +93,6 @@ function setFieldsEnabled(enabled) {
     }
 }
 
-// ─── Visibilité des boutons d'action ───────────────────────
 function setActionButtonsVisible(visible) {
     var btnSave = document.getElementById('btnSaveSaisie');
     if (btnSave) btnSave.style.display = visible ? '' : 'none';
@@ -124,8 +115,11 @@ function openModalSaisie(e) {
     if (e) e.preventDefault();
     AppState.editingId = null;
     currentMode = 'add';
+
     var title = getModalTitle();
-    if (title) title.innerHTML = '<i class="fas fa-plus"></i> Nouvelle demande';
+    if (title) title.innerHTML =
+        '<i class="fas fa-plus"></i> ' + T('saisies.modal.add_title_short', 'Nouvelle demande');
+
     resetFormSaisie();
     setFieldsEnabled(true);
     setNumeroReadOnly();
@@ -133,10 +127,14 @@ function openModalSaisie(e) {
     setActionButtonsVisible(true);
     document.getElementById('saisieModal').style.display = 'flex';
 
-    // ✅ Rappel discret
     var nomConnecte = getCurrentUserNom();
     if (nomConnecte) {
-        showToast('Info', 'Bénéficiaire automatique : ' + nomConnecte, 'info', 2500);
+        showToast(
+            T('saisies.msg.info', 'Info'),
+            T('saisies.msg.beneficiaire_auto', 'Bénéficiaire automatique : {nom}', { nom: nomConnecte }),
+            'info',
+            2500
+        );
     }
 }
 
@@ -159,14 +157,13 @@ function resetFormSaisie() {
     var numero = document.getElementById('sortieNumero');
     if (numero) {
         numero.value = '';
-        numero.placeholder = 'Sera généré automatiquement';
+        numero.placeholder = T('saisies.modal.numero_auto_placeholder', 'Sera généré automatiquement');
     }
     var date = document.getElementById('sortieDate');
     if (date) date.value = toLocalISO(new Date());
     var dest = document.getElementById('sortieDestination');
     if (dest) dest.value = '';
 
-    // ✅ Bénéficiaire : rempli automatiquement avec l'utilisateur connecté
     var nom = document.getElementById('sortieNom');
     if (nom) nom.value = getCurrentUserNom();
 
@@ -198,7 +195,6 @@ function chargerDemandeDansModal(demande) {
     var dest = document.getElementById('sortieDestination');
     if (dest) dest.value = demande.DESTINATION || '';
 
-    // ✅ Bénéficiaire : valeur historique (VIEW/EDIT)
     var nom = document.getElementById('sortieNom');
     if (nom) nom.value = demande.NOM || getCurrentUserNom();
 
@@ -226,21 +222,21 @@ function chargerDemandeDansModal(demande) {
 async function saveSaisie(e) {
     e.preventDefault();
     if (currentMode === 'view') {
-        showToast('Info', 'Vous êtes en consultation, aucune modification possible.', 'info');
+        showToast(T('saisies.msg.info', 'Info'),
+                  T('saisies.msg.view_mode', 'Vous êtes en consultation, aucune modification possible.'),
+                  'info');
         return;
     }
 
     var id = AppState.editingId;
     var data = {
-        dateSortie: document.getElementById('sortieDate').value,
+        dateSortie:  document.getElementById('sortieDate').value,
         destination: document.getElementById('sortieDestination').value.trim(),
-        // ✅ Envoie le nom de la session (le serveur le revérifie de toute façon)
-        nom: getCurrentUserNom(),
-        fonction: document.getElementById('sortieFonction').value.trim(),
-        notes: document.getElementById('sortieNotes').value.trim(),
-        lignes: getLignesFromModal(),
-        // ✅ Marqueur : le serveur doit utiliser AuthHelper.GetUserFullName()
-        source: 'saisie'
+        nom:         getCurrentUserNom(),
+        fonction:    document.getElementById('sortieFonction').value.trim(),
+        notes:       document.getElementById('sortieNotes').value.trim(),
+        lignes:      getLignesFromModal(),
+        source:      'saisie'
     };
 
     if (id) {
@@ -250,20 +246,31 @@ async function saveSaisie(e) {
 
     var valid = true;
     clearErrors();
-    if (!data.dateSortie) { showError('sortieDate', 'La date est requise'); valid = false; }
-    if (!data.destination) { showError('sortieDestination', 'La destination est requise'); valid = false; }
-    if (!data.lignes.length) { showToast('Erreur', 'Ajoutez au moins une ligne d\'article', 'error'); valid = false; }
+    if (!data.dateSortie) {
+        showError('sortieDate', T('saisies.msg.date_required', 'La date est requise'));
+        valid = false;
+    }
+    if (!data.destination) {
+        showError('sortieDestination', T('saisies.msg.destination_required', 'La destination est requise'));
+        valid = false;
+    }
+    if (!data.lignes.length) {
+        showToast(T('message.error', 'Erreur'),
+                  T('saisies.msg.line_required', "Ajoutez au moins une ligne d'article"),
+                  'error');
+        valid = false;
+    }
     if (!valid) return;
 
     var endpoint = id ? API.EDIT : API.ADD;
-    var payload = id ? Object.assign({}, data, { id: id }) : data;
-    var btnSave = document.getElementById('btnSaveSaisie');
+    var payload  = id ? Object.assign({}, data, { id: id }) : data;
+    var btnSave  = document.getElementById('btnSaveSaisie');
 
     try {
         showSpinner();
-        setButtonLoading(btnSave, true, 'Enregistrement…');
+        setButtonLoading(btnSave, true, '…');
 
-        var url = API.BASE + API.HANDLERS_PATH + endpoint;
+        var url  = API.BASE + API.HANDLERS_PATH + endpoint;
         var resp = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -272,17 +279,27 @@ async function saveSaisie(e) {
         var result = await resp.json();
 
         if (result.success) {
-            var msg = result.message || (id ? 'Demande modifiée' : 'Demande créée');
-            if (result.numero && !id) msg = 'Demande créée avec succès (' + result.numero + ').';
-            showToast('Succès', msg, 'success');
+            var msg;
+            if (result.numero && !id) {
+                msg = T('saisies.msg.added_with_numero',
+                        'Demande créée avec succès ({numero}).',
+                        { numero: result.numero });
+            } else {
+                msg = result.message || (id
+                    ? T('saisies.msg.updated', 'Demande modifiée')
+                    : T('saisies.msg.added',   'Demande créée'));
+            }
+            showToast(T('message.success', 'Succès'), msg, 'success');
             closeModalSaisie();
             loadDemandes();
             loadDemandesStats();
         } else {
-            showToast('Erreur', result.message || 'Échec de l\'opération', 'error');
+            showToast(T('message.error', 'Erreur'),
+                      result.message || T('saisies.msg.save_error', "Échec de l'opération"),
+                      'error');
         }
     } catch (err) {
-        showToast('Erreur', err.message, 'error');
+        showToast(T('message.error', 'Erreur'), err.message, 'error');
     } finally {
         setButtonLoading(btnSave, false);
         hideSpinner();
@@ -299,7 +316,8 @@ function viewDemande(id) {
     currentMode = 'view';
 
     var title = getModalTitle();
-    if (title) title.innerHTML = '<i class="fas fa-eye"></i> Détails de la demande';
+    if (title) title.innerHTML =
+        '<i class="fas fa-eye"></i> ' + T('saisies.modal.view_title', 'Détails de la demande');
 
     chargerDemandeDansModal(demande);
     setFieldsEnabled(false);
@@ -326,13 +344,18 @@ function editDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
     if (!demande) return;
     if (demande.STATUT !== 'BROUILLON') {
-        showToast('Attention', 'Cette demande est déjà validée et ne peut pas être modifiée.', 'warning');
+        showToast(T('message.warning', 'Attention'),
+                  T('saisies.msg.edit_locked', 'Cette demande est déjà validée et ne peut pas être modifiée.'),
+                  'warning');
         return;
     }
     AppState.editingId = id;
     currentMode = 'edit';
+
     var title = getModalTitle();
-    if (title) title.innerHTML = '<i class="fas fa-edit"></i> Modifier la demande';
+    if (title) title.innerHTML =
+        '<i class="fas fa-edit"></i> ' + T('saisies.modal.edit_title', 'Modifier la demande');
+
     chargerDemandeDansModal(demande);
     setFieldsEnabled(true);
     setNumeroReadOnly();
@@ -343,35 +366,42 @@ function editDemande(id) {
 }
 
 // ============================================================
-// SUPPRESSION (avec mot de passe)
+// SUPPRESSION
 // ============================================================
 async function deleteDemande(id) {
     var demande = AppState.sorties.find(function (s) { return s.ID === id; });
     if (demande && demande.STATUT !== 'BROUILLON') {
-        showToast('Attention', 'Impossible de supprimer une demande validée.', 'warning');
+        showToast(T('message.warning', 'Attention'),
+                  T('saisies.msg.delete_validated', 'Impossible de supprimer une demande validée.'),
+                  'warning');
         return;
     }
 
     var confirmResult = await Swal.fire({
-        title: 'Confirmer la suppression',
+        title: T('saisies.confirm.delete_title', 'Confirmer la suppression'),
         html:
             '<p style="margin-bottom:14px;color:#495057;">' +
-                'Voulez-vous vraiment supprimer cette demande ?' +
+                T('saisies.msg.delete_confirm', 'Voulez-vous vraiment supprimer cette demande ?') +
             '</p>' +
             '<div style="text-align:left;">' +
-                '<label for="swalDeletePwd" style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;color:#212529;">' +
-                    'Mot de passe de suppression <span style="color:#dc3545;">*</span>' +
+                '<label for="swalDeletePwd" style="font-weight:600;font-size:13px;' +
+                       'display:block;margin-bottom:6px;color:#212529;">' +
+                    T('saisies.msg.delete_pwd_label', 'Mot de passe de suppression') +
+                    ' <span style="color:#dc3545;">*</span>' +
                 '</label>' +
                 '<input type="password" id="swalDeletePwd" class="swal2-input" autocomplete="off" ' +
-                    'placeholder="Saisissez le mot de passe" style="width:100%;margin:0;box-sizing:border-box;" />' +
-                '<div id="swalDeletePwdError" style="color:#dc3545;font-size:12.5px;margin-top:6px;display:none;font-weight:600;"></div>' +
+                    'placeholder="' + T('saisies.msg.delete_pwd_placeholder', 'Saisissez le mot de passe') + '" ' +
+                    'style="width:100%;margin:0;box-sizing:border-box;" />' +
+                '<div id="swalDeletePwdError" style="color:#dc3545;font-size:12.5px;' +
+                     'margin-top:6px;display:none;font-weight:600;"></div>' +
             '</div>',
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#6c757d',
-        confirmButtonText: '<i class="fas fa-trash"></i> Confirmer la suppression',
-        cancelButtonText: 'Annuler',
+        confirmButtonText: '<i class="fas fa-trash"></i> ' +
+            T('saisies.msg.delete_confirm_btn', 'Confirmer la suppression'),
+        cancelButtonText: T('button.cancel', 'Annuler'),
         reverseButtons: true,
         focusConfirm: false,
         didOpen: function () {
@@ -380,19 +410,19 @@ async function deleteDemande(id) {
         },
         preConfirm: async function () {
             var pwdInput = document.getElementById('swalDeletePwd');
-            var errEl = document.getElementById('swalDeletePwdError');
-            var pwd = pwdInput ? pwdInput.value : '';
+            var errEl    = document.getElementById('swalDeletePwdError');
+            var pwd      = pwdInput ? pwdInput.value : '';
 
             if (!pwd) {
                 if (errEl) {
-                    errEl.textContent = 'Veuillez saisir le mot de passe.';
+                    errEl.textContent = T('saisies.msg.delete_pwd_required', 'Veuillez saisir le mot de passe.');
                     errEl.style.display = 'block';
                 }
                 return false;
             }
 
             try {
-                var url = API.BASE + API.HANDLERS_PATH + API.DELETE;
+                var url  = API.BASE + API.HANDLERS_PATH + API.DELETE;
                 var resp = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -400,10 +430,10 @@ async function deleteDemande(id) {
                 });
                 var result = await resp.json();
                 if (result && result.success) {
-                    return { message: result.message || 'Demande supprimée' };
+                    return { message: result.message || T('saisies.msg.deleted', 'Demande supprimée') };
                 }
                 if (errEl) {
-                    errEl.textContent = result.message || 'Mot de passe incorrect.';
+                    errEl.textContent = result.message || T('saisies.msg.delete_pwd_bad', 'Mot de passe incorrect.');
                     errEl.style.display = 'block';
                 }
                 if (pwdInput) { pwdInput.value = ''; pwdInput.focus(); }
@@ -420,13 +450,15 @@ async function deleteDemande(id) {
 
     if (!confirmResult.isConfirmed || !confirmResult.value) return;
 
-    showToast('Succès', confirmResult.value.message || 'Demande supprimée', 'success');
+    showToast(T('message.success', 'Succès'),
+              confirmResult.value.message || T('saisies.msg.deleted', 'Demande supprimée'),
+              'success');
     loadDemandes();
     loadDemandesStats();
 }
 
 // ============================================================
-// ERREURS
+// ERREURS DE CHAMP
 // ============================================================
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
@@ -443,19 +475,20 @@ function clearErrors() {
 // ============================================================
 // EXPOSITIONS
 // ============================================================
-window.openModalSaisie = openModalSaisie;
-window.closeModalSaisie = closeModalSaisie;
-window.resetFormSaisie = resetFormSaisie;
-window.saveSaisie = saveSaisie;
-window.viewDemande = viewDemande;
-window.editDemande = editDemande;
-window.deleteDemande = deleteDemande;
-window.showError = showError;
-window.clearErrors = clearErrors;
-window.setFieldsEnabled = setFieldsEnabled;
+window.openModalSaisie         = openModalSaisie;
+window.closeModalSaisie        = closeModalSaisie;
+window.resetFormSaisie         = resetFormSaisie;
+window.saveSaisie              = saveSaisie;
+window.viewDemande             = viewDemande;
+window.editDemande             = editDemande;
+window.deleteDemande           = deleteDemande;
+window.showError               = showError;
+window.clearErrors             = clearErrors;
+window.setFieldsEnabled        = setFieldsEnabled;
 window.setActionButtonsVisible = setActionButtonsVisible;
-window.getModalTitle = getModalTitle;
-window.setNumeroReadOnly = setNumeroReadOnly;
-window.setButtonLoading = setButtonLoading;
-window.getCurrentUserNom = getCurrentUserNom;
-window.lockBeneficiaire = lockBeneficiaire;
+window.getModalTitle           = getModalTitle;
+window.setNumeroReadOnly       = setNumeroReadOnly;
+window.setButtonLoading        = setButtonLoading;
+window.getCurrentUserNom       = getCurrentUserNom;
+window.lockBeneficiaire        = lockBeneficiaire;
+window.chargerDemandeDansModal = chargerDemandeDansModal;

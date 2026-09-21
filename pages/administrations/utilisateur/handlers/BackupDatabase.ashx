@@ -1,233 +1,259 @@
-<%@ Page Language="C#" ContentType="application/json" ResponseEncoding="utf-8" %>
-<%@ Import Namespace="System" %>
-<%@ Import Namespace="System.Configuration" %>
-<%@ Import Namespace="System.Data.SqlClient" %>
-<%@ Import Namespace="System.IO" %>
-<%@ Import Namespace="System.Web.Script.Serialization" %>
-<%@ Import Namespace="System.Collections.Generic" %>
+<%@ WebHandler Language="C#" Class="BackupDatabaseHandler" %>
+<%@ Assembly Name="System.Web.Extensions" %>
 
-<script runat="server">
-protected void Page_Load(object sender, EventArgs e)
+using System;
+using System.Collections.Generic;
+using System.Data.SqlClient;
+using System.IO;
+using System.Web;
+using System.Web.Script.Serialization;
+
+public class BackupDatabaseHandler : IHttpHandler
 {
-    // ✅ Vérification d'authentification et de rôle (SuperAdmin uniquement)
-    if (!AuthHelper.IsAuthenticated(Context))
+    public bool IsReusable { get { return false; } }
+
+    // ============================================================
+    // POINT D'ENTRÉE
+    // ============================================================
+    public void ProcessRequest(HttpContext context)
     {
-        WriteError("Non authentifié");
-        Response.End();
-        return;
-    }
+        HttpResponse Response   = context.Response;
 
-    int role = AuthHelper.GetUserRole(Context);
-    if (role != 0)
-    {
-        WriteError("Permissions insuffisantes (SuperAdmin requis)");
-        Response.End();
-        return;
-    }
+        Response.Clear();
+        Response.ContentType    = "application/json";
+        Response.ContentEncoding = new System.Text.UTF8Encoding(false);
 
-    Response.Clear();
-    Response.ContentType = "application/json";
-    Response.ContentEncoding = new System.Text.UTF8Encoding(false);
-
-    try
-    {
-        string action = Request.QueryString["action"];
-
-        if (action == "prepare")
+        try
         {
-            PrepareBackup();
+            if (!AuthHelper.IsAuthenticated(context))
+            {
+                WriteError(Response, "Non authentifié");
+                return;
+            }
+
+            int role = AuthHelper.GetUserRole(context);
+            if (role != 0)
+            {
+                WriteError(Response, "Permissions insuffisantes (SuperAdmin requis)");
+                return;
+            }
+
+            string action = context.Request.QueryString["action"];
+            switch (action)
+            {
+                case "prepare": PrepareBackup(context);     break;
+                case "execute": ExecuteBackup(context);     break;
+                case "check":   CheckBackupStatus(context); break;
+                default:        WriteError(Response, "Action non reconnue"); break;
+            }
         }
-        else if (action == "execute")
+        catch (Exception ex)
         {
-            ExecuteBackup();
+            // On loggue la stack trace complète avant de renvoyer le message
+            LogBackupAction("Erreur handler: " + ex.ToString());
+            WriteError(Response, ex.Message);
         }
-        else if (action == "check")
+    }
+
+    // ============================================================
+    // PREPARE
+    // ============================================================
+    private void PrepareBackup(HttpContext context)
+    {
+        var Response = context.Response;
+        var Request  = context.Request;
+        var Session  = context.Session;
+
+        string maintenanceTime = Request.QueryString["time"];
+        if (string.IsNullOrEmpty(maintenanceTime))
+            maintenanceTime = DateTime.Now.AddMinutes(5).ToString("HH:mm");
+
+        string maintenanceMessage = string.Format(
+            "⚠️ MAINTENANCE PROGRAMMÉE\n\n" +
+            "La base de données sera sauvegardée à {0}.\n\n" +
+            "Veuillez sauvegarder votre travail. Vous serez déconnecté dans 5 minutes.",
+            maintenanceTime);
+
+        Session["MaintenanceTime"]    = maintenanceTime;
+        Session["MaintenanceStarted"] = DateTime.Now.ToString();
+
+        LogBackupAction(string.Format("Préparation sauvegarde programmée à {0}", maintenanceTime));
+
+        var result = new Dictionary<string, object>();
+        result["success"]         = true;
+        result["message"]         = maintenanceMessage;
+        result["maintenanceTime"] = maintenanceTime;
+
+        WriteJson(Response, result);
+    }
+
+    // ============================================================
+    // EXECUTE : déconnexion + sauvegarde + téléchargement
+    // ============================================================
+    private void ExecuteBackup(HttpContext context)
+    {
+        var Response = context.Response;
+
+        string connStr = AuthHelper.ConnectionString;
+        if (string.IsNullOrEmpty(connStr))
         {
-            CheckBackupStatus();
+            WriteError(Response, "Chaîne de connexion non trouvée");
+            return;
         }
-        else
+
+        string databaseName   = "MONAPPECOLE2";
+        string backupFileName = string.Format("backup_{0}_{1}.bak",
+                                              databaseName,
+                                              DateTime.Now.ToString("yyyyMMdd_HHmmss"));
+        string backupPath     = Path.Combine(Path.GetTempPath(), backupFileName);
+
+        try
         {
-            WriteError("Action non reconnue");
+            // ---------- 1) Déconnexion des utilisateurs ----------
+            int currentUserId = AuthHelper.GetUserId(context);
+
+            LogBackupAction("Déconnexion des utilisateurs...");
+            DisconnectAllUsers(context, currentUserId);
+            LogBackupAction("Utilisateurs déconnectés");
+
+            // ---------- 2) Sauvegarde ----------
+            LogBackupAction("Préparation de la sauvegarde...");
+            LogBackupAction("Sauvegarde de la base de données...");
+
+            string backupQuery = string.Format(
+                "BACKUP DATABASE [{0}] TO DISK = N'{1}' " +
+                "WITH FORMAT, NOUNLOAD, NAME = N'Full Backup', SKIP, STATS = 10, COMPRESSION",
+                databaseName, backupPath);
+
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                conn.Open();
+                using (SqlCommand cmd = new SqlCommand(backupQuery, conn))
+                {
+                    cmd.CommandTimeout = 300;
+                    cmd.ExecuteNonQuery();
+                }
+            }
+
+            // ---------- 3) Livraison du fichier ----------
+            if (!File.Exists(backupPath))
+            {
+                LogBackupAction("Erreur: fichier .bak non créé à " + backupPath);
+                WriteError(Response, "Le fichier de sauvegarde n'a pas été créé");
+                return;
+            }
+
+            byte[] fileBytes = File.ReadAllBytes(backupPath);
+            LogBackupAction(string.Format("Sauvegarde réussie : {0} ({1} MB)",
+                                          backupFileName,
+                                          fileBytes.Length / 1024 / 1024));
+
+            Response.Clear();
+            Response.ContentType = "application/octet-stream";
+            Response.AppendHeader("Content-Disposition",
+                string.Format("attachment; filename={0}", backupFileName));
+            Response.BinaryWrite(fileBytes);
+            Response.Flush();
+
+            try { File.Delete(backupPath); } catch { /* non bloquant */ }
+        }
+        catch (Exception ex)
+        {
+            LogBackupAction("Erreur sauvegarde: " + ex.ToString());
+            WriteError(Response, "Erreur lors de la sauvegarde: " + ex.Message);
+        }
+        finally
+        {
+            // Nettoyage de session dans TOUS les cas (succès, échec, exception)
+            try
+            {
+                context.Session.Remove("MaintenanceTime");
+                context.Session.Remove("MaintenanceStarted");
+            }
+            catch { /* Session peut être indisponible : on ignore */ }
         }
     }
-    catch (Exception ex)
+
+    // ============================================================
+    // DÉCONNEXION
+    // ============================================================
+    private void DisconnectAllUsers(HttpContext context, int currentUserId)
     {
-        WriteError(ex.Message.Replace("\"", "\\\""));
-    }
-    finally
-    {
-        Response.End();
-    }
-}
-
-private void PrepareBackup()
-{
-    string maintenanceTime = Request.QueryString["time"];
-    if (string.IsNullOrEmpty(maintenanceTime))
-    {
-        maintenanceTime = DateTime.Now.AddMinutes(5).ToString("HH:mm");
-    }
-
-    string maintenanceMessage = string.Format(
-        "⚠️ MAINTENANCE PROGRAMMÉE\n\nLa base de données sera sauvegardée à {0}.\n\nVeuillez sauvegarder votre travail. Vous serez déconnecté dans 5 minutes.",
-        maintenanceTime);
-
-    // Enregistrer l'heure de maintenance en session
-    Session["MaintenanceTime"] = maintenanceTime;
-    Session["MaintenanceStarted"] = DateTime.Now.ToString();
-
-    // Journaliser l'action
-    LogBackupAction(string.Format("Préparation sauvegarde programmée à {0}", maintenanceTime));
-
-    var result = new Dictionary<string, object>();
-    result["success"] = true;
-    result["message"] = maintenanceMessage;
-    result["maintenanceTime"] = maintenanceTime;
-
-    WriteJson(result);
-}
-
-private void ExecuteBackup()
-{
-    string connStr = AuthHelper.ConnectionString; // via AuthHelper
-    if (string.IsNullOrEmpty(connStr))
-    {
-        WriteError("Chaîne de connexion non trouvée");
-        return;
-    }
-
-    string databaseName = "MONAPPECOLE2";
-    string backupFileName = string.Format("backup_{0}_{1}.bak", databaseName, DateTime.Now.ToString("yyyyMMdd_HHmmss"));
-    string backupPath = Path.Combine(Path.GetTempPath(), backupFileName);
-
-    try
-    {
-        // 1. Déconnecter tous les utilisateurs SAUF le SuperAdmin actuel
-        int currentUserId = AuthHelper.GetUserId(Context);
-        DisconnectAllUsers(currentUserId);
-
-        // 2. Exécuter la sauvegarde
-        string backupQuery = string.Format(
-            "BACKUP DATABASE [{0}] TO DISK = N'{1}' WITH FORMAT, NOUNLOAD, NAME = N'Full Backup', SKIP, STATS = 10, COMPRESSION",
-            databaseName, backupPath);
+        string connStr = AuthHelper.ConnectionString;
+        if (string.IsNullOrEmpty(connStr))
+            throw new InvalidOperationException(
+                "Chaîne de connexion absente pour la déconnexion des utilisateurs");
 
         using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
-            using (SqlCommand cmd = new SqlCommand(backupQuery, conn))
+
+            const string sql = @"
+                UPDATE USERS
+                   SET SESSION_TOKEN = NULL,
+                       LAST_PC       = NULL
+                 WHERE IDUSER <> @CurrentUserId";
+
+            using (SqlCommand cmd = new SqlCommand(sql, conn))
             {
-                cmd.CommandTimeout = 300;
-                cmd.ExecuteNonQuery();
+                cmd.Parameters.AddWithValue("@CurrentUserId", currentUserId);
+                int affected = cmd.ExecuteNonQuery();
+                LogBackupAction(string.Format(
+                    "{0} utilisateur(s) déconnectés pour la maintenance", affected));
             }
         }
+    }
 
-        // 3. Vérifier que le fichier existe
-        if (File.Exists(backupPath))
+    // ============================================================
+    // CHECK
+    // ============================================================
+    private void CheckBackupStatus(HttpContext context)
+    {
+        var Response = context.Response;
+        var Session  = context.Session;
+
+        var result = new Dictionary<string, object>();
+        result["success"]         = true;
+        result["isMaintenance"]   = (Session["MaintenanceTime"] != null);
+        result["maintenanceTime"] = Session["MaintenanceTime"] as string ?? "";
+
+        WriteJson(Response, result);
+    }
+
+    // ============================================================
+    // LOG
+    // ============================================================
+    private void LogBackupAction(string message)
+    {
+        try
         {
-            byte[] fileBytes = File.ReadAllBytes(backupPath);
+            string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+                                          "App_Data", "backup_log.txt");
+            string logDir  = Path.GetDirectoryName(logPath);
+            if (!Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
 
-            LogBackupAction(string.Format("Sauvegarde réussie : {0} ({1} MB)", backupFileName, fileBytes.Length / 1024 / 1024));
+            string logEntry = string.Format("{0} - {1}{2}",
+                DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"),
+                message,
+                Environment.NewLine);
 
-            Response.Clear();
-            Response.ContentType = "application/octet-stream";
-            Response.AppendHeader("Content-Disposition", string.Format("attachment; filename={0}", backupFileName));
-            Response.BinaryWrite(fileBytes);
-            Response.Flush();
-
-            // Nettoyer
-            try { File.Delete(backupPath); } catch { }
-
-            // Nettoyer la session
-            Session.Remove("MaintenanceTime");
-            Session.Remove("MaintenanceStarted");
+            File.AppendAllText(logPath, logEntry);
         }
-        else
-        {
-            WriteError("Le fichier de sauvegarde n'a pas été créé");
-        }
+        catch { /* le log ne doit jamais casser la réponse */ }
     }
-    catch (Exception ex)
+
+    // ============================================================
+    // HELPERS JSON
+    // ============================================================
+    private void WriteJson(HttpResponse Response, object obj)
     {
-        LogBackupAction(string.Format("Erreur sauvegarde: {0}", ex.Message));
-        WriteError(string.Format("Erreur lors de la sauvegarde: {0}", ex.Message));
+        var serializer = new JavaScriptSerializer();
+        serializer.MaxJsonLength = int.MaxValue;
+        Response.Write(serializer.Serialize(obj));
     }
-}
 
-private void DisconnectAllUsers(int currentUserId)
-{
-    string connStr = AuthHelper.ConnectionString;
-    if (string.IsNullOrEmpty(connStr)) return;
-
-    using (SqlConnection conn = new SqlConnection(connStr))
+    private void WriteError(HttpResponse Response, string message)
     {
-        conn.Open();
-
-        string sql = @"
-            UPDATE USERS 
-            SET SESSION_TOKEN = NULL, 
-                LAST_PC = NULL 
-            WHERE IDUSER != @CurrentUserId";
-
-        using (SqlCommand cmd = new SqlCommand(sql, conn))
-        {
-            cmd.Parameters.AddWithValue("@CurrentUserId", currentUserId);
-            int affected = cmd.ExecuteNonQuery();
-            LogBackupAction(string.Format("{0} utilisateur(s) déconnectés pour la maintenance", affected));
-        }
+        WriteJson(Response, new { success = false, message = message });
     }
 }
-
-private void CheckBackupStatus()
-{
-    var result = new Dictionary<string, object>();
-    result["success"] = true;
-    result["isMaintenance"] = (Session["MaintenanceTime"] != null);
-    result["maintenanceTime"] = Session["MaintenanceTime"] as string ?? "";
-
-    WriteJson(result);
-}
-
-private void NotifyAllUsers(string maintenanceTime)
-{
-    try
-    {
-        // Stocker la maintenance dans Application (accessible à tous)
-        System.Web.HttpContext.Current.Application.Lock();
-        System.Web.HttpContext.Current.Application["MaintenanceMode"] = true;
-        System.Web.HttpContext.Current.Application["MaintenanceTime"] = maintenanceTime;
-        System.Web.HttpContext.Current.Application.Unlock();
-
-        // Journaliser
-        LogBackupAction(string.Format("Notification envoyée à tous les utilisateurs pour une maintenance à {0}", maintenanceTime));
-    }
-    catch (Exception ex)
-    {
-        LogBackupAction(string.Format("Erreur notification: {0}", ex.Message));
-    }
-}
-
-private void LogBackupAction(string message)
-{
-    try
-    {
-        string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "App_Data", "backup_log.txt");
-        string logDir = Path.GetDirectoryName(logPath);
-        if (!Directory.Exists(logDir)) Directory.CreateDirectory(logDir);
-
-        string logEntry = string.Format("{0} - {1}{2}", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"), message, Environment.NewLine);
-        File.AppendAllText(logPath, logEntry);
-    }
-    catch { }
-}
-
-private void WriteJson(object obj)
-{
-    var serializer = new JavaScriptSerializer();
-    Response.Write(serializer.Serialize(obj));
-}
-
-private void WriteError(string message)
-{
-    WriteJson(new { success = false, message = message });
-}
-</script>

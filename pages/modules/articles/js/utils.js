@@ -1,36 +1,29 @@
 // ============================================================
-// UTILITAIRES GLOBAUX
+// UTILITAIRES GLOBAUX + i18n
 // ============================================================
 
-/**
- * Affiche un toast de notification avec SweetAlert2
- * @param {string} title - Titre du toast
- * @param {string} message - Message (optionnel, utilisé comme contenu principal)
- * @param {string} icon - 'success'|'error'|'warning'|'info'
- * @param {number} timer - Durée d'affichage en ms
- */
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
+
 function showToast(title, message, icon, timer) {
-    // Valeurs par défaut
     icon = icon || 'success';
     timer = timer || 3000;
 
-    // Vérifier que Swal est disponible
     if (typeof Swal === 'undefined') {
         console.warn('SweetAlert2 non chargé, fallback vers alert');
         alert((title || '') + (message ? '\n' + message : ''));
         return;
     }
 
-    // Nettoyer les paramètres (les convertir en chaîne, éviter undefined)
     var finalTitle = (title || '').toString();
     var finalMessage = (message || '').toString();
 
-    // Si les deux sont vides, mettre un texte par défaut
     if (!finalTitle && !finalMessage) {
-        finalTitle = 'Notification';
+        finalTitle = _t('message.warning') || 'Notification';
     }
 
-    // Si seul le message est fourni, l'utiliser comme titre
     if (!finalTitle && finalMessage) {
         finalTitle = finalMessage;
         finalMessage = '';
@@ -55,18 +48,14 @@ function showToast(title, message, icon, timer) {
     });
 }
 
-/**
- * Affiche un message d'erreur dans un toast
- * @param {string} message
- */
 function showErrorToast(message) {
-    showToast('Erreur', message, 'error');
+    showToast(_t('message.error'), message, 'error');
 }
 
-/**
- * Affiche un message de succès
- * @param {string} message
- */
 function showSuccessToast(message) {
-    showToast('Succès', message, 'success');
+    showToast(_t('message.success'), message, 'success');
 }
+
+window.showToast = showToast;
+window.showErrorToast = showErrorToast;
+window.showSuccessToast = showSuccessToast;

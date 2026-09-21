@@ -1,9 +1,18 @@
-// loaders.js
-async function loadFournisseurs(options = {}) {
-    const silent = !!(options && options.silent);
+// loaders.js - Module Fournisseurs + i18n
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
+
+// ============================================================
+// CHARGEMENT DE LA LISTE
+// ============================================================
+async function loadFournisseurs(options) {
+    options = options || {};
+    var silent = !!options.silent;
     if (!silent) showSpinner();
     try {
-        const params = new URLSearchParams({
+        var params = new URLSearchParams({
             page: AppState.page,
             pageSize: AppState.pageSize,
             search: AppState.filters.search,
@@ -11,9 +20,9 @@ async function loadFournisseurs(options = {}) {
             sort: AppState.sortField,
             order: AppState.sortOrder
         });
-        const url = `${API.BASE}${API.HANDLERS_PATH}${API.LIST}?${params}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
+        var url = API.BASE + API.HANDLERS_PATH + API.LIST + '?' + params;
+        var resp = await fetch(url);
+        var data = await resp.json();
         if (data.success) {
             AppState.fournisseurs = data.Fournisseurs || [];
             AppState.total = Number(data.total || 0);
@@ -26,73 +35,83 @@ async function loadFournisseurs(options = {}) {
             loadFournisseurStats();
             createPaginationControls(AppState.totalPages);
         } else {
-            showToast('Erreur', data.message || 'Impossible de charger les fournisseurs', 'error');
+            showToast(_t('message.error'), data.message || _t('fournisseurs.msg.load_error'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         if (!silent) hideSpinner();
     }
 }
 
+// ============================================================
+// CHARGEMENT DES STATISTIQUES
+// ============================================================
 async function loadFournisseurStats() {
     try {
-        const url = `${API.BASE}${API.HANDLERS_PATH}${API.STATS}`;
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        var url = API.BASE + API.HANDLERS_PATH + API.STATS;
+        var resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var data = await resp.json();
         if (data.success) {
-            document.getElementById('statTotal').textContent = data.total ?? 0;
-            document.getElementById('statActif').textContent = data.actif ?? 0;
-            document.getElementById('statInactif').textContent = data.inactif ?? 0;
-            document.getElementById('statAvecEmail').textContent = data.avecEmail ?? 0;
+            document.getElementById('statTotal').textContent = data.total != null ? data.total : 0;
+            document.getElementById('statActif').textContent = data.actif != null ? data.actif : 0;
+            document.getElementById('statInactif').textContent = data.inactif != null ? data.inactif : 0;
+            document.getElementById('statAvecEmail').textContent = data.avecEmail != null ? data.avecEmail : 0;
         } else {
             console.warn('Stats API returned success=false:', data.message);
         }
-    } catch (e) {
-        console.error('Erreur stats :', e);
-        showToast('Erreur', 'Impossible de charger les statistiques', 'error');
+    } catch (err) {
+        console.error('Erreur stats :', err);
+        showToast(_t('message.error'), _t('fournisseurs.msg.stats_error'), 'error');
     }
 }
 
+// ============================================================
+// RENDU DU TABLEAU
+// ============================================================
 function renderFournisseursTable(fournisseurs) {
-    const tbody = document.getElementById('fournisseursTableBody');
+    var tbody = document.getElementById('fournisseursTableBody');
     if (!fournisseurs.length) {
-        tbody.innerHTML = `<tr><td colspan="9" class="text-center">Aucun fournisseur trouvé</td></tr>`;
-        document.getElementById('resultsCounter').textContent = '0 fournisseur(s)';
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">' + _t('fournisseurs.msg.no_data') + '</td></tr>';
+        document.getElementById('resultsCounter').textContent = _t('fournisseurs.counter').replace('{n}', 0);
         return;
     }
-    let html = '';
-    fournisseurs.forEach(f => {
-        const statusHtml = f.ACTIVE
-            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
-            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
-        const codeHtml = f.CODE
+
+    var html = '';
+    fournisseurs.forEach(function (f) {
+        var statusHtml = f.ACTIVE
+            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">' + _t('fournisseurs.status.active') + '</span>'
+            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">' + _t('fournisseurs.status.inactive') + '</span>';
+
+        var codeHtml = f.CODE
             ? '<span class="badge bg-secondary" style="color:#6c757d; font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">' + f.CODE + '</span>'
             : '<span class="badge bg-secondary" style="color:#6c757d; background-color:#f8f9fa; padding:4px 10px; border-radius:20px;color:#333;">N/A</span>';
-        html += `
-            <tr>
-                <td>${codeHtml}</td>
-                <td><strong>${f.NOM || ''}</strong></td>
-                <td>${f.ADRESSE || ''}</td>
-                <td>${f.TELEPHONE || ''}</td>
-                <td>${f.EMAIL || ''}</td>
-                <td>${f.CONTACT_NOM || ''}</td>
-                <td>${f.SIRET || ''}</td>
-                <td>${statusHtml}</td>
-                <td>
-                    <button type="button" class="btn btn-sm btn-info" onclick="viewFournisseur('${f.ID}')" title="Voir détails"><i class="fas fa-eye"></i></button>
-                    <button type="button" class="btn btn-sm btn-primary" onclick="editFournisseur('${f.ID}')"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteFournisseur('${f.ID}')"><i class="fas fa-trash"></i></button>
-                </td>
-            </tr>
-        `;
+
+        html += '<tr>'
+            + '<td>' + codeHtml + '</td>'
+            + '<td><strong>' + (f.NOM || '') + '</strong></td>'
+            + '<td>' + (f.ADRESSE || '') + '</td>'
+            + '<td>' + (f.TELEPHONE || '') + '</td>'
+            + '<td>' + (f.EMAIL || '') + '</td>'
+            + '<td>' + (f.CONTACT_NOM || '') + '</td>'
+            + '<td>' + (f.SIRET || '') + '</td>'
+            + '<td>' + statusHtml + '</td>'
+            + '<td>'
+            +   '<button type="button" class="btn btn-sm btn-info" onclick="viewFournisseur(\'' + f.ID + '\')" title="' + _t('fournisseurs.action.view_details') + '"><i class="fas fa-eye"></i></button> '
+            +   '<button type="button" class="btn btn-sm btn-primary" onclick="editFournisseur(\'' + f.ID + '\')" title="' + _t('button.edit') + '"><i class="fas fa-edit"></i></button> '
+            +   '<button type="button" class="btn btn-sm btn-danger" onclick="deleteFournisseur(\'' + f.ID + '\')" title="' + _t('button.delete') + '"><i class="fas fa-trash"></i></button>'
+            + '</td>'
+            + '</tr>';
     });
     tbody.innerHTML = html;
-    document.getElementById('resultsCounter').textContent = `${AppState.total} fournisseur(s)`;
+    document.getElementById('resultsCounter').textContent =
+        _t('fournisseurs.counter').replace('{n}', AppState.total);
 }
 
-// expositions
+// ============================================================
+// EXPOSITIONS
+// ============================================================
 window.loadFournisseurs = loadFournisseurs;
 window.loadFournisseurStats = loadFournisseurStats;
 window.renderFournisseursTable = renderFournisseursTable;

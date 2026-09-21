@@ -138,3 +138,303 @@
 .project-name-badge .project-code {
     font-weight: 800;
 }
+
+.card-body-login {
+    -ms-flex: 1 1 auto;
+    flex: 1 1 auto;
+    min-height: 1px;
+    padding: 1.25rem 1.25rem 0 1.25rem;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   BADGE VERSION — sous le bouton Connexion
+   ═══════════════════════════════════════════════════════════ */
+.login-version-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 6px 12px;
+  font-size: 12px;
+  color: #6c757d;
+  font-family: 'Source Sans Pro', sans-serif;
+  letter-spacing: 0.3px;
+  border-top: 1px dashed #dee2e6;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+}
+
+.login-version-badge:hover {
+  opacity: 1;
+  color: #495057;
+}
+
+.login-version-badge i {
+  font-size: 11px;
+  color: #17a2b8;
+}
+
+.login-version-badge span {
+  font-weight: 500;
+}
+
+/* Variante : si tu veux un badge "pill" plus visible */
+.login-version-badge.pill {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 20px;
+  border-top: 1px solid #dee2e6;
+  padding: 6px 6px;
+  display: inline-flex;
+  margin-left: auto;
+  margin-right: auto;
+  width: fit-content;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOGO PERSONNEL — coin bas droit (page Login)
+   ═══════════════════════════════════════════════════════════ */
+.login-corner-logo {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 100;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+
+    opacity: 0.9;
+    transition: opacity 0.25s ease,
+                transform 0.25s ease,
+                box-shadow 0.25s ease;
+    animation: logoFadeIn 0.8s ease-out 0.3s both;
+
+    pointer-events: auto;
+    user-select: none;
+}
+
+.login-corner-logo:hover {
+    opacity: 1;
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+
+.login-corner-logo img {
+    display: block;
+    width: 90px;
+    height: auto;
+    max-height: 60px;
+    object-fit: contain;
+}
+
+/* Animation d'apparition discrète */
+@keyframes logoFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.96);
+    }
+    to {
+        opacity: 0.9;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ─── Tablette ─── */
+@media (max-width: 768px) {
+    .login-corner-logo {
+        bottom: 14px;
+        right: 14px;
+        padding: 8px 12px;
+        border-radius: 10px;
+    }
+    .login-corner-logo img {
+        width: 70px;
+        max-height: 50px;
+    }
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 480px) {
+    .login-corner-logo {
+        bottom: 10px;
+        right: 10px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.75);
+    }
+    .login-corner-logo img {
+        width: 55px;
+        max-height: 40px;
+    }
+}
+
+/* ─── Mode sombre (si activé un jour sur la page Login) ─── */
+body.dark-mode .login-corner-logo {
+    background: rgba(30, 30, 30, 0.75);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ═══════════════════════════════════════════════════════════
+   LOGO ZOOM — Agrandissement au clic
+   ═══════════════════════════════════════════════════════════ */
+
+/* Curseur main + indication cliquable (survol) */
+.login-corner-logo {
+    cursor: pointer;
+}
+
+/* Légère pulsation au survol (indique que c'est interactif) */
+.login-corner-logo:hover {
+    /* on garde la position / taille actuelles, on ne change que l'opacité déjà gérée */
+}
+
+/* ─── Overlay plein écran ─── */
+.logo-zoom-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.78);
+    -webkit-backdrop-filter: blur(4px);
+    backdrop-filter: blur(4px);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    box-sizing: border-box;
+
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.logo-zoom-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+/* ─── Image agrandie ─── */
+.logo-zoom-image {
+    max-width: 90vw;
+    max-height: 85vh;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+
+    background: #ffffff;
+    padding: 12px;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+
+    transform: scale(0.92);
+    transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.3, 1);
+
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-user-drag: none;
+}
+
+.logo-zoom-overlay.show .logo-zoom-image {
+    transform: scale(1);
+}
+
+/* ─── Bouton Fermer (×) ─── */
+.logo-zoom-close {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 44px;
+    height: 44px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    background: rgba(255, 255, 255, 0.92);
+    border: none;
+    border-radius: 50%;
+    color: #333;
+
+    font-size: 26px;
+    font-weight: 300;
+    line-height: 1;
+    font-family: Arial, Helvetica, sans-serif;
+    padding: 0;
+    cursor: pointer;
+
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+    transition: background 0.2s ease, transform 0.2s ease;
+}
+
+.logo-zoom-close:hover {
+    background: #ffffff;
+    transform: scale(1.08) rotate(90deg);
+}
+
+.logo-zoom-close:focus {
+    outline: 2px solid #17a2b8;
+    outline-offset: 2px;
+}
+
+/* ─── Tablette ─── */
+@media (max-width: 768px) {
+    .logo-zoom-image {
+        max-width: 95vw;
+        max-height: 80vh;
+        padding: 10px;
+    }
+    .logo-zoom-close {
+        top: 12px;
+        right: 12px;
+        width: 40px;
+        height: 40px;
+        font-size: 22px;
+    }
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 480px) {
+    .logo-zoom-overlay {
+        padding: 10px;
+    }
+    .logo-zoom-image {
+        max-width: 98vw;
+        max-height: 75vh;
+        padding: 8px;
+        border-radius: 8px;
+    }
+    .logo-zoom-close {
+        top: 8px;
+        right: 8px;
+        width: 36px;
+        height: 36px;
+        font-size: 20px;
+    }
+}
+
+/* ─── Mode sombre (optionnel) ─── */
+body.dark-mode .logo-zoom-image {
+    background: #1f2937;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+}
+
+body.dark-mode .logo-zoom-close {
+    background: rgba(60, 60, 60, 0.92);
+    color: #f0f0f0;
+}
+
+body.dark-mode .logo-zoom-close:hover {
+    background: #4a4a4a;
+}

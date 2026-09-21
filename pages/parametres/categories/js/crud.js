@@ -1,6 +1,12 @@
-// crud.js - Module Catégories avec génération automatique du CODE
+// crud.js - Module Catégories avec génération automatique du CODE + i18n
 var currentCategorieId = null;
 var currentMode = 'add'; // 'add', 'edit', 'view'
+
+// ─── Helper i18n défensif ───
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
 
 // ============================================================
 // UTILITAIRE : activer / désactiver les champs
@@ -26,7 +32,10 @@ function openAddCategorieModal(e) {
     if (e) e.preventDefault();
     currentCategorieId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-tags"></i> Ajouter une catégorie';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-tags"></i> ' + _t('categories.modal.add_title');
+
     document.getElementById('categorieForm').reset();
     document.getElementById('categorieActif').value = '1';
     document.getElementById('categorieParent').value = '';
@@ -34,14 +43,13 @@ function openAddCategorieModal(e) {
     // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
     var codeEl = document.getElementById('categorieCode');
     codeEl.value = '';
-    codeEl.placeholder = 'Sera généré automatiquement (CAT-XXX-00001)';
+    codeEl.placeholder = _t('categories.modal.code_auto_placeholder');
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
 
     setFieldsEnabled(true);
 
-    // setFieldsEnabled réactive les champs → on réapplique le readonly sur le code
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
@@ -60,7 +68,9 @@ function editCategorie(id) {
     if (!cat) return;
     currentCategorieId = id;
     currentMode = 'edit';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier une catégorie';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-edit"></i> ' + _t('categories.modal.edit_title');
 
     var codeEl = document.getElementById('categorieCode');
     codeEl.value = cat.CODE || '';
@@ -74,14 +84,12 @@ function editCategorie(id) {
 
     setFieldsEnabled(true);
 
-    // Réapplication du readonly sur le code (le code est immuable)
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
 
     document.getElementById('btnSaveCategorie').style.display = '';
 
-    // Charger le dropdown parent et sélectionner la valeur actuelle
     loadParentDropdown(function () {
         document.getElementById('categorieParent').value = cat.PARENT_ID || '';
     });
@@ -98,7 +106,9 @@ function viewCategorie(id) {
     if (!cat) return;
     currentCategorieId = id;
     currentMode = 'view';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails de la catégorie';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-eye"></i> ' + _t('categories.modal.view_title');
 
     var codeEl = document.getElementById('categorieCode');
     codeEl.value = cat.CODE || '';
@@ -123,21 +133,18 @@ function viewCategorie(id) {
 }
 
 // ============================================================
-// ENREGISTREMENT (ajout ou modification)
+// ENREGISTREMENT
 // ============================================================
 async function saveCategorie(e) {
     e.preventDefault();
 
     if (currentMode === 'view') {
-        showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
+        showToast(_t('categories.msg.info'), _t('categories.msg.view_mode'), 'info');
         return;
     }
 
     var id = currentCategorieId;
 
-    // ⚠️ Le CODE n'est plus envoyé :
-    //    - à l'ajout → généré côté serveur (CA-PROJET-00001)
-    //    - en modification → immuable, non modifiable
     var data = {
         nom: document.getElementById('categorieNom').value.trim(),
         description: document.getElementById('categorieDescription').value.trim(),
@@ -145,10 +152,12 @@ async function saveCategorie(e) {
         actif: parseInt(document.getElementById('categorieActif').value) === 1
     };
 
-    // Validation : seul le nom est requis
     var valid = true;
     clearErrors();
-    if (!data.nom) { showError('categorieNom', 'Le nom est requis'); valid = false; }
+    if (!data.nom) {
+        showError('categorieNom', _t('categories.msg.name_required'));
+        valid = false;
+    }
     if (!valid) return;
 
     var endpoint = id ? API.EDIT : API.ADD;
@@ -165,17 +174,19 @@ async function saveCategorie(e) {
         var result = await resp.json();
 
         if (result.success) {
-            var msg = result.message || (id ? 'Catégorie modifiée' : 'Catégorie ajoutée');
-            if (result.code && !id) msg = 'Catégorie ajoutée avec succès (' + result.code + ').';
-            showToast('Succès', msg, 'success');
+            var msg = result.message || (id ? _t('categories.msg.updated') : _t('categories.msg.added'));
+            if (result.code && !id) {
+                msg = _t('categories.msg.added_with_code').replace('{code}', result.code);
+            }
+            showToast(_t('message.success'), msg, 'success');
             closeCategorieModal();
             loadCategories();
             loadStats();
         } else {
-            showToast('Erreur', result.message || 'Une erreur est survenue', 'error');
+            showToast(_t('message.error'), result.message || _t('message.error'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -186,14 +197,14 @@ async function saveCategorie(e) {
 // ============================================================
 async function deleteCategorie(id) {
     var confirmResult = await Swal.fire({
-        title: 'Confirmer la suppression',
-        text: 'Voulez-vous vraiment supprimer cette catégorie ?',
+        title: _t('categories.confirm.delete_title'),
+        text: _t('categories.confirm.delete_text'),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
+        confirmButtonText: _t('categories.confirm.delete_yes'),
+        cancelButtonText: _t('button.cancel')
     });
     if (!confirmResult.isConfirmed) return;
 
@@ -207,14 +218,14 @@ async function deleteCategorie(id) {
         });
         var result = await resp.json();
         if (result.success) {
-            showToast('Succès', 'Catégorie supprimée', 'success');
+            showToast(_t('message.success'), _t('categories.msg.deleted'), 'success');
             loadCategories();
             loadStats();
         } else {
-            showToast('Attention', result.message || 'Échec de la suppression', 'error');
+            showToast(_t('message.warning'), result.message || _t('categories.msg.delete_failed'), 'error');
         }
-    } catch (e) {
-        showToast('Attention', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.warning'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -228,15 +239,16 @@ function closeCategorieModal() {
 
     currentCategorieId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-tags"></i> Ajouter une catégorie';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-tags"></i> ' + _t('categories.modal.add_title');
 
     setFieldsEnabled(true);
 
-    // Repasser le champ code en mode "généré auto"
     var codeEl = document.getElementById('categorieCode');
     if (codeEl) {
         codeEl.value = '';
-        codeEl.placeholder = 'Sera généré automatiquement (CAT-XXX-00001)';
+        codeEl.placeholder = _t('categories.modal.code_auto_placeholder');
         codeEl.readOnly = true;
         codeEl.style.backgroundColor = '#e9ecef';
         codeEl.style.cursor = 'not-allowed';
@@ -251,7 +263,10 @@ function closeCategorieModal() {
 // ============================================================
 function showError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
-    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+    }
 }
 
 function clearErrors() {

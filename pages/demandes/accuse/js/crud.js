@@ -2,7 +2,6 @@
 // CRUD - ACCUSE (visualisation + accusés de réception)
 // ============================================================
 
-// ✅ Ensemble des IDs en cours de traitement (anti double-clic)
 var __accuseInProgress = {};
 
 // ============================================================
@@ -28,9 +27,9 @@ function viewAccuse(id) {
     }
     document.getElementById('accuseDate').value = dateStr;
     document.getElementById('accuseDestination').value = sortie.DESTINATION || '';
-    document.getElementById('accuseNom').value = sortie.NOM || '';
-    document.getElementById('accuseFonction').value = sortie.FONCTION || '';
-    document.getElementById('accuseNotes').value = sortie.NOTES || '';
+    document.getElementById('accuseNom').value         = sortie.NOM         || '';
+    document.getElementById('accuseFonction').value    = sortie.FONCTION    || '';
+    document.getElementById('accuseNotes').value       = sortie.NOTES       || '';
 
     var tbody = document.getElementById('accuseLignesBody');
     tbody.innerHTML = '';
@@ -38,17 +37,20 @@ function viewAccuse(id) {
     if (lignes.length) {
         lignes.forEach(function (l, index) {
             var tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="text-align:center;width: 5%;">${index + 1}</td>
-                <td style="text-align:left;width: 30%;">${l.ARTICLE_CODE ? l.ARTICLE_CODE + ' - ' : ''}${l.ARTICLE_NOM || ''}</td>
-                <td style="text-align:right;width: 15%;">${formatNumber(l.QUANTITE_D, 2)}</td>
-                <td style="text-align:right;width: 15%;">${formatNumber(l.QUANTITE_R, 2)}</td>
-                <td style="text-align:left;width: 30%;">${l.OBSERVATIONS || ''}</td>
-            `;
+            tr.innerHTML =
+                '<td style="text-align:center;width:5%;">' + (index + 1) + '</td>' +
+                '<td style="text-align:left;width:30%;">' +
+                    (l.ARTICLE_CODE ? l.ARTICLE_CODE + ' - ' : '') + (l.ARTICLE_NOM || '') +
+                '</td>' +
+                '<td style="text-align:right;width:15%;">' + formatNumber(l.QUANTITE_D, 2) + '</td>' +
+                '<td style="text-align:right;width:15%;">' + formatNumber(l.QUANTITE_R, 2) + '</td>' +
+                '<td style="text-align:left;width:30%;">' + (l.OBSERVATIONS || '') + '</td>';
             tbody.appendChild(tr);
         });
     } else {
-        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Aucune ligne</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">' +
+            T('accuses.modal.lignes_no_data', 'Aucune ligne') +
+            '</td></tr>';
     }
 
     showModal('accuseModal');
@@ -59,48 +61,35 @@ function closeAccuseModal() {
 }
 
 // ============================================================
-// ✅ ACCUSÉ DE RÉCEPTION AVEC DATE OBLIGATOIRE
+// ACCUSÉ DE RÉCEPTION AVEC DATE OBLIGATOIRE
 // ============================================================
-
-/**
- * Marque un bon de sortie comme TERMINE (articles reçus par le demandeur).
- * 1. Modal avec champ Date de réception (pré-rempli à aujourd'hui)
- * 2. Validation client (obligatoire, non future)
- * 3. Appel serveur sécurisé
- * 4. Rafraîchissement de la liste
- */
 async function accuseReceipt(id) {
     if (!id) return;
 
-    // ✅ Anti double-clic
     if (__accuseInProgress[id]) return;
     __accuseInProgress[id] = true;
 
-    // ✅ Préparer la date du jour au format yyyy-MM-dd
     var today = new Date();
     var pad = function (v) { return String(v).padStart(2, '0'); };
     var todayStr = today.getFullYear() + '-' + pad(today.getMonth() + 1) + '-' + pad(today.getDate());
 
-    // ============================================================
-    // MODAL DE CONFIRMATION AVEC CHAMP DATE
-    // ============================================================
     var confirmation = await Swal.fire({
         icon: 'question',
-        title: 'Confirmer la réception ?',
+        title: T('accuses.confirm.title', 'Confirmer la réception ?'),
         html:
             '<div style="text-align:left;padding:0 8px;">' +
                 '<p style="margin-bottom:14px;color:#495057;font-size:14px;line-height:1.5;">' +
-                    'Confirmez-vous que <b>vous avez reçu tous les articles</b> ?' +
-                    '<br><small style="color:#6c757d;">' +
-                        '<i>Le bon passera au statut <b>TERMINE</b>.</i>' +
-                    '</small>' +
+                    T('accuses.confirm.question', 'Confirmez-vous que <b>vous avez reçu tous les articles</b> ?') +
+                    '<br><small style="color:#6c757d;"><i>' +
+                        T('accuses.confirm.hint', 'Le bon passera au statut <b>TERMINE</b>.') +
+                    '</i></small>' +
                 '</p>' +
-                '<label for="swalDateReception" ' +
-                       'style="font-weight:600;font-size:13px;display:block;margin-bottom:6px;color:#212529;">' +
-                    'Date de réception <span style="color:#dc3545;">*</span>' +
+                '<label for="swalDateReception" style="font-weight:600;font-size:13px;' +
+                       'display:block;margin-bottom:6px;color:#212529;">' +
+                    T('accuses.confirm.date_label', 'Date de réception') +
+                    ' <span style="color:#dc3545;">*</span>' +
                 '</label>' +
-                '<input type="date" id="swalDateReception" ' +
-                       'value="' + todayStr + '" ' +
+                '<input type="date" id="swalDateReception" value="' + todayStr + '" ' +
                        'style="width:100%;padding:10px 12px;font-size:14px;' +
                               'border:1px solid #ced4da;border-radius:6px;' +
                               'box-sizing:border-box;outline:none;" />' +
@@ -108,18 +97,16 @@ async function accuseReceipt(id) {
                      'style="color:#dc3545;font-size:12px;margin-top:6px;display:none;"></div>' +
             '</div>',
         showCancelButton: true,
-        confirmButtonText: '<i class="fas fa-check-double"></i> Oui, confirmer',
-        cancelButtonText: 'Annuler',
+        confirmButtonText: '<i class="fas fa-check-double"></i> ' + T('accuses.confirm.yes', 'Oui, confirmer'),
+        cancelButtonText: T('accuses.confirm.cancel', 'Annuler'),
         confirmButtonColor: '#28a745',
         cancelButtonColor: '#6c757d',
         reverseButtons: true,
         focusConfirm: false,
         didOpen: function () {
-            // Focus sur le champ date à l'ouverture
             var input = document.getElementById('swalDateReception');
             if (input) {
                 input.focus();
-                // Sélection visuelle après ouverture
                 setTimeout(function () {
                     try { input.select(); } catch (e) { /* ignore */ }
                 }, 100);
@@ -130,32 +117,29 @@ async function accuseReceipt(id) {
             var errEl = document.getElementById('swalDateError');
             var value = input ? input.value : '';
 
-            // ✅ Validation : champ obligatoire
             if (!value) {
                 if (errEl) {
-                    errEl.textContent = 'La date de réception est obligatoire.';
-                    errEl.style.display = 'block';
-                }
-                return false; // bloque la fermeture du modal
-            }
-
-            // ✅ Validation : date valide
-            var dateObj = new Date(value);
-            if (isNaN(dateObj.getTime())) {
-                if (errEl) {
-                    errEl.textContent = 'Date invalide.';
+                    errEl.textContent = T('accuses.msg.date_required', 'La date de réception est obligatoire.');
                     errEl.style.display = 'block';
                 }
                 return false;
             }
 
-            // ✅ Validation : pas de date dans le futur
-            var today = new Date();
-            today.setHours(0, 0, 0, 0);
-            dateObj.setHours(0, 0, 0, 0);
-            if (dateObj > today) {
+            var dateObj = new Date(value);
+            if (isNaN(dateObj.getTime())) {
                 if (errEl) {
-                    errEl.textContent = 'La date de réception ne peut pas être dans le futur.';
+                    errEl.textContent = T('accuses.msg.date_invalid', 'Date invalide.');
+                    errEl.style.display = 'block';
+                }
+                return false;
+            }
+
+            var todayObj = new Date();
+            todayObj.setHours(0, 0, 0, 0);
+            dateObj.setHours(0, 0, 0, 0);
+            if (dateObj > todayObj) {
+                if (errEl) {
+                    errEl.textContent = T('accuses.msg.date_future', 'La date de réception ne peut pas être dans le futur.');
                     errEl.style.display = 'block';
                 }
                 return false;
@@ -171,23 +155,23 @@ async function accuseReceipt(id) {
         return;
     }
 
-    // ✅ Désactivation visuelle du bouton pour éviter un double-clic
     var clickedBtn = null;
     document.querySelectorAll('button[onclick*="' + id + '"]').forEach(function (btn) {
-        if (btn.textContent.indexOf('Accus') !== -1 ||
-            (btn.getAttribute('title') || '').indexOf('réception') !== -1) {
+        var title = btn.getAttribute('title') || '';
+        var btnAccuse = T('accuses.btn.accuse', 'Confirmer la réception des articles');
+        if (title === btnAccuse || (btn.textContent || '').indexOf('Accus') !== -1) {
             clickedBtn = btn;
             btn.disabled = true;
             btn.dataset.originalHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ' +
+                            T('accuses.confirm.processing', 'Traitement...');
         }
     });
 
     showSpinner();
 
     try {
-        // ✅ Appel POST au handler serveur
-        var url = API.BASE + API.HANDLERS_PATH + API.SET_ACCUSE;
+        var url  = API.BASE + API.HANDLERS_PATH + API.SET_ACCUSE;
         var body = new URLSearchParams();
         body.append('id', id);
         body.append('dateReception', confirmation.value.dateReception);
@@ -202,30 +186,28 @@ async function accuseReceipt(id) {
         try {
             data = await resp.json();
         } catch (parseErr) {
-            throw new Error('Réponse serveur invalide');
+            throw new Error(T('accuses.msg.server_error', 'Réponse serveur invalide'));
         }
 
         if (data && data.success) {
             await Swal.fire({
                 icon: 'success',
-                title: 'Réception confirmée',
+                title: T('accuses.confirm.ok_title', 'Réception confirmée'),
                 html:
                     '<p style="margin:0;color:#495057;">' +
-                        (data.message || 'Le bon a été marqué comme TERMINE.') +
+                        (data.message || T('accuses.confirm.ok_default', 'Le bon a été marqué comme TERMINE.')) +
                     '</p>',
                 timer: 2200,
                 showConfirmButton: false
             });
-            // ✅ Recharger la liste pour refléter le nouveau statut
             loadAccuse({ silent: true });
         } else {
             Swal.fire({
                 icon: 'error',
-                title: 'Échec',
-                text: (data && data.message) || 'Impossible de marquer le bon comme terminé.',
+                title: T('accuses.confirm.fail_title', 'Échec'),
+                text: (data && data.message) || T('accuses.confirm.fail_default', 'Impossible de marquer le bon comme terminé.'),
                 confirmButtonColor: '#dc3545'
             });
-            // Restaurer le bouton
             if (clickedBtn && clickedBtn.dataset.originalHtml) {
                 clickedBtn.disabled = false;
                 clickedBtn.innerHTML = clickedBtn.dataset.originalHtml;
@@ -235,8 +217,8 @@ async function accuseReceipt(id) {
         console.error('accuseReceipt error:', err);
         Swal.fire({
             icon: 'error',
-            title: 'Erreur',
-            text: err.message || 'Erreur de communication avec le serveur.',
+            title: T('message.error', 'Erreur'),
+            text: err.message || T('accuses.msg.comm_error', 'Erreur de communication avec le serveur.'),
             confirmButtonColor: '#dc3545'
         });
         if (clickedBtn && clickedBtn.dataset.originalHtml) {
@@ -249,6 +231,6 @@ async function accuseReceipt(id) {
     }
 }
 
-window.viewAccuse = viewAccuse;
+window.viewAccuse       = viewAccuse;
 window.closeAccuseModal = closeAccuseModal;
-window.accuseReceipt = accuseReceipt;
+window.accuseReceipt    = accuseReceipt;

@@ -1,5 +1,10 @@
 'use strict';
 
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
+
 // Spinner
 function forceHideSpinner() {
     const s = document.getElementById('spinnerOverlay');
@@ -47,7 +52,7 @@ function createPaginationControls(totalPages) {
             cursor:${disabled || isActive ? 'default' : 'pointer'};border-radius:6px;
             font-weight:${isActive ? '700' : '500'};min-width:40px;`;
         if (onClick && !disabled && !isActive) {
-            btn.addEventListener('click', function(e) {
+            btn.addEventListener('click', function (e) {
                 e.preventDefault();
                 onClick();
             });
@@ -56,41 +61,41 @@ function createPaginationControls(totalPages) {
         return btn;
     }
 
-    container.appendChild(createBtn('«', function() {
+    container.appendChild(createBtn('«', function () {
         if (AppState.page !== 1) { AppState.page = 1; loadArticles(); }
     }, AppState.page === 1));
 
-    container.appendChild(createBtn('‹', function() {
+    container.appendChild(createBtn('‹', function () {
         if (AppState.page > 1) { AppState.page--; loadArticles(); }
     }, AppState.page === 1));
 
     const maxVisible = 5;
-    let start = Math.max(1, AppState.page - Math.floor(maxVisible/2));
+    let start = Math.max(1, AppState.page - Math.floor(maxVisible / 2));
     let end = Math.min(totalPages, start + maxVisible - 1);
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
     if (start > 1) {
-        container.appendChild(createBtn('1', function() { AppState.page = 1; loadArticles(); }));
+        container.appendChild(createBtn('1', function () { AppState.page = 1; loadArticles(); }));
         if (start > 2) container.appendChild(createBtn('...', null, true, true));
     }
     for (let i = start; i <= end; i++) {
-        (function(page) {
-            container.appendChild(createBtn(String(page), function() {
+        (function (page) {
+            container.appendChild(createBtn(String(page), function () {
                 if (page !== AppState.page) { AppState.page = page; loadArticles(); }
             }));
         })(i);
     }
     if (end < totalPages) {
         if (end < totalPages - 1) container.appendChild(createBtn('...', null, true, true));
-        (function(tp) {
-            container.appendChild(createBtn(String(tp), function() { AppState.page = tp; loadArticles(); }));
+        (function (tp) {
+            container.appendChild(createBtn(String(tp), function () { AppState.page = tp; loadArticles(); }));
         })(totalPages);
     }
 
-    container.appendChild(createBtn('›', function() {
+    container.appendChild(createBtn('›', function () {
         if (AppState.page < totalPages) { AppState.page++; loadArticles(); }
     }, AppState.page === totalPages));
 
-    container.appendChild(createBtn('»', function() {
+    container.appendChild(createBtn('»', function () {
         if (AppState.page !== totalPages) { AppState.page = totalPages; loadArticles(); }
     }, AppState.page === totalPages));
 
@@ -99,20 +104,23 @@ function createPaginationControls(totalPages) {
 }
 
 function applyFilters() {
-    const search = document.getElementById('search-filter')?.value || '';
-    const category = document.getElementById('category-filter')?.value || '';
-    const status = document.getElementById('status-filter')?.value || '';
-    AppState.filters.search = search;
-    AppState.filters.category = category;
-    AppState.filters.status = status;
+    const searchEl = document.getElementById('search-filter');
+    const categoryEl = document.getElementById('category-filter');
+    const statusEl = document.getElementById('status-filter');
+    AppState.filters.search = searchEl ? searchEl.value : '';
+    AppState.filters.category = categoryEl ? categoryEl.value : '';
+    AppState.filters.status = statusEl ? statusEl.value : '';
     AppState.page = 1;
     loadArticles({ silent: true });
 }
 
 function resetFilters() {
-    document.getElementById('search-filter').value = '';
-    document.getElementById('category-filter').value = '';
-    document.getElementById('status-filter').value = '';
+    const s = document.getElementById('search-filter');
+    const c = document.getElementById('category-filter');
+    const t2 = document.getElementById('status-filter');
+    if (s) s.value = '';
+    if (c) c.value = '';
+    if (t2) t2.value = '';
     AppState.filters = { search: '', category: '', status: '' };
     AppState.page = 1;
     loadArticles({ silent: true });
@@ -133,7 +141,7 @@ function initRowsPerPage() {
     if (!exists) {
         const opt = document.createElement('option');
         opt.value = currentSize;
-        opt.textContent = currentSize + ' par page';
+        opt.textContent = currentSize + ' / page';
         select.appendChild(opt);
         select.value = currentSize;
     }
@@ -155,11 +163,13 @@ function initFilterListeners() {
     if (searchInput) {
         searchInput.addEventListener('input', function () {
             clearTimeout(timeoutId);
-            timeoutId = setTimeout(function() { applyFilters(); }, 300);
+            timeoutId = setTimeout(function () { applyFilters(); }, 300);
         });
     }
-    document.getElementById('category-filter')?.addEventListener('change', applyFilters);
-    document.getElementById('status-filter')?.addEventListener('change', applyFilters);
+    const catEl = document.getElementById('category-filter');
+    const stEl = document.getElementById('status-filter');
+    if (catEl) catEl.addEventListener('change', applyFilters);
+    if (stEl) stEl.addEventListener('change', applyFilters);
 }
 
 // ============================================================
@@ -175,57 +185,40 @@ function makeModalDraggable(modalId) {
     var isDragging = false;
     var offsetX = 0, offsetY = 0;
 
-    // Curseur "move" sur l'en-tête
     header.style.cursor = 'move';
 
-    // Démarrer le drag
-    header.addEventListener('mousedown', function(e) {
-        // Ignorer si on clique sur un bouton, input, select, etc.
+    header.addEventListener('mousedown', function (e) {
         var tag = e.target.tagName;
         if (tag === 'BUTTON' || tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || tag === 'A') {
             return;
         }
-
         isDragging = true;
-
-        // Récupérer la position actuelle du modal
         var rect = modal.getBoundingClientRect();
         offsetX = e.clientX - rect.left;
         offsetY = e.clientY - rect.top;
-
-        // Passer en position fixed avec des coordonnées absolues
         modal.style.position = 'fixed';
         modal.style.left = rect.left + 'px';
         modal.style.top = rect.top + 'px';
         modal.style.margin = '0';
         modal.style.transform = 'none';
-
-        // Empêcher la sélection de texte pendant le drag
         document.body.style.userSelect = 'none';
     });
 
-    // Déplacer le modal
-    document.addEventListener('mousemove', function(e) {
+    document.addEventListener('mousemove', function (e) {
         if (!isDragging) return;
-
         var newLeft = e.clientX - offsetX;
         var newTop = e.clientY - offsetY;
-
-        // Optionnel : empêcher de sortir de l'écran
         var winWidth = window.innerWidth;
         var winHeight = window.innerHeight;
         var modalWidth = modal.offsetWidth;
         var modalHeight = modal.offsetHeight;
-
         newLeft = Math.max(0, Math.min(newLeft, winWidth - modalWidth));
         newTop = Math.max(0, Math.min(newTop, winHeight - modalHeight));
-
         modal.style.left = newLeft + 'px';
         modal.style.top = newTop + 'px';
     });
 
-    // Fin du drag
-    document.addEventListener('mouseup', function() {
+    document.addEventListener('mouseup', function () {
         if (isDragging) {
             isDragging = false;
             document.body.style.userSelect = '';
@@ -234,28 +227,26 @@ function makeModalDraggable(modalId) {
 }
 
 function initUIControls() {
-    document.addEventListener('keydown', function(e) {
+    document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
-            closeAdjustModal();
-            closeHistoryModal();
-            closeArticleModal();
+            if (typeof closeAdjustModal === 'function') closeAdjustModal();
+            if (typeof closeHistoryModal === 'function') closeHistoryModal();
+            if (typeof closeArticleModal === 'function') closeArticleModal();
         }
     });
     const closeButtons = document.querySelectorAll('.modal .close');
     closeButtons.forEach(btn => {
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', function () {
             const modal = this.closest('.modal');
             if (modal) modal.style.display = 'none';
         });
     });
     initFilterListeners();
     initRowsPerPage();
-    // Sécuriser les boutons
     document.querySelectorAll('button').forEach(btn => {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
 }
-
 
 window.applyFilters = applyFilters;
 window.resetFilters = resetFilters;
@@ -263,3 +254,5 @@ window.showSpinner = showSpinner;
 window.hideSpinner = hideSpinner;
 window.createPaginationControls = createPaginationControls;
 window.initUIControls = initUIControls;
+window.forceHideSpinner = forceHideSpinner;
+window.makeModalDraggable = makeModalDraggable;

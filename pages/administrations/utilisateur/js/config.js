@@ -51,7 +51,7 @@ var CHECKBOX_ID_MAP = {
 // ✅ Permissions par défaut par ROLEID (0 = SuperAdmin, 1 = Admin, 2 = User, 3 = Logisticien, 4 = Comptable)
 var DEFAULT_ROLE_PERMISSIONS = {
     0: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'resetpwd', 'utilisateurs', 'requetes'], // SuperAdmin
-    1: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'utilisateurs'],          // Admin
+    1: ['accueil', 'unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'resetpwd', 'utilisateurs'],          // Admin
     2: ['accueil','saisies', 'accuses', 'resetpwd'],                                                                                                                                                                       // User
     3: ['accueil','unites', 'emplacements', 'articles', 'categories', 'fournisseurs', 'entrees', 'sorties', 'stock', 'inventaire', 'exploitation', 'resetpwd'],                                                           // Logisticien
     4: ['accueil', 'stock', 'saisies', 'accuses', 'inventaire', 'exploitation', 'resetpwd']                                                                                                          // Comptable

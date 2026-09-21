@@ -1,24 +1,27 @@
-// crud.js - Gestion de l'historique du stock (suppression des ajustements)
-
 // ============================================================
-// HISTORIQUE
+// CRUD - STOCK (historique des mouvements)
 // ============================================================
 
-var historyArticleId = null;
+var historyArticleId     = null;
 var historyEmplacementId = null;
-var historyPage = 1;
-var historyPageSize = 20;
-var historyTotalPages = 0;
+var historyPage          = 1;
+var historyPageSize      = 20;
+var historyTotalPages    = 0;
 
 async function viewHistory(articleId, emplacementId) {
     if (!articleId || !emplacementId) {
-        showToast('Erreur', 'Article ou emplacement manquant', 'error');
+        showToast(T('message.error', 'Erreur'),
+                  T('stock.msg.article_missing', 'Article ou emplacement manquant'),
+                  'error');
         return;
     }
-    historyArticleId = articleId;
+    historyArticleId     = articleId;
     historyEmplacementId = emplacementId;
-    historyPage = 1;
-    document.getElementById('historyModal').style.display = 'flex';
+    historyPage          = 1;
+
+    var modal = document.getElementById('historyModal');
+    if (modal) modal.style.display = 'flex';
+
     await loadHistory();
 }
 
@@ -27,12 +30,12 @@ async function loadHistory() {
     try {
         showSpinner();
         var params = new URLSearchParams({
-            articleId: historyArticleId,
+            articleId:     historyArticleId,
             emplacementId: historyEmplacementId,
-            page: historyPage,
-            pageSize: historyPageSize
+            page:          historyPage,
+            pageSize:      historyPageSize
         });
-        var url = API.BASE + API.HANDLERS_PATH + API.MOUVEMENTS + '?' + params;
+        var url  = API.BASE + API.HANDLERS_PATH + API.MOUVEMENTS + '?' + params;
         var resp = await fetch(url);
         var data = await resp.json();
         if (data.success) {
@@ -40,10 +43,12 @@ async function loadHistory() {
             historyTotalPages = data.totalPages || 1;
             renderHistoryPagination(historyTotalPages);
         } else {
-            showToast('Erreur', data.message || 'Impossible de charger l\'historique', 'error');
+            showToast(T('message.error', 'Erreur'),
+                      data.message || T('stock.msg.history_load_error', "Impossible de charger l'historique"),
+                      'error');
         }
     } catch (e) {
-        showToast('Erreur', e.message, 'error');
+        showToast(T('message.error', 'Erreur'), e.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -52,18 +57,27 @@ async function loadHistory() {
 function renderHistoryTable(mouvements) {
     var tbody = document.getElementById('historyTableBody');
     if (!tbody) return;
+
     if (!mouvements || !mouvements.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;">Aucun mouvement trouvé</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;">' +
+            T('stock.msg.no_history', 'Aucun mouvement trouvé') +
+            '</td></tr>';
         return;
     }
+
+    var lblEntree = T('stock.history.type.entree', 'Entrée');
+    var lblSortie = T('stock.history.type.sortie', 'Sortie');
+
     var html = '';
-    mouvements.forEach(function(m) {
-        var typeLabel = m.TYPE === 'ENTREE' ? '✅ Entrée' : '📤 Sortie';
+    mouvements.forEach(function (m) {
+        var typeLabel = m.TYPE === 'ENTREE'
+            ? '✅ ' + lblEntree
+            : '📤 ' + lblSortie;
         var date = m.CREATED_AT || '';
         html += '<tr>' +
             '<td>' + date + '</td>' +
             '<td>' + typeLabel + '</td>' +
-            '<td>' + (m.QUANTITE || 0) + '</td>' +
+            '<td>' + (m.QUANTITE       || 0) + '</td>' +
             '<td>' + (m.QUANTITE_AVANT || 0) + '</td>' +
             '<td>' + (m.QUANTITE_APRES || 0) + '</td>' +
             '<td>' + (m.MOTIF || '') + '</td>' +
@@ -76,12 +90,11 @@ function renderHistoryTable(mouvements) {
 function renderHistoryPagination(totalPages) {
     var wrapper = document.getElementById('historyPagination');
     if (!wrapper) return;
-    if (totalPages <= 1) {
-        wrapper.innerHTML = '';
-        return;
-    }
+    if (totalPages <= 1) { wrapper.innerHTML = ''; return; }
+
     var container = document.createElement('div');
     container.style.cssText = 'display:flex;justify-content:center;gap:5px;margin-top:10px;';
+
     for (var i = 1; i <= totalPages; i++) {
         var btn = document.createElement('button');
         btn.type = 'button';
@@ -90,7 +103,7 @@ function renderHistoryPagination(totalPages) {
             'background:' + (i === historyPage ? '#007bff' : 'white') + ';' +
             'color:' + (i === historyPage ? 'white' : '#333') + ';' +
             'cursor:pointer;border-radius:4px;';
-        btn.addEventListener('click', function() {
+        btn.addEventListener('click', function () {
             historyPage = i;
             loadHistory();
         });
@@ -103,17 +116,16 @@ function renderHistoryPagination(totalPages) {
 function closeHistoryModal() {
     var modal = document.getElementById('historyModal');
     if (modal) modal.style.display = 'none';
-    historyArticleId = null;
+    historyArticleId     = null;
     historyEmplacementId = null;
-    historyPage = 1;
+    historyPage          = 1;
 }
 
 // ============================================================
-// EXPOSITIONS GLOBALES
+// EXPOSITIONS
 // ============================================================
-
-window.viewHistory = viewHistory;
-window.loadHistory = loadHistory;
-window.closeHistoryModal = closeHistoryModal;
-window.renderHistoryTable = renderHistoryTable;
-window.renderHistoryPagination = renderHistoryPagination;
+window.viewHistory               = viewHistory;
+window.loadHistory               = loadHistory;
+window.closeHistoryModal         = closeHistoryModal;
+window.renderHistoryTable        = renderHistoryTable;
+window.renderHistoryPagination   = renderHistoryPagination;

@@ -1,4 +1,4 @@
-﻿﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="Login.aspx.cs" Inherits="Login" %>
+﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="Login.aspx.cs" Inherits="Login" %>
 
   <!DOCTYPE html>
   <html lang="fr">
@@ -328,7 +328,7 @@
           <hr />
           <a class="h2"><b>Gestion de Stock</b></a>
         </div>
-        <div class="card-body" style="background-color: #f6f6f6">
+        <div class="card-body-login" style="background-color: #f6f6f6">
           <form id="form1" runat="server" style="gap:10px">
             <asp:HiddenField ID="hfTimerEnabled" runat="server" Value="false" />
             <asp:Label ID="lblLicenceInfo" runat="server" ForeColor="#856404" CssClass="mb-2 d-block licence-warning"
@@ -368,6 +368,15 @@
                 <asp:Button ID="btnLogin" CssClass="btn btn-primary btn-block" runat="server" Text="Connexion"
                   OnClick="btnLogin_Click" OnClientClick="return onLoginButtonClick();" />
               </div>
+            </div>
+
+            <!-- ═══════════════════════════════════════════════════════════
+            ✅ BADGE VERSION — affiché sous le bouton Connexion
+            La version provient de Web.config (appSettings → Version)
+             ═══════════════════════════════════════════════════════════ -->
+            <div class="login-version-badge">
+              <i class="fas fa-code-branch"></i>
+              <span>Version&nbsp;: v<%= AuthHelper.Version %></span>
             </div>
           </form>
         </div>
@@ -529,6 +538,87 @@
           }
         }
       });
+    </script>
+    <!-- ═══════════════════════════════════════════════════════════
+         ✅ LOGO PERSONNEL — coin bas droit (fixed)
+         Chemin : ../img/logo2.png  (= /img/logo2.png depuis /auth/)
+         ═══════════════════════════════════════════════════════════ -->
+    <!-- ═══════════════════════════════════════════════════════════
+     ✅ LOGO PERSONNEL — coin bas droit (cliquable pour agrandir)
+     Chemin : ../img/logo2.png
+     ═══════════════════════════════════════════════════════════ -->
+    <div class="login-corner-logo" id="loginLogoTrigger" role="button" tabindex="0" aria-label="Agrandir le logo"
+      title="Cliquer pour agrandir">
+      <img src="../img/logo2.png" alt="Logo" />
+    </div>
+
+    <!-- ═══════════════════════════════════════════════════════════
+     ✅ MODALE D'AGRANDISSEMENT
+     ═══════════════════════════════════════════════════════════ -->
+    <div id="logoZoomOverlay" class="logo-zoom-overlay" aria-hidden="true" role="dialog" aria-modal="true"
+      aria-label="Logo agrandi">
+      <button type="button" class="logo-zoom-close" id="logoZoomClose" aria-label="Fermer">&times;</button>
+      <img src="../img/logo2.png" alt="Logo" class="logo-zoom-image" />
+    </div>
+    <!-- ═══ SCRIPT ZOOM LOGO ═══ -->
+    <script>
+      (function () {
+        'use strict';
+
+        var trigger = document.getElementById('loginLogoTrigger');
+        var overlay = document.getElementById('logoZoomOverlay');
+        var closeBtn = document.getElementById('logoZoomClose');
+
+        if (!trigger || !overlay) return;
+
+        function openZoom() {
+          overlay.classList.add('show');
+          overlay.setAttribute('aria-hidden', 'false');
+          document.body.style.overflow = 'hidden';
+          if (closeBtn) closeBtn.focus();
+        }
+
+        function closeZoom() {
+          overlay.classList.remove('show');
+          overlay.setAttribute('aria-hidden', 'true');
+          document.body.style.overflow = '';
+          trigger.focus();
+        }
+
+        // Clic sur le logo → ouvrir
+        trigger.addEventListener('click', function (e) {
+          e.preventDefault();
+          openZoom();
+        });
+
+        // Clavier (accessibilité) : Entrée / Espace
+        trigger.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            openZoom();
+          }
+        });
+
+        // Bouton ✕ → fermer
+        if (closeBtn) {
+          closeBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            closeZoom();
+          });
+        }
+
+        // Clic sur l'arrière-plan → fermer
+        overlay.addEventListener('click', function (e) {
+          if (e.target === overlay) closeZoom();
+        });
+
+        // Touche Échap → fermer
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && overlay.classList.contains('show')) {
+            closeZoom();
+          }
+        });
+      })();
     </script>
   </body>
 

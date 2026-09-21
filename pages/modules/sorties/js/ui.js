@@ -1,8 +1,7 @@
 // ============================================================
-// UI - SORTIES (Spinner, Modales, Pagination, Lignes)
+// UI - SORTIES
 // ============================================================
 
-// ─── SPINNER ───
 function forceHideSpinner() {
     var s = document.getElementById('spinnerOverlay');
     if (!s) return;
@@ -21,23 +20,15 @@ function showSpinner() {
 }
 function hideSpinner() { forceHideSpinner(); }
 
-// ─── MODALES ───
 function showModal(id) {
     var m = document.getElementById(id || 'sortieModal');
-    if (m) {
-        m.style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    }
+    if (m) { m.style.display = 'flex'; document.body.style.overflow = 'hidden'; }
 }
 function closeModal(id) {
     var m = document.getElementById(id || 'sortieModal');
-    if (m) {
-        m.style.display = 'none';
-        document.body.style.overflow = '';
-    }
+    if (m) { m.style.display = 'none'; document.body.style.overflow = ''; }
 }
 
-// ─── PAGINATION ───
 function createPaginationControls(totalPages) {
     var wrapper = document.getElementById('paginationWrapper');
     if (!wrapper) return;
@@ -50,7 +41,7 @@ function createPaginationControls(totalPages) {
 
     var createBtn = function (text, onClick, disabled, isDots) {
         disabled = disabled || false;
-        isDots = isDots || false;
+        isDots   = isDots   || false;
         var btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = text;
@@ -66,10 +57,7 @@ function createPaginationControls(totalPages) {
             + 'color:' + (isActive ? 'white' : (disabled ? '#6c757d' : '#007bff')) + ';'
             + 'cursor:' + (disabled || isActive ? 'default' : 'pointer') + ';border-radius:6px;font-weight:' + (isActive ? '700' : '500') + ';min-width:40px;';
         if (onClick && !disabled && !isActive) {
-            btn.addEventListener('click', function (e) {
-                e.preventDefault();
-                onClick();
-            });
+            btn.addEventListener('click', function (e) { e.preventDefault(); onClick(); });
         }
         if (disabled) btn.disabled = true;
         return btn;
@@ -78,14 +66,13 @@ function createPaginationControls(totalPages) {
     container.appendChild(createBtn('«', function () {
         if (AppState.page !== 1) { AppState.page = 1; loadSorties(); }
     }, AppState.page === 1));
-
     container.appendChild(createBtn('‹', function () {
         if (AppState.page > 1) { AppState.page--; loadSorties(); }
     }, AppState.page === 1));
 
     var maxVisible = 5;
     var start = Math.max(1, AppState.page - Math.floor(maxVisible / 2));
-    var end = Math.min(totalPages, start + maxVisible - 1);
+    var end   = Math.min(totalPages, start + maxVisible - 1);
     if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1);
 
     if (start > 1) {
@@ -109,7 +96,6 @@ function createPaginationControls(totalPages) {
     container.appendChild(createBtn('›', function () {
         if (AppState.page < totalPages) { AppState.page++; loadSorties(); }
     }, AppState.page === totalPages));
-
     container.appendChild(createBtn('»', function () {
         if (AppState.page !== totalPages) { AppState.page = totalPages; loadSorties(); }
     }, AppState.page === totalPages));
@@ -117,13 +103,17 @@ function createPaginationControls(totalPages) {
     wrapper.appendChild(container);
 }
 
-// ─── LIGNES ───
+// ============================================================
+// LIGNES
+// ============================================================
 function ajouterLigne(articleId, qteD, qteR, obs) {
     var tbody = document.getElementById('lignesBody');
     if (!tbody) return;
     var rowCount = tbody.children.length;
     var tr = document.createElement('tr');
     tr.dataset.index = rowCount;
+
+    var artPh = T('sorties.modal.lignes_article_select', '-- Article --');
 
     var optionsHtml = AppState.articles.map(function (a) {
         return '<option value="' + a.ID + '"' + (a.ID === articleId ? ' selected' : '') + '>' +
@@ -134,7 +124,7 @@ function ajouterLigne(articleId, qteD, qteR, obs) {
         '<td>' + (rowCount + 1) + '</td>' +
         '<td>' +
             '<select class="form-control form-control-sm ligne-article" required>' +
-                '<option value="">-- Article --</option>' +
+                '<option value="">' + artPh + '</option>' +
                 optionsHtml +
             '</select>' +
         '</td>' +
@@ -175,7 +165,7 @@ function getLignesFromModal() {
         var articleId = articleSelect ? articleSelect.value : '';
         var qteD = parseFloat(tr.querySelector('.ligne-qted').value) || 0;
         var qteR = parseFloat(tr.querySelector('.ligne-qter').value) || 0;
-        var obs = tr.querySelector('.ligne-obs') ? tr.querySelector('.ligne-obs').value : '';
+        var obs  = tr.querySelector('.ligne-obs') ? tr.querySelector('.ligne-obs').value : '';
         if (articleId && qteD > 0) {
             lignes.push({ articleId: articleId, quantiteD: qteD, quantiteR: qteR, observations: obs });
         }
@@ -183,7 +173,16 @@ function getLignesFromModal() {
     return lignes;
 }
 
-// ─── INITIALISATION UI ───
+function resetFilters() {
+    document.getElementById('search-filter').value = '';
+    document.getElementById('statut-filter').value = '';
+    AppState.filters.search      = '';
+    AppState.filters.destination = '';
+    AppState.filters.statut      = '';
+    AppState.page = 1;
+    loadSorties({ silent: true });
+}
+
 function initUIControls() {
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
@@ -199,6 +198,7 @@ function initUIControls() {
     document.querySelectorAll('button').forEach(function (btn) {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
+
     var rowsSelect = document.getElementById('rows-per-page-top');
     if (rowsSelect) {
         rowsSelect.addEventListener('change', function () {
@@ -208,15 +208,51 @@ function initUIControls() {
             loadSorties();
         });
     }
+
+    var searchInput = document.getElementById('search-filter');
+    if (searchInput) {
+        var timeoutId = null;
+        searchInput.addEventListener('input', function () {
+            clearTimeout(timeoutId);
+            var self = this;
+            timeoutId = setTimeout(function () {
+                AppState.filters.search = self.value.trim();
+                AppState.page = 1;
+                loadSorties({ silent: true });
+            }, 300);
+        });
+    }
+    var statutFilter = document.getElementById('statut-filter');
+    if (statutFilter) {
+        statutFilter.addEventListener('change', function () {
+            AppState.filters.statut = this.value;
+            AppState.page = 1;
+            loadSorties({ silent: true });
+        });
+    }
+    var resetBtn = document.getElementById('btnResetFilters');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', function () { resetFilters(); });
+    }
+
+    window.sortData = function (field) {
+        if (AppState.sortField === field) {
+            AppState.sortOrder = AppState.sortOrder === 'ASC' ? 'DESC' : 'ASC';
+        } else {
+            AppState.sortField = field;
+            AppState.sortOrder = 'ASC';
+        }
+        loadSorties();
+    };
 }
 
-// ─── EXPOSITIONS ───
-window.showSpinner = showSpinner;
-window.hideSpinner = hideSpinner;
-window.showModal = showModal;
-window.closeModal = closeModal;
+window.showSpinner              = showSpinner;
+window.hideSpinner              = hideSpinner;
+window.showModal                = showModal;
+window.closeModal               = closeModal;
 window.createPaginationControls = createPaginationControls;
-window.ajouterLigne = ajouterLigne;
-window.supprimerLigne = supprimerLigne;
-window.getLignesFromModal = getLignesFromModal;
-window.initUIControls = initUIControls;
+window.ajouterLigne             = ajouterLigne;
+window.supprimerLigne           = supprimerLigne;
+window.getLignesFromModal       = getLignesFromModal;
+window.initUIControls           = initUIControls;
+window.resetFilters             = resetFilters;

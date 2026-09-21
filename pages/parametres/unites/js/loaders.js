@@ -1,9 +1,18 @@
-// loaders.js – Version avec bouton Visualiser
-async function loadUnites(options = {}) {
-    const silent = !!(options && options.silent);
+// loaders.js – Version avec bouton Visualiser + i18n
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
+
+// ============================================================
+// CHARGEMENT DE LA LISTE
+// ============================================================
+async function loadUnites(options) {
+    options = options || {};
+    var silent = !!options.silent;
     if (!silent) showSpinner();
     try {
-        const params = new URLSearchParams({
+        var params = new URLSearchParams({
             page: AppState.page,
             pageSize: AppState.pageSize,
             search: AppState.filters.search,
@@ -11,9 +20,9 @@ async function loadUnites(options = {}) {
             sort: AppState.sortField,
             order: AppState.sortOrder
         });
-        const url = `${API.BASE}${API.HANDLERS_PATH}${API.LIST}?${params}`;
-        const resp = await fetch(url);
-        const data = await resp.json();
+        var url = API.BASE + API.HANDLERS_PATH + API.LIST + '?' + params;
+        var resp = await fetch(url);
+        var data = await resp.json();
         if (data.success) {
             AppState.unites = data.Unites || [];
             AppState.total = Number(data.total || 0);
@@ -24,70 +33,81 @@ async function loadUnites(options = {}) {
             loadStats();
             createPaginationControls(AppState.totalPages);
         } else {
-            showToast('Erreur', data.message || 'Impossible de charger les unités', 'error');
+            showToast(_t('message.error'), data.message || _t('unites.msg.load_error'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         if (!silent) hideSpinner();
     }
 }
 
+// ============================================================
+// CHARGEMENT DES STATISTIQUES
+// ============================================================
 async function loadStats() {
     try {
-        const url = `${API.BASE}${API.HANDLERS_PATH}${API.STATS}`;
-        const resp = await fetch(url);
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-        const data = await resp.json();
+        var url = API.BASE + API.HANDLERS_PATH + API.STATS;
+        var resp = await fetch(url);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        var data = await resp.json();
         if (data.success) {
-            document.getElementById('statTotal').textContent = data.total ?? 0;
-            document.getElementById('statActives').textContent = data.actives ?? 0;
-            document.getElementById('statInactives').textContent = data.inactives ?? 0;
+            document.getElementById('statTotal').textContent = data.total != null ? data.total : 0;
+            document.getElementById('statActives').textContent = data.actives != null ? data.actives : 0;
+            document.getElementById('statInactives').textContent = data.inactives != null ? data.inactives : 0;
         } else {
             console.warn('Stats API returned success=false:', data.message);
         }
-    } catch (e) {
-        console.error('Erreur stats :', e);
-        showToast('Erreur', 'Impossible de charger les statistiques', 'error');
+    } catch (err) {
+        console.error('Erreur stats :', err);
+        showToast(_t('message.error'), _t('unites.msg.stats_error'), 'error');
     }
 }
 
+// ============================================================
+// RENDU DU TABLEAU
+// ============================================================
 function renderTable(unites) {
-    const tbody = document.getElementById('unitesTableBody');
+    var tbody = document.getElementById('unitesTableBody');
     if (!unites.length) {
-        tbody.innerHTML = `<tr><td colspan="4" class="text-center">Aucune unité trouvée</td></tr>`;
-        document.getElementById('resultsCounter').textContent = '0 unité(s)';
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">' + _t('unites.msg.no_data') + '</td></tr>';
+        document.getElementById('resultsCounter').textContent = _t('unites.counter').replace('{n}', 0);
         return;
     }
-    let html = '';
-    unites.forEach(u => {
-        const statusHtml = u.ACTIVE
-            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">✓ Actif</span>'
-            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">✗ Inactif</span>';
-        const codeHtml = u.CODE
+
+    var html = '';
+    unites.forEach(function (u) {
+        var statusHtml = u.ACTIVE
+            ? '<span class="badge bg-success" style="background:#28a745;padding:4px 10px;border-radius:20px;color:white;">' + _t('unites.status.active') + '</span>'
+            : '<span class="badge bg-danger" style="background:#dc3545;padding:4px 10px;border-radius:20px;color:white;">' + _t('unites.status.inactive') + '</span>';
+
+        var codeHtml = u.CODE
             ? '<span class="badge bg-secondary" style="color:#6c757d; font-weight:bold; background-color:#e9e9e9; padding:4px 10px; border-radius:20px;color:#333;">' + u.CODE + '</span>'
             : '<span class="badge bg-secondary" style="color:#6c757d; background-color:#f8f9fa; padding:4px 10px; border-radius:20px;color:#333;">N/A</span>';
-        const nomHtml = u.NOM
+
+        var nomHtml = u.NOM
             ? '<span class="badge bg-secondary" style="font-weight:bold; padding:4px 10px;">' + u.NOM + '</span>'
             : '<span class="badge bg-secondary" style="font-weight:bold; padding:4px 10px;">N/A</span>';
-        html += `
-            <tr>
-                <td>${codeHtml}</td>
-                <td>${nomHtml}</td>
-                <td>${statusHtml}</td>
-                <td>
-                    <button type="button" class="btn btn-sm btn-info" onclick="viewUnite('${u.ID}')" title="Voir détails"><i class="fas fa-eye"></i></button>
-                    <button type="button" class="btn btn-sm btn-primary" onclick="editUnite('${u.ID}')"><i class="fas fa-edit"></i></button>
-                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteUnite('${u.ID}')"><i class="fas fa-trash"></i></button>
-                </td>
-            </tr>
-        `;
+
+        html += '<tr>'
+            + '<td>' + codeHtml + '</td>'
+            + '<td>' + nomHtml + '</td>'
+            + '<td>' + statusHtml + '</td>'
+            + '<td>'
+            +   '<button type="button" class="btn btn-sm btn-info" onclick="viewUnite(\'' + u.ID + '\')" title="' + _t('unites.action.view_details') + '"><i class="fas fa-eye"></i></button> '
+            +   '<button type="button" class="btn btn-sm btn-primary" onclick="editUnite(\'' + u.ID + '\')" title="' + _t('button.edit') + '"><i class="fas fa-edit"></i></button> '
+            +   '<button type="button" class="btn btn-sm btn-danger" onclick="deleteUnite(\'' + u.ID + '\')" title="' + _t('button.delete') + '"><i class="fas fa-trash"></i></button>'
+            + '</td>'
+            + '</tr>';
     });
     tbody.innerHTML = html;
-    document.getElementById('resultsCounter').textContent = `${AppState.total} unité(s)`;
+    document.getElementById('resultsCounter').textContent =
+        _t('unites.counter').replace('{n}', AppState.total);
 }
 
-// Expositions
+// ============================================================
+// EXPOSITIONS
+// ============================================================
 window.loadUnites = loadUnites;
 window.loadStats = loadStats;
 window.renderTable = renderTable;

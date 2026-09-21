@@ -1,6 +1,12 @@
-// crud.js - Module Fournisseurs avec génération automatique du CODE
+// crud.js - Module Fournisseurs avec génération automatique du CODE + i18n
 var currentFournisseurId = null;
 var currentMode = 'add'; // 'add', 'edit', 'view'
+
+// ─── Helper i18n défensif ───
+function _t(key, params) {
+    if (typeof window.t === 'function') return window.t(key, params);
+    return key;
+}
 
 // ============================================================
 // UTILITAIRE : activer / désactiver les champs
@@ -26,21 +32,23 @@ function openAddFournisseurModal(e) {
     if (e) e.preventDefault();
     currentFournisseurId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-truck"></i> Ajouter un fournisseur';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-truck"></i> ' + _t('fournisseurs.modal.add_title');
+
     document.getElementById('fournisseurForm').reset();
     document.getElementById('fournisseurActif').value = '1';
 
     // 🔒 Le CODE est généré côté serveur → champ vide, en lecture seule
     var codeEl = document.getElementById('fournisseurCode');
     codeEl.value = '';
-    codeEl.placeholder = 'Sera généré automatiquement (FRS-XXX-00001)';
+    codeEl.placeholder = _t('fournisseurs.modal.code_auto_placeholder');
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
 
     setFieldsEnabled(true);
 
-    // setFieldsEnabled réactive les champs → on réapplique le readonly sur le code
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
@@ -58,7 +66,9 @@ function editFournisseur(id) {
     if (!fournisseur) return;
     currentFournisseurId = id;
     currentMode = 'edit';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-edit"></i> Modifier un fournisseur';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-edit"></i> ' + _t('fournisseurs.modal.edit_title');
 
     var codeEl = document.getElementById('fournisseurCode');
     codeEl.value = fournisseur.CODE || '';
@@ -77,7 +87,6 @@ function editFournisseur(id) {
 
     setFieldsEnabled(true);
 
-    // Réapplication du readonly sur le code (le code est immuable)
     codeEl.readOnly = true;
     codeEl.style.backgroundColor = '#e9ecef';
     codeEl.style.cursor = 'not-allowed';
@@ -95,7 +104,9 @@ function viewFournisseur(id) {
     if (!fournisseur) return;
     currentFournisseurId = id;
     currentMode = 'view';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-eye"></i> Détails du fournisseur';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-eye"></i> ' + _t('fournisseurs.modal.view_title');
 
     var codeEl = document.getElementById('fournisseurCode');
     codeEl.value = fournisseur.CODE || '';
@@ -120,21 +131,18 @@ function viewFournisseur(id) {
 }
 
 // ============================================================
-// ENREGISTREMENT (ajout ou modification)
+// ENREGISTREMENT
 // ============================================================
 async function saveFournisseur(e) {
     e.preventDefault();
 
     if (currentMode === 'view') {
-        showToast('Info', 'Vous êtes en mode consultation, aucune modification n\'est possible.', 'info');
+        showToast(_t('fournisseurs.msg.info'), _t('fournisseurs.msg.view_mode'), 'info');
         return;
     }
 
     var id = currentFournisseurId;
 
-    // ⚠️ Le CODE n'est plus envoyé :
-    //    - à l'ajout → généré côté serveur (FRS-XXX-00001)
-    //    - en modification → immuable, non modifiable
     var data = {
         nom: document.getElementById('fournisseurNom').value.trim(),
         adresse: document.getElementById('fournisseurAdresse').value.trim(),
@@ -146,10 +154,12 @@ async function saveFournisseur(e) {
         actif: parseInt(document.getElementById('fournisseurActif').value) === 1
     };
 
-    // Validation : seul le nom est requis
     var valid = true;
     clearFieldErrors(['fournisseurCode', 'fournisseurNom']);
-    if (!data.nom) { showFieldError('fournisseurNom', 'Le nom est requis'); valid = false; }
+    if (!data.nom) {
+        showFieldError('fournisseurNom', _t('fournisseurs.msg.name_required'));
+        valid = false;
+    }
     if (!valid) return;
 
     var endpoint = id ? API.EDIT : API.ADD;
@@ -166,17 +176,19 @@ async function saveFournisseur(e) {
         var result = await resp.json();
 
         if (result.success) {
-            var msg = result.message || (id ? 'Fournisseur modifié' : 'Fournisseur ajouté');
-            if (result.code && !id) msg = 'Fournisseur ajouté avec succès (' + result.code + ').';
-            showToast('Succès', msg, 'success');
+            var msg = result.message || (id ? _t('fournisseurs.msg.updated') : _t('fournisseurs.msg.added'));
+            if (result.code && !id) {
+                msg = _t('fournisseurs.msg.added_with_code').replace('{code}', result.code);
+            }
+            showToast(_t('message.success'), msg, 'success');
             closeFournisseurModal();
             loadFournisseurs();
             loadFournisseurStats();
         } else {
-            showToast('Erreur', result.message || 'Une erreur est survenue', 'error');
+            showToast(_t('message.error'), result.message || _t('message.error'), 'error');
         }
-    } catch (e) {
-        showToast('Erreur', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.error'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -187,14 +199,14 @@ async function saveFournisseur(e) {
 // ============================================================
 async function deleteFournisseur(id) {
     var confirmResult = await Swal.fire({
-        title: 'Confirmer la suppression',
-        text: 'Voulez-vous vraiment supprimer ce fournisseur ?',
+        title: _t('fournisseurs.confirm.delete_title'),
+        text: _t('fournisseurs.confirm.delete_text'),
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Oui, supprimer',
-        cancelButtonText: 'Annuler'
+        confirmButtonText: _t('fournisseurs.confirm.delete_yes'),
+        cancelButtonText: _t('button.cancel')
     });
     if (!confirmResult.isConfirmed) return;
 
@@ -208,14 +220,14 @@ async function deleteFournisseur(id) {
         });
         var result = await resp.json();
         if (result.success) {
-            showToast('Succès', 'Fournisseur supprimé', 'success');
+            showToast(_t('message.success'), _t('fournisseurs.msg.deleted'), 'success');
             loadFournisseurs();
             loadFournisseurStats();
         } else {
-            showToast('Attention', result.message || 'Échec de la suppression', 'error');
+            showToast(_t('message.warning'), result.message || _t('fournisseurs.msg.delete_failed'), 'error');
         }
-    } catch (e) {
-        showToast('Attention', e.message, 'error');
+    } catch (err) {
+        showToast(_t('message.warning'), err.message, 'error');
     } finally {
         hideSpinner();
     }
@@ -229,15 +241,16 @@ function closeFournisseurModal() {
 
     currentFournisseurId = null;
     currentMode = 'add';
-    document.getElementById('modalTitle').innerHTML = '<i class="fas fa-truck"></i> Ajouter un fournisseur';
+
+    document.getElementById('modalTitle').innerHTML =
+        '<i class="fas fa-truck"></i> ' + _t('fournisseurs.modal.add_title');
 
     setFieldsEnabled(true);
 
-    // Repasser le champ code en mode "généré auto"
     var codeEl = document.getElementById('fournisseurCode');
     if (codeEl) {
         codeEl.value = '';
-        codeEl.placeholder = 'Sera généré automatiquement (FRS-XXX-00001)';
+        codeEl.placeholder = _t('fournisseurs.modal.code_auto_placeholder');
         codeEl.readOnly = true;
         codeEl.style.backgroundColor = '#e9ecef';
         codeEl.style.cursor = 'not-allowed';
@@ -252,13 +265,20 @@ function closeFournisseurModal() {
 // ============================================================
 function showFieldError(fieldId, msg) {
     var errEl = document.getElementById('err-' + fieldId);
-    if (errEl) { errEl.textContent = msg; errEl.style.display = 'block'; }
+    if (errEl) {
+        errEl.textContent = msg;
+        errEl.style.display = 'block';
+    }
 }
 
 function clearFieldErrors(fieldIds) {
-    fieldIds.forEach(function(id) {
+    if (!fieldIds) return;
+    fieldIds.forEach(function (id) {
         var err = document.getElementById('err-' + id);
-        if (err) { err.textContent = ''; err.style.display = 'none'; }
+        if (err) {
+            err.textContent = '';
+            err.style.display = 'none';
+        }
     });
 }
 

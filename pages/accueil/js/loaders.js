@@ -115,8 +115,8 @@ async function loadAlerts() {
         "<td>" + escapeHtml(a.nom) + "</td>" +
         "<td>" + escapeHtml(a.categorie || "—") + "</td>" +
         "<td>" + escapeHtml(a.emplacement || "—") + "</td>" +
+        "<td><strong>" + formatNumber(a.seuilAlerte) + "</strong></td>" +
         "<td><strong>" + formatNumber(a.quantite) + "</strong> " + escapeHtml(a.unite) + "</td>" +
-        "<td>" + formatNumber(a.seuilAlerte) + "</td>" +
         "<td>" + statutBadge(a.statut) + "</td>" +
         "</tr>";
     }
@@ -160,9 +160,9 @@ async function loadStockAlerts() {
         "<td>" + escapeHtml(a.ARTICLE_NOM) + "</td>" +
         "<td>" + escapeHtml(a.CATEGORIE_NOM || "—") + "</td>" +
         "<td>" + escapeHtml(a.EMPLACEMENT_NOM || "—") + "</td>" +
+        "<td><strong>" + formatNumber(a.SEUIL_ALERTE, 0) + "</strong></td>" +
         "<td><strong>" + formatNumber(a.DISPONIBLE, 0) + "</strong>" +
           (a.UNITE_NOM ? " <small>" + escapeHtml(a.UNITE_NOM) + "</small>" : "") + "</td>" +
-        "<td>" + formatNumber(a.SEUIL_ALERTE, 0) + "</td>" +
         "<td>" + statutBadge("ALERTE") + "</td>" +
         "</tr>";
     }
