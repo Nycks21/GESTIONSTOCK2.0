@@ -17,9 +17,10 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        // ✅ Authentification : Admin (1) ou SuperAdmin (0)
-        if (!AuthHelper.RequireApiAuth(Context, -1))
+        // ✅ AUTH + CSRF + rôle Admin minimum (1)
+        if (!AuthHelper.RequireCsrfSafePost(Context, 1))
         {
+            Response.StatusCode = 403;
             WriteResponse(false, "Accès non autorisé");
             return;
         }
@@ -83,7 +84,7 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // ✅ AJOUT : contrôle SuperAdmin APRÈS avoir lu roleId
+        // ✅ Contrôle SuperAdmin
         int currentRole = AuthHelper.GetUserRole(Context);
         if (roleId == 0 && currentRole != 0)
         {
@@ -91,7 +92,7 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // ✅ AJOUT : validation des permissions contre AllMenus
+        // ✅ Validation des permissions contre AllMenus
         List<string> permissions = new List<string>();
         if (data.ContainsKey("PERMISSIONS") && data["PERMISSIONS"] != null)
         {
@@ -174,67 +175,25 @@ protected void Page_Load(object sender, EventArgs e)
 
 private bool ValidateUserData(string username, string nom, string password, string email, int roleId)
 {
-    if (string.IsNullOrEmpty(username))
-    {
-        WriteResponse(false, "Le nom d'utilisateur est requis");
-        return false;
-    }
-    if (username.Length < 3 || username.Length > 50)
-    {
-        WriteResponse(false, "Le nom d'utilisateur doit contenir entre 3 et 50 caractères");
-        return false;
-    }
-    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-zA-Z0-9_]+$"))
-    {
-        WriteResponse(false, "Le nom d'utilisateur contient des caractères invalides");
-        return false;
-    }
-    if (string.IsNullOrEmpty(nom))
-    {
-        WriteResponse(false, "Le nom complet est requis");
-        return false;
-    }
-    if (nom.Length > 100)
-    {
-        WriteResponse(false, "Le nom complet est trop long");
-        return false;
-    }
-    if (string.IsNullOrEmpty(password))
-    {
-        WriteResponse(false, "Le mot de passe est requis");
-        return false;
-    }
-    if (password.Length < 8)
-    {
-        WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
-        return false;
-    }
-    if (string.IsNullOrEmpty(email))
-    {
-        WriteResponse(false, "L'email est requis");
-        return false;
-    }
-    if (!IsValidEmail(email))
-    {
-        WriteResponse(false, "Format d'email invalide");
-        return false;
-    }
+    if (string.IsNullOrEmpty(username)) { WriteResponse(false, "Le nom d'utilisateur est requis"); return false; }
+    if (username.Length < 3 || username.Length > 50) { WriteResponse(false, "Le nom d'utilisateur doit contenir entre 3 et 50 caractères"); return false; }
+    if (!System.Text.RegularExpressions.Regex.IsMatch(username, @"^[a-zA-Z0-9_]+$")) { WriteResponse(false, "Le nom d'utilisateur contient des caractères invalides"); return false; }
+    if (string.IsNullOrEmpty(nom)) { WriteResponse(false, "Le nom complet est requis"); return false; }
+    if (nom.Length > 100) { WriteResponse(false, "Le nom complet est trop long"); return false; }
+    if (string.IsNullOrEmpty(password)) { WriteResponse(false, "Le mot de passe est requis"); return false; }
+    if (password.Length < 8) { WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères"); return false; }
+    if (string.IsNullOrEmpty(email)) { WriteResponse(false, "L'email est requis"); return false; }
+    if (!IsValidEmail(email)) { WriteResponse(false, "Format d'email invalide"); return false; }
 
-    // Rôles autorisés à la création (SuperAdmin = 0 réservé au SuperAdmin)
     int[] allowedRoles = { 1, 2, 3, 4 };
-    if (!Array.Exists(allowedRoles, r => r == roleId))
-    {
-        WriteResponse(false, "Rôle invalide");
-        return false;
-    }
+    if (!Array.Exists(allowedRoles, r => r == roleId)) { WriteResponse(false, "Rôle invalide"); return false; }
 
     return true;
 }
 
 private string GetStringValue(Dictionary<string, object> data, string key)
 {
-    if (data.ContainsKey(key) && data[key] != null)
-        return data[key].ToString();
+    if (data.ContainsKey(key) && data[key] != null) return data[key].ToString();
     return "";
 }
 
@@ -273,11 +232,7 @@ private void LogSecurityAction(SqlConnection conn, int userId, string action, st
     try
     {
         bool closeConn = conn == null;
-        if (closeConn)
-        {
-            conn = new SqlConnection(connStr);
-            conn.Open();
-        }
+        if (closeConn) { conn = new SqlConnection(connStr); conn.Open(); }
 
         string sql = @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
                        VALUES (@UserId, @Action, @Details, @IP, GETDATE())";

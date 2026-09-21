@@ -367,6 +367,7 @@
 
       <script src="../_assets/js/chart.umd.min.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../_assets/js/i18n.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="../_assets/js/csrf.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../_assets/js/sweetalert2.all.min.js?v=<%=AuthHelper.Version %>"></script>
       <script>window.BASE_PATH = '<%= ResolveUrl("~/") %>';</script>

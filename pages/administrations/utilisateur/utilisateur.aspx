@@ -417,6 +417,7 @@
       <script src="../../_assets/js/pdfmake.min.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../../_assets/js/vfs_fonts.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../../_assets/js/i18n.js?v=<%=AuthHelper.Version %>"></script>
+      <script src="../../_assets/js/csrf.js?v=<%=AuthHelper.Version %>"></script>
       <script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
       <script src="js/config.js?v=<%=AuthHelper.Version %>"></script>
       <script src="js/state.js?v=<%=AuthHelper.Version %>"></script>

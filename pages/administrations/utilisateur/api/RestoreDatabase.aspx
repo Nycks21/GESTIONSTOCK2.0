@@ -15,25 +15,22 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        // ✅ Vérification d'authentification - SuperAdmin uniquement
-        if (!AuthHelper.RequireApiAuth(Context, 0))
-        {
-            Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
-            return;
-        }
-
         // ============================================================
-        // ACTION SPÉCIALE : renvoyer le nom de la base au client
-        // (pour affichage uniquement — jamais utilisé pour la restauration)
+        // ACTION SPÉCIALE : dbname → GET, lecture seule
         // ============================================================
         string requestedAction = Request.QueryString["action"];
         if (requestedAction == "dbname")
         {
+            if (!AuthHelper.RequireApiAuth(Context, 0))
+            {
+                Response.StatusCode = 403;
+                Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+                return;
+            }
+
             string dbName = GetApplicationDatabaseName();
             if (string.IsNullOrEmpty(dbName))
-            {
                 Response.Write("{\"success\":false,\"message\":\"Base de données introuvable\"}");
-            }
             else
             {
                 var ser = new System.Web.Script.Serialization.JavaScriptSerializer();
@@ -43,8 +40,14 @@ protected void Page_Load(object sender, EventArgs e)
         }
 
         // ============================================================
-        // RESTAURATION
+        // RESTAURATION : POST + CSRF + SuperAdmin
         // ============================================================
+        if (!AuthHelper.RequireCsrfSafePost(Context, 0))
+        {
+            Response.StatusCode = 403;
+            Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            return;
+        }
 
         // Lire le corps de la requête
         string jsonBody = "";
@@ -78,9 +81,7 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // ============================================================
-        // 1) Récupérer le NOM DE LA BASE dynamiquement
-        // ============================================================
+        // 1) Nom de la base
         string databaseName = GetApplicationDatabaseName();
         if (string.IsNullOrEmpty(databaseName))
         {
@@ -88,14 +89,11 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // ============================================================
-        // 2) Chaîne de connexion MASTER (pour la restauration)
-        // ============================================================
+        // 2) Chaîne master
         string masterConnStr = null;
         var masterCs = ConfigurationManager.ConnectionStrings["MasterConnection"];
         if (masterCs != null) masterConnStr = masterCs.ConnectionString;
 
-        // Fallback : construire une connexion master à partir de MaConnexion
         if (string.IsNullOrEmpty(masterConnStr))
         {
             var appCs = ConfigurationManager.ConnectionStrings["MaConnexion"];
@@ -135,7 +133,6 @@ protected void Page_Load(object sender, EventArgs e)
 
             try
             {
-                // ÉTAPE 3 : RESTORE
                 string restoreSql = "RESTORE DATABASE [" + databaseName + "] " +
                                     "FROM DISK = N'" + windowsPath.Replace("'", "''") + "' " +
                                     "WITH REPLACE, STATS = 10;";
@@ -147,7 +144,6 @@ protected void Page_Load(object sender, EventArgs e)
             }
             finally
             {
-                // ÉTAPE 4 : MULTI_USER (toujours, même en cas d'échec)
                 try
                 {
                     using (SqlCommand cmd = new SqlCommand(
@@ -173,12 +169,8 @@ protected void Page_Load(object sender, EventArgs e)
     }
 }
 
-// ============================================================
-// RÉCUPÉRATION DYNAMIQUE DU NOM DE LA BASE
-// ============================================================
 private string GetApplicationDatabaseName()
 {
-    // 1) Tentative depuis la chaîne de connexion "MaConnexion"
     var cs = ConfigurationManager.ConnectionStrings["MaConnexion"];
     if (cs != null && !string.IsNullOrEmpty(cs.ConnectionString))
     {
@@ -186,7 +178,6 @@ private string GetApplicationDatabaseName()
         if (!string.IsNullOrEmpty(name)) return name;
     }
 
-    // 2) Fallback : interroger SQL directement
     try
     {
         if (cs != null && !string.IsNullOrEmpty(cs.ConnectionString))
@@ -197,8 +188,7 @@ private string GetApplicationDatabaseName()
                 using (SqlCommand cmd = new SqlCommand("SELECT DB_NAME()", conn))
                 {
                     object result = cmd.ExecuteScalar();
-                    if (result != null && result != DBNull.Value)
-                        return result.ToString();
+                    if (result != null && result != DBNull.Value) return result.ToString();
                 }
             }
         }
@@ -211,15 +201,12 @@ private string GetApplicationDatabaseName()
 private string ExtractDatabaseFromConnectionString(string connStr)
 {
     if (string.IsNullOrEmpty(connStr)) return null;
-
     try
     {
         var builder = new SqlConnectionStringBuilder(connStr);
-        if (!string.IsNullOrEmpty(builder.InitialCatalog))
-            return builder.InitialCatalog;
+        if (!string.IsNullOrEmpty(builder.InitialCatalog)) return builder.InitialCatalog;
     }
     catch { }
-
     return null;
 }
 
@@ -231,10 +218,7 @@ private string ReplaceDatabaseInConnectionString(string connStr, string newDatab
         builder.InitialCatalog = newDatabase;
         return builder.ConnectionString;
     }
-    catch
-    {
-        return connStr;
-    }
+    catch { return connStr; }
 }
 
 private bool IsSecurePath(string path)

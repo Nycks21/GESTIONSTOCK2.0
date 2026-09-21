@@ -1,4 +1,4 @@
-﻿﻿﻿<%@ Page Language="C#" AutoEventWireup="true" %>
+﻿﻿<%@ Page Language="C#" AutoEventWireup="true" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.Configuration" %>
 
@@ -22,6 +22,14 @@ protected void Page_Load(object sender, EventArgs e)
     {
         Response.StatusCode = 405;
         WriteResponse("error", "Méthode non autorisée");
+        return;
+    }
+
+    // ✅ AUTH + CSRF + rôle SuperAdmin
+    if (!AuthHelper.RequireCsrfSafePost(Context, 0))
+    {
+        Response.StatusCode = 403;
+        WriteResponse("error", "Accès non autorisé");
         return;
     }
 

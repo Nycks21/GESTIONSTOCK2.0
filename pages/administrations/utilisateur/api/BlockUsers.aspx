@@ -14,23 +14,17 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        if (Session["authenticated"] == null || !(bool)Session["authenticated"])
+        // ✅ AUTH + CSRF + rôle SuperAdmin
+        if (!AuthHelper.RequireCsrfSafePost(Context, 0))
         {
-            WriteJson(new { success = false, message = "Non authentifié" });
+            Response.StatusCode = 403;
+            WriteJson(new { success = false, message = "Accès non autorisé" });
             return;
         }
 
-        int currentUserId = Session["IDUSER"]   != null ? Convert.ToInt32(Session["IDUSER"])   : 0;
-        int currentRole   = Session["USERROLE"] != null ? Convert.ToInt32(Session["USERROLE"]) : -1;
+        int currentUserId = AuthHelper.GetUserId(Context);
 
-        if (currentRole != 0)
-        {
-            WriteJson(new { success = false, message = "Seul un SuperAdmin peut bloquer les utilisateurs" });
-            return;
-        }
-
-        // --- Lecture défensive du body ---
-        int duration = 1; // 1 minute par défaut
+        int duration = 1;
         string body = new System.IO.StreamReader(Request.InputStream).ReadToEnd();
 
         if (!string.IsNullOrEmpty(body))
@@ -40,20 +34,16 @@ protected void Page_Load(object sender, EventArgs e)
                 var serializer = new JavaScriptSerializer();
                 var data = serializer.Deserialize<Dictionary<string, object>>(body);
                 if (data != null && data.ContainsKey("duration") && data["duration"] != null)
-                {
                     duration = Convert.ToInt32(data["duration"]);
-                }
             }
             catch (Exception parseEx)
             {
-                // On log sans casser : on reste sur la valeur par défaut
                 System.Diagnostics.Debug.WriteLine("BlockUsers: parsing body échoué - " + parseEx.Message);
             }
         }
 
-        // --- Garde-fous ---
         if (duration < 1)    duration = 1;
-        if (duration > 1440) duration = 1440; // max 24h
+        if (duration > 1440) duration = 1440;
 
         DateTime blockUntil = DateTime.Now.AddMinutes(duration);
         string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
@@ -62,19 +52,14 @@ protected void Page_Load(object sender, EventArgs e)
         {
             conn.Open();
 
-            // Ajout de la colonne si absente
             string checkColumn = @"
                 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
                                WHERE TABLE_NAME = 'USERS' AND COLUMN_NAME = 'BLOCKED_UNTIL')
                 BEGIN
                     ALTER TABLE USERS ADD BLOCKED_UNTIL DATETIME NULL
                 END";
-            using (SqlCommand checkCmd = new SqlCommand(checkColumn, conn))
-            {
-                checkCmd.ExecuteNonQuery();
-            }
+            using (SqlCommand checkCmd = new SqlCommand(checkColumn, conn)) { checkCmd.ExecuteNonQuery(); }
 
-            // Blocage
             string sql = @"
                 UPDATE USERS
                 SET BLOCKED_UNTIL = @BlockUntil

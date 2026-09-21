@@ -14,20 +14,15 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        if (Session["authenticated"] == null || !(bool)Session["authenticated"])
+        // ✅ AUTH + CSRF + rôle SuperAdmin
+        if (!AuthHelper.RequireCsrfSafePost(Context, 0))
         {
-            WriteJson(new { success = false, message = "Non authentifié" });
+            Response.StatusCode = 403;
+            WriteJson(new { success = false, message = "Accès non autorisé" });
             return;
         }
 
-        int currentUserId = Session["IDUSER"]   != null ? Convert.ToInt32(Session["IDUSER"])   : 0;
-        int currentRole   = Session["USERROLE"] != null ? Convert.ToInt32(Session["USERROLE"]) : -1;
-
-        if (currentRole != 0)
-        {
-            WriteJson(new { success = false, message = "Seul un SuperAdmin peut bloquer les connexions" });
-            return;
-        }
+        int currentUserId = AuthHelper.GetUserId(Context);
 
         // --- Lecture défensive du body ---
         int duration = 1;
@@ -40,9 +35,7 @@ protected void Page_Load(object sender, EventArgs e)
                 var serializer = new JavaScriptSerializer();
                 var data = serializer.Deserialize<Dictionary<string, object>>(body);
                 if (data != null && data.ContainsKey("duration") && data["duration"] != null)
-                {
                     duration = Convert.ToInt32(data["duration"]);
-                }
             }
             catch (Exception parseEx)
             {
@@ -66,10 +59,7 @@ protected void Page_Load(object sender, EventArgs e)
                 BEGIN
                     ALTER TABLE USERS ADD BLOCKED_UNTIL DATETIME NULL
                 END";
-            using (SqlCommand checkCmd = new SqlCommand(checkColumn, conn))
-            {
-                checkCmd.ExecuteNonQuery();
-            }
+            using (SqlCommand checkCmd = new SqlCommand(checkColumn, conn)) { checkCmd.ExecuteNonQuery(); }
 
             string sql = @"
                 UPDATE USERS

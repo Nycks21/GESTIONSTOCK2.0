@@ -4,6 +4,31 @@
    ═══════════════════════════════════════════════════════════════
 */
 
+// ============================================================================
+// 🔒 ACTIVATION DE LA PROTECTION CSRF
+// ----------------------------------------------------------------------------
+// Doit être exécuté EN PREMIER, avant toute fonction qui utilise fetch().
+// Le patch est idempotent (window.__csrfPatched) : appeler plusieurs fois
+// patchGlobalFetch() est sans effet secondaire.
+//
+// ⚠️ Requiert que /_assets/js/csrf.js soit chargé AVANT global.js.
+// ============================================================================
+(function activateCsrfProtection() {
+  if (typeof window.patchGlobalFetch === "function") {
+    window.patchGlobalFetch();
+    if (window.console && console.log) {
+      console.log("🔒 Protection CSRF activée sur window.fetch");
+    }
+  } else {
+    if (window.console && console.warn) {
+      console.warn(
+        "⚠️ csrf.js non chargé : protection CSRF inactive. " +
+          "Vérifiez que <script src=\".../js/csrf.js\"> est bien présent AVANT global.js.",
+      );
+    }
+  }
+})();
+
 function formatNumber(value, decimals) {
   decimals = decimals || 2;
   var num = parseFloat(value);
@@ -1125,8 +1150,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
   console.log("✅ Sélecteur de langue initialisé");
 });
-
-// ... (contenu existant jusqu'à la fin) ...
 
 // ============================================================================
 // AJOUTS POUR LE MODULE ARTICLES (CRUD)

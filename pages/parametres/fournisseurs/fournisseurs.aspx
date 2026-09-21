@@ -302,6 +302,7 @@
     <script src="../../_assets/js/xlsx.full.min.js?v=<%=AuthHelper.Version %>"></script>
     <script src="../../_assets/js/vfs_fonts.js?v=<%=AuthHelper.Version %>"></script>
     <script src="../../_assets/js/i18n.js?v=<%=AuthHelper.Version %>"></script>
+    <script src="../../_assets/js/csrf.js?v=<%=AuthHelper.Version %>"></script>
     <script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
     <script>window.BASE_PATH = '<%= ResolveUrl("~/") %>';</script>
     <script src="js/config.js?v=<%=AuthHelper.Version %>"></script>

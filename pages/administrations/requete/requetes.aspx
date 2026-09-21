@@ -145,6 +145,7 @@
               <script src="../../_assets/js/jquery-3.6.0.min.js?v=<%=AuthHelper.Version %>"></script>
               <script src="../../_assets/js/sweetalert2@11.js?v=<%=AuthHelper.Version %>"></script>
               <script src="../../_assets/js/i18n.js?v=<%=AuthHelper.Version %>"></script>
+              <script src="../../_assets/js/csrf.js?v=<%=AuthHelper.Version %>"></script>
               <script src="../../_assets/js/global.js?v=<%=AuthHelper.Version %>"></script>
               <script src="js/script.js?v=<%=AuthHelper.Version %>"></script>
               <div id="toastContainer"></div>

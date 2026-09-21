@@ -17,9 +17,10 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        // ✅ Vérification d'authentification - Admin (1) ou SuperAdmin (0)
-        if (!AuthHelper.RequireApiAuth(Context, -1))
+        // ✅ AUTH + CSRF + rôle Admin minimum (1)
+        if (!AuthHelper.RequireCsrfSafePost(Context, 1))
         {
+            Response.StatusCode = 403;
             WriteResponse(false, "Accès non autorisé");
             return;
         }
@@ -38,7 +39,6 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // 🔹 Récupération des paramètres depuis la QueryString
         int userId = GetQueryInt("id", 0);
         string nom = GetQueryString("nom");
         string email = GetQueryString("email");
@@ -48,52 +48,16 @@ protected void Page_Load(object sender, EventArgs e)
         string password = GetQueryString("password");
         string permissionsJson = GetQueryString("permissions");
 
-        // Validation de l'ID
-        if (userId <= 0)
-        {
-            WriteResponse(false, "ID utilisateur invalide");
-            return;
-        }
+        if (userId <= 0) { WriteResponse(false, "ID utilisateur invalide"); return; }
+        if (string.IsNullOrEmpty(nom)) { WriteResponse(false, "Le nom complet est requis"); return; }
+        if (nom.Length > 100) { WriteResponse(false, "Le nom complet est trop long"); return; }
+        if (string.IsNullOrEmpty(email)) { WriteResponse(false, "L'email est requis"); return; }
+        if (!IsValidEmail(email)) { WriteResponse(false, "Format d'email invalide"); return; }
 
-        // Validation des champs obligatoires
-        if (string.IsNullOrEmpty(nom))
-        {
-            WriteResponse(false, "Le nom complet est requis");
-            return;
-        }
-        if (nom.Length > 100)
-        {
-            WriteResponse(false, "Le nom complet est trop long");
-            return;
-        }
-
-        if (string.IsNullOrEmpty(email))
-        {
-            WriteResponse(false, "L'email est requis");
-            return;
-        }
-        if (!IsValidEmail(email))
-        {
-            WriteResponse(false, "Format d'email invalide");
-            return;
-        }
-
-        // Validation du rôle (0-4)
         int[] allowedRoles = { 0, 1, 2, 3, 4 };
-        if (!Array.Exists(allowedRoles, r => r == roleId))
-        {
-            WriteResponse(false, "Rôle invalide");
-            return;
-        }
+        if (!Array.Exists(allowedRoles, r => r == roleId)) { WriteResponse(false, "Rôle invalide"); return; }
+        if (!string.IsNullOrEmpty(password) && password.Length < 8) { WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères"); return; }
 
-        // Validation du mot de passe (si fourni)
-        if (!string.IsNullOrEmpty(password) && password.Length < 8)
-        {
-            WriteResponse(false, "Le mot de passe doit contenir au moins 8 caractères");
-            return;
-        }
-
-        // ✅ Validation des permissions contre AuthHelper.AllMenus
         List<string> validatedPermissions = new List<string>();
         if (!string.IsNullOrEmpty(permissionsJson))
         {
@@ -106,9 +70,7 @@ protected void Page_Load(object sender, EventArgs e)
                     foreach (string p in permsList)
                     {
                         if (AuthHelper.AllMenus.Any(m => m.Code == p))
-                        {
                             validatedPermissions.Add(p);
-                        }
                     }
                 }
             }
@@ -119,7 +81,6 @@ protected void Page_Load(object sender, EventArgs e)
             }
         }
 
-        // ID de l'utilisateur qui effectue la mise à jour
         int currentUserId = AuthHelper.GetUserId(Context);
         int callerRole = AuthHelper.GetUserRole(Context);
 
@@ -127,21 +88,15 @@ protected void Page_Load(object sender, EventArgs e)
         {
             conn.Open();
 
-            // 🔹 Récupérer le ROLEID actuel de la cible
             int targetCurrentRole = -1;
             using (SqlCommand getRoleCmd = new SqlCommand("SELECT ROLEID FROM USERS WHERE IDUSER = @ID", conn))
             {
                 getRoleCmd.Parameters.AddWithValue("@ID", userId);
                 object result = getRoleCmd.ExecuteScalar();
-                if (result == null || result == DBNull.Value)
-                {
-                    WriteResponse(false, "Utilisateur non trouvé");
-                    return;
-                }
+                if (result == null || result == DBNull.Value) { WriteResponse(false, "Utilisateur non trouvé"); return; }
                 targetCurrentRole = Convert.ToInt32(result);
             }
 
-            // ✅ Règle 1 : Seul SuperAdmin peut modifier un SuperAdmin
             if (targetCurrentRole == 0 && callerRole != 0)
             {
                 LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED",
@@ -149,8 +104,6 @@ protected void Page_Load(object sender, EventArgs e)
                 WriteResponse(false, "Seul un SuperAdmin peut modifier un SuperAdmin");
                 return;
             }
-
-            // ✅ Règle 2 : Seul SuperAdmin peut attribuer le rôle SuperAdmin
             if (roleId == 0 && callerRole != 0)
             {
                 LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED",
@@ -158,17 +111,13 @@ protected void Page_Load(object sender, EventArgs e)
                 WriteResponse(false, "Seul un SuperAdmin peut attribuer le rôle SuperAdmin");
                 return;
             }
-
-            // ✅ Règle 3 : Anti-escalade sur soi-même
             if (userId == currentUserId && callerRole != 0 && roleId == 0)
             {
-                LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED",
-                    "Tentative d'auto-promotion SuperAdmin");
+                LogSecurityAction(conn, currentUserId, "USER_UPDATE_DENIED", "Tentative d'auto-promotion SuperAdmin");
                 WriteResponse(false, "Auto-promotion interdite");
                 return;
             }
 
-            // Construction de la requête de mise à jour
             string query = @"
                 UPDATE USERS SET
                     NOM = @NOM,
@@ -179,12 +128,8 @@ protected void Page_Load(object sender, EventArgs e)
                     UPDATED_AT = GETDATE(),
                     UPDATED_BY = @UPDATED_BY";
 
-            if (!string.IsNullOrEmpty(password))
-            {
-                query += ", PWD = @PWD";
-            }
+            if (!string.IsNullOrEmpty(password)) query += ", PWD = @PWD";
 
-            // ✅ On utilise la liste validée, re-sérialisée
             string validatedPermissionsJson = null;
             if (!string.IsNullOrEmpty(permissionsJson))
             {
@@ -205,47 +150,24 @@ protected void Page_Load(object sender, EventArgs e)
                 cmd.Parameters.AddWithValue("@UPDATED_BY", currentUserId);
                 cmd.Parameters.AddWithValue("@ID", userId);
 
-                if (!string.IsNullOrEmpty(password))
-                {
-                    cmd.Parameters.AddWithValue("@PWD", PasswordHelper.HashPassword(password));
-                }
-
-                if (validatedPermissionsJson != null)
-                {
-                    cmd.Parameters.AddWithValue("@PERMISSIONS", validatedPermissionsJson);
-                }
+                if (!string.IsNullOrEmpty(password)) cmd.Parameters.AddWithValue("@PWD", PasswordHelper.HashPassword(password));
+                if (validatedPermissionsJson != null) cmd.Parameters.AddWithValue("@PERMISSIONS", validatedPermissionsJson);
 
                 int rowsAffected = cmd.ExecuteNonQuery();
-                if (rowsAffected == 0)
-                {
-                    WriteResponse(false, "Aucune modification effectuée");
-                    return;
-                }
+                if (rowsAffected == 0) { WriteResponse(false, "Aucune modification effectuée"); return; }
             }
 
-            // Journalisation enrichie
             LogSecurityAction(conn, currentUserId, "USER_UPDATE",
-                "Mise à jour de l'utilisateur ID " + userId +
-                " (rôle cible: " + targetCurrentRole + " -> " + roleId + ")");
+                "Mise à jour de l'utilisateur ID " + userId + " (rôle cible: " + targetCurrentRole + " -> " + roleId + ")");
 
             WriteResponse(true, "Utilisateur mis à jour avec succès", userId);
         }
     }
     catch (SqlException ex)
     {
-        if (ex.Number == 2627)
-        {
-            WriteResponse(false, "Conflit d'identifiant (peut-être email déjà utilisé)");
-        }
-        else if (ex.Number == 547)
-        {
-            WriteResponse(false, "Violation de contrainte de clé étrangère");
-        }
-        else
-        {
-            LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message);
-            WriteResponse(false, "Erreur de base de données");
-        }
+        if (ex.Number == 2627) WriteResponse(false, "Conflit d'identifiant (peut-être email déjà utilisé)");
+        else if (ex.Number == 547) WriteResponse(false, "Violation de contrainte de clé étrangère");
+        else { LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message); WriteResponse(false, "Erreur de base de données"); }
     }
     catch (Exception ex)
     {
@@ -255,37 +177,9 @@ protected void Page_Load(object sender, EventArgs e)
     }
 }
 
-// ------------------- Méthodes utilitaires -------------------
-
-private string GetQueryString(string key)
-{
-    string val = Request.QueryString[key];
-    return val != null ? val.Trim() : "";
-}
-
-private int GetQueryInt(string key, int defaultValue)
-{
-    string val = Request.QueryString[key];
-    if (string.IsNullOrEmpty(val))
-        return defaultValue;
-    int result;
-    if (int.TryParse(val, out result))
-        return result;
-    return defaultValue;
-}
-
-private bool IsValidEmail(string email)
-{
-    try
-    {
-        var addr = new System.Net.Mail.MailAddress(email);
-        return addr.Address == email;
-    }
-    catch
-    {
-        return false;
-    }
-}
+private string GetQueryString(string key) { string val = Request.QueryString[key]; return val != null ? val.Trim() : ""; }
+private int GetQueryInt(string key, int defaultValue) { string val = Request.QueryString[key]; if (string.IsNullOrEmpty(val)) return defaultValue; int r; return int.TryParse(val, out r) ? r : defaultValue; }
+private bool IsValidEmail(string email) { try { var addr = new System.Net.Mail.MailAddress(email); return addr.Address == email; } catch { return false; } }
 
 private void WriteResponse(bool success, string message, int userId = 0)
 {
@@ -293,10 +187,7 @@ private void WriteResponse(bool success, string message, int userId = 0)
     var response = new Dictionary<string, object>();
     response["success"] = success;
     response["message"] = message;
-    if (userId > 0)
-    {
-        response["userId"] = userId;
-    }
+    if (userId > 0) response["userId"] = userId;
     Response.Write(serializer.Serialize(response));
 }
 
@@ -305,11 +196,7 @@ private void LogSecurityAction(SqlConnection conn, int userId, string action, st
     try
     {
         bool closeConn = conn == null;
-        if (closeConn)
-        {
-            conn = new SqlConnection(connStr);
-            conn.Open();
-        }
+        if (closeConn) { conn = new SqlConnection(connStr); conn.Open(); }
 
         string sql = @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
                        VALUES (@UserId, @Action, @Details, @IP, GETDATE())";
@@ -322,9 +209,8 @@ private void LogSecurityAction(SqlConnection conn, int userId, string action, st
             cmd.ExecuteNonQuery();
         }
 
-        if (closeConn)
-            conn.Close();
+        if (closeConn) conn.Close();
     }
-    catch { /* Ne pas échouer si le log échoue */ }
+    catch { }
 }
 </script>

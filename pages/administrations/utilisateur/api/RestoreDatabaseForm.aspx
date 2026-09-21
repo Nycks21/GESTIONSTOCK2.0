@@ -9,63 +9,50 @@ protected void Page_Load(object sender, EventArgs e)
     Response.Clear();
     Response.ContentType = "application/json";
     Response.ContentEncoding = new System.Text.UTF8Encoding(false);
-    
+
     try
     {
-        if (Session["authenticated"] == null || !(bool)Session["authenticated"])
+        // ✅ AUTH + CSRF + SuperAdmin
+        if (!AuthHelper.RequireCsrfSafePost(Context, 0))
         {
-            Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            Response.StatusCode = 403;
+            Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
-        
-        int userRole = Session["USERROLE"] != null ? Convert.ToInt32(Session["USERROLE"]) : -1;
-        if (userRole != 0)
-        {
-            Response.Write("{\"success\":false,\"message\":\"Droits insuffisants\"}");
-            return;
-        }
-        
-        // Vérifier si un fichier a été uploadé
+
         if (Request.Files.Count == 0)
         {
             Response.Write("{\"success\":false,\"message\":\"Aucun fichier reçu\"}");
             return;
         }
-        
+
         HttpPostedFile file = Request.Files[0];
         string fileName = Path.GetFileName(file.FileName);
-        
+
         if (string.IsNullOrEmpty(fileName))
         {
             Response.Write("{\"success\":false,\"message\":\"Nom de fichier invalide\"}");
             return;
         }
-        
+
         if (!fileName.ToLower().EndsWith(".bak"))
         {
             Response.Write("{\"success\":false,\"message\":\"Le fichier doit être au format .bak\"}");
             return;
         }
-        
-        // Vérifier la taille (max 100 Mo)
+
         if (file.ContentLength > 100 * 1024 * 1024)
         {
             Response.Write("{\"success\":false,\"message\":\"Le fichier dépasse la taille maximale de 100 Mo\"}");
             return;
         }
-        
-        // Créer le dossier si nécessaire
+
         string tempFolder = Server.MapPath("~/App_Data/Backups");
-        if (!Directory.Exists(tempFolder))
-        {
-            Directory.CreateDirectory(tempFolder);
-        }
-        
-        // Sauvegarder le fichier
+        if (!Directory.Exists(tempFolder)) Directory.CreateDirectory(tempFolder);
+
         string tempFilePath = Path.Combine(tempFolder, "restore_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".bak");
         file.SaveAs(tempFilePath);
-        
-        // Vérifier que le fichier a bien été sauvegardé
+
         if (File.Exists(tempFilePath))
         {
             FileInfo info = new FileInfo(tempFilePath);

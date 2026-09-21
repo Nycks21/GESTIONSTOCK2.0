@@ -19,20 +19,33 @@ protected void Page_Load(object sender, EventArgs e)
 
     try
     {
-        // ---- 1) AUTHENTIFICATION ----
-        if (!AuthHelper.RequireApiAuth(Context, -1))
+        // ---- 0) PREFLIGHT CORS (avant toute vérification) ----
+        if (Request.HttpMethod == "OPTIONS")
         {
-            WriteResponse(false, "Session expirée. Veuillez vous reconnecter.");
+            Response.StatusCode = 200;
+            Response.End();
             return;
         }
-        if (Request.HttpMethod == "OPTIONS") { Response.StatusCode = 200; Response.End(); return; }
+
+        // ---- 1) MÉTHODE ----
         if (Request.HttpMethod != "POST")
         {
             WriteResponse(false, "Méthode non autorisée");
             return;
         }
 
-        // ---- 2) UTILISATEUR CONNECTÉ ----
+        // ---- 2) AUTHENTIFICATION + CSRF ----
+        //  RequireCsrfSafePost = RequireApiAuth + ValidateCsrfToken + ValidateOrigin
+        //  Pas de rôle minimum (-1) : tout utilisateur connecté peut changer
+        //  son propre mot de passe.
+        if (!AuthHelper.RequireCsrfSafePost(Context))
+        {
+            Response.StatusCode = 403;
+            WriteResponse(false, "Session expirée ou requête non autorisée. Veuillez vous reconnecter.");
+            return;
+        }
+
+        // ---- 3) UTILISATEUR CONNECTÉ ----
         int userId = AuthHelper.GetUserId(Context);
         if (userId <= 0)
         {
@@ -40,12 +53,12 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        // ---- 3) PARAMÈTRES ----
+        // ---- 4) PARAMÈTRES ----
         string oldPwd     = (Request.Form["oldPwd"]     ?? Request["oldPwd"]     ?? "").Trim();
         string newPwd     = (Request.Form["newPwd"]     ?? Request["newPwd"]     ?? "").Trim();
         string confirmPwd = (Request.Form["confirmPwd"] ?? Request["confirmPwd"] ?? "").Trim();
 
-        // ---- 4) VALIDATIONS ----
+        // ---- 5) VALIDATIONS ----
         if (string.IsNullOrEmpty(oldPwd) || string.IsNullOrEmpty(newPwd) || string.IsNullOrEmpty(confirmPwd))
         { WriteResponse(false, "Tous les champs sont obligatoires."); return; }
         if (newPwd.Length < MIN_PWD_LENGTH)
@@ -57,12 +70,12 @@ protected void Page_Load(object sender, EventArgs e)
         if (string.Equals(oldPwd, newPwd, StringComparison.Ordinal))
         { WriteResponse(false, "Le nouveau mot de passe doit être différent de l'ancien."); return; }
 
-        // ---- 5) TRAITEMENT SQL ----
+        // ---- 6) TRAITEMENT SQL ----
         using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
 
-            // 5.1) Récupérer le hash stocké
+            // 6.1) Récupérer le hash stocké
             string storedPwd;
             using (SqlCommand cmd = new SqlCommand(
                 "SELECT PWD FROM USERS WHERE IDUSER = @id AND DELETION_AT IS NULL", conn))
@@ -74,7 +87,7 @@ protected void Page_Load(object sender, EventArgs e)
                 storedPwd = o.ToString();
             }
 
-            // 5.2) Vérifier l'ancien mot de passe
+            // 6.2) Vérifier l'ancien mot de passe
             //      ✅ On délègue à PasswordHelper (même logique que Login.aspx).
             //      ⚠️ Ordre : (storedHash, password, out needsRehash)
             bool needsRehash;
@@ -83,7 +96,7 @@ protected void Page_Load(object sender, EventArgs e)
             if (!pwdOk)
             { WriteResponse(false, "L'ancien mot de passe est incorrect."); return; }
 
-            // 5.3) Mettre à jour avec un hash PBKDF2 neuf (aligné sur PasswordHelper)
+            // 6.3) Mettre à jour avec un hash PBKDF2 neuf (aligné sur PasswordHelper)
             string newHash = PasswordHelper.HashPassword(newPwd);
             using (SqlCommand cmd = new SqlCommand(
                 "UPDATE USERS SET PWD = @pwd, UPDATED_AT = GETDATE(), UPDATED_BY = @by WHERE IDUSER = @id", conn))

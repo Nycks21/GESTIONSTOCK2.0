@@ -24,39 +24,23 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
 
     public void ProcessRequest(HttpContext context)
     {
-        // ✅ Sécurité : 3 vérifications essentielles (CSRF supprimé)
-
-        // 1. Authentification
-        if (context.Session == null || context.Session["authenticated"] == null || !(bool)context.Session["authenticated"])
+        // ✅ Sécurité : garde-fou unifié
+        //    RequireCsrfSafePost = RequireApiAuth + ValidateCsrfToken + ValidateOrigin
+        //    1. Session authentifiée
+        //    2. Token de session valide (validé en DB)
+        //    3. Rôle minimal : SuperAdmin (role == 0)
+        //    4. Header X-CSRF-Token valide
+        //    5. Origin/Referer de confiance
+        if (!AuthHelper.RequireCsrfSafePost(context, 0))
         {
-            context.Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
-            return;
-        }
-
-        // 2. Token de session valide
-        if (!AuthHelper.RequireApiAuth(context))
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Session invalide\"}");
-            return;
-        }
-
-        // 3. Permission (SuperAdmin = 0, Admin = 1, etc.)
-        int role = AuthHelper.GetUserRole(context);
-        if (role < 0 || role > 1) // Permissions minimales selon le handler
-        {
-            context.Response.Write("{\"success\":false,\"message\":\"Permissions insuffisantes\"}");
+            context.Response.ContentType = "application/json";
+            context.Response.StatusCode = 403;
+            SendResponse(context, false, "Accès non autorisé.");
             return;
         }
 
         context.Response.ContentType = "application/json";
         context.Response.Headers["Cache-Control"] = "no-cache";
-
-        // ✅ Vérification d'authentification supplémentaire (SuperAdmin uniquement)
-        if (!AuthHelper.RequireApiAuth(context, 0)) // SuperAdmin uniquement
-        {
-            SendResponse(context, false, "Accès non autorisé.");
-            return;
-        }
 
         string sqlQuery = context.Request.Form["query"];
 
@@ -100,7 +84,6 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
             }
             catch (SqlException ex)
             {
-                // ✅ Log sécurisé sans exposer les détails
                 LogError(context, ex);
                 SendResponse(context, false, "Erreur de base de données. Contactez l'administrateur.");
             }
@@ -127,7 +110,6 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
         try
         {
             string logFile = context.Server.MapPath("~/App_Data/security.log");
-            // Concaténation classique pour .NET 4.0 (pas d'interpolation)
             string entry = "[" + DateTime.Now.ToString() + "] SQL Error: " + ex.Message + "\n" +
                            "IP: " + context.Request.UserHostAddress + "\n" +
                            "---\n";

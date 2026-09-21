@@ -8,44 +8,36 @@ protected void Page_Load(object sender, EventArgs e)
 {
     Response.ContentType = "application/json";
     Response.ContentEncoding = new System.Text.UTF8Encoding(false);
-    
+
     try
     {
-        // Vérifier que l'utilisateur est SuperAdmin
-        if (Session["authenticated"] == null || !(bool)Session["authenticated"])
+        // ✅ AUTH + CSRF + rôle SuperAdmin
+        if (!AuthHelper.RequireCsrfSafePost(Context, 0))
         {
-            Response.Write("{\"success\":false,\"message\":\"Non authentifié\"}");
+            Response.StatusCode = 403;
+            Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
-        
-        int currentUserId = Session["IDUSER"] != null ? Convert.ToInt32(Session["IDUSER"]) : 0;
-        int currentRole = Session["USERROLE"] != null ? Convert.ToInt32(Session["USERROLE"]) : -1;
-        
-        if (currentRole != 0)
-        {
-            Response.Write("{\"success\":false,\"message\":\"Seul un SuperAdmin peut déconnecter les utilisateurs\"}");
-            return;
-        }
-        
+
+        int currentUserId = AuthHelper.GetUserId(Context);
         string connStr = ConfigurationManager.ConnectionStrings["MaConnexion"].ConnectionString;
-        
+
         using (SqlConnection conn = new SqlConnection(connStr))
         {
             conn.Open();
-            
-            // Déconnecter tous les utilisateurs SAUF le SuperAdmin actuel
+
             string sql = @"
-                UPDATE USERS 
-                SET SESSION_TOKEN = NULL, 
+                UPDATE USERS
+                SET SESSION_TOKEN = NULL,
                     LAST_PC = NULL,
                     LAST_LOGIN = DATEADD(MINUTE, -1, GETDATE())
                 WHERE IDUSER != @CurrentUserId";
-            
+
             using (SqlCommand cmd = new SqlCommand(sql, conn))
             {
                 cmd.Parameters.AddWithValue("@CurrentUserId", currentUserId);
                 int affected = cmd.ExecuteNonQuery();
-                
+
                 Response.Write("{\"success\":true,\"message\":\"" + affected + " utilisateur(s) déconnecté(s)\", \"count\":" + affected + "}");
             }
         }

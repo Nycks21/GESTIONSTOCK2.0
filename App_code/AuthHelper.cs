@@ -23,6 +23,12 @@ public static class AuthHelper
     private const string SK_SESSION_TOKEN = "SESSION_TOKEN";
     private const string SK_USER_PERMISSIONS = "USER_PERMISSIONS";
 
+    // ============================================================
+    // ✅ CSRF — Constantes
+    // ============================================================
+    private const string SK_CSRF_TOKEN = "CSRF_TOKEN";
+    private const string CSRF_HEADER_NAME = "X-CSRF-Token";
+
     static AuthHelper()
     {
         try
@@ -106,6 +112,166 @@ public static class AuthHelper
 
         int userRole = GetUserRole(context);
         return userRole == 0 || userRole == 1;
+    }
+
+    // ============================================================
+    // ✅ CSRF PROTECTION — Token, validation, meta tag
+    // ============================================================
+
+    /// <summary>
+    /// Retourne le token CSRF de la session courante, en le créant si absent.
+    /// Le token = 32 octets aléatoires (RNG cryptographique) en Base64 URL-safe.
+    /// Durée de vie = celle de la session (pas de rotation).
+    /// </summary>
+    public static string GetOrCreateCsrfToken()
+    {
+        var session = HttpContext.Current != null ? HttpContext.Current.Session : null;
+        if (session == null) return "";
+
+        if (session[SK_CSRF_TOKEN] == null)
+        {
+            session[SK_CSRF_TOKEN] = GenerateCsrfToken();
+        }
+        return session[SK_CSRF_TOKEN].ToString();
+    }
+
+    /// <summary>
+    /// Génère un token aléatoire cryptographiquement sûr.
+    /// </summary>
+    private static string GenerateCsrfToken()
+    {
+        byte[] buffer = new byte[32];
+        using (var rng = new RNGCryptoServiceProvider())
+        {
+            rng.GetBytes(buffer);
+        }
+        // Base64 URL-safe (évite + / = qui gênent dans les headers)
+        return Convert.ToBase64String(buffer)
+            .Replace("+", "-")
+            .Replace("/", "_")
+            .Replace("=", "");
+    }
+
+    /// <summary>
+    /// Vérifie que le header X-CSRF-Token correspond au token stocké en session.
+    /// Retourne false si absent ou invalide.
+    /// </summary>
+    public static bool ValidateCsrfToken(HttpContext context)
+    {
+        if (context == null || context.Session == null) return false;
+
+        string sessionToken = context.Session[SK_CSRF_TOKEN] as string;
+        if (string.IsNullOrEmpty(sessionToken))
+        {
+            LogAuthError("ValidateCsrfToken: aucun token en session");
+            return false;
+        }
+
+        // Le header peut arriver en "X-CSRF-Token" ou "HTTP_X_CSRF_TOKEN"
+        string headerToken = context.Request.Headers[CSRF_HEADER_NAME];
+        if (string.IsNullOrEmpty(headerToken))
+            headerToken = context.Request.Headers["HTTP_X_CSRF_TOKEN"];
+
+        if (string.IsNullOrEmpty(headerToken))
+        {
+            LogAuthError("ValidateCsrfToken: aucun header X-CSRF-Token");
+            return false;
+        }
+
+        // Comparaison à temps constant (anti timing-attack)
+        return FixedTimeEquals(sessionToken, headerToken);
+    }
+
+    /// <summary>
+    /// Comparaison de chaînes à temps constant.
+    /// Évite les attaques par mesure de temps (timing attacks).
+    /// </summary>
+    private static bool FixedTimeEquals(string a, string b)
+    {
+        if (a == null || b == null) return false;
+        if (a.Length != b.Length) return false;
+
+        int diff = 0;
+        for (int i = 0; i < a.Length; i++)
+        {
+            diff |= a[i] ^ b[i];
+        }
+        return diff == 0;
+    }
+
+    /// <summary>
+    /// Vérifie que la requête provient d'une origine de confiance
+    /// (Origin ou Referer doit pointer vers le host courant).
+    /// Défense en profondeur complémentaire au token.
+    /// </summary>
+    public static bool ValidateOrigin(HttpContext context)
+    {
+        if (context == null || context.Request == null) return false;
+
+        string host = context.Request.Url != null ? context.Request.Url.Host : null;
+        if (string.IsNullOrEmpty(host)) return false;
+
+        string origin = context.Request.Headers["Origin"];
+        if (!string.IsNullOrEmpty(origin))
+        {
+            try
+            {
+                var uri = new Uri(origin);
+                return string.Equals(uri.Host, host, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        string referer = context.Request.Headers["Referer"];
+        if (!string.IsNullOrEmpty(referer))
+        {
+            try
+            {
+                var uri = new Uri(referer);
+                return string.Equals(uri.Host, host, StringComparison.OrdinalIgnoreCase);
+            }
+            catch { return false; }
+        }
+
+        // Ni Origin ni Referer : suspect en POST
+        LogAuthError("ValidateOrigin: ni Origin ni Referer");
+        return false;
+    }
+
+    /// <summary>
+    /// Garde-fou unifié pour les handlers mutateurs :
+    ///   1. Session valide (RequireApiAuth)
+    ///   2. Token CSRF valide
+    ///   3. Origin / Referer de confiance
+    /// À utiliser à la place de RequireApiAuth dans TOUS les handlers
+    /// qui font des actions mutantes (POST/DELETE/PUT).
+    /// </summary>
+    public static bool RequireCsrfSafePost(HttpContext context, int minRole = -1)
+    {
+        if (!RequireApiAuth(context, minRole)) return false;
+        if (!ValidateCsrfToken(context)) return false;
+        if (!ValidateOrigin(context)) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// Injecte le token CSRF dans le HTML sous forme de meta tag.
+    /// À appeler dans le &lt;head&gt; de chaque page .aspx :
+    ///   &lt;%= AuthHelper.RenderCsrfMetaTag() %&gt;
+    /// </summary>
+    public static string RenderCsrfMetaTag()
+    {
+        try
+        {
+            string token = GetOrCreateCsrfToken();
+            return "<meta name=\"csrf-token\" content=\"" +
+                   HttpUtility.HtmlAttributeEncode(token) + "\">";
+        }
+        catch (Exception ex)
+        {
+            LogAuthError("RenderCsrfMetaTag: " + ex.Message);
+            return "";
+        }
     }
 
     // ============================================================
@@ -207,15 +373,6 @@ public static class AuthHelper
 
     // ============================================================
     // MAPPINGS UI POUR LA GÉNÉRATION DYNAMIQUE DES PERMISSIONS
-    // ------------------------------------------------------------
-    // Ces tables centralisent les correspondances entre :
-    //   - Code MenuItem  → id HTML de la checkbox (compatibilité JS)
-    //   - Section i18n   → icône FontAwesome
-    //   - Code MenuItem  → emoji cosmétique (facultatif)
-    //
-    // ⚠️ Si vous ajoutez un nouveau MenuItem, ajoutez son Code dans
-    //    CheckboxIdByCode et (optionnellement) dans EmojiByCode.
-    //    La Section est résolue automatiquement via AllMenus.
     // ============================================================
 
     /// <summary>
@@ -271,8 +428,7 @@ public static class AuthHelper
 
     /// <summary>
     /// Retourne l'id HTML d'une checkbox à partir du Code MenuItem.
-    /// Fallback : "perm_" + code (permet d'ajouter un MenuItem sans
-    /// toucher à CheckboxIdByCode — l'id sera auto-généré).
+    /// Fallback : "perm_" + code.
     /// </summary>
     public static string GetCheckboxId(string menuCode)
     {
@@ -284,10 +440,6 @@ public static class AuthHelper
 
     // ============================================================
     // ✅ GÉNÉRATION DYNAMIQUE DU BLOC PERMISSIONS (UI)
-    // ------------------------------------------------------------
-    // Produit le HTML complet groupé par Section, dans l'ordre
-    // défini par MenuItem.Order. Les checkboxes utilisent les mêmes
-    // id que le code JS (CHECKBOX_ID_MAP) → aucune régression.
     // ============================================================
     public static string RenderPermissionsUI()
     {
@@ -296,13 +448,10 @@ public static class AuthHelper
             var html = new StringBuilder();
             html.Append(@"<div class=""perm-sections"">");
 
-            // 1) Regrouper les menus par Section, trier les groupes par
-            //    l'Order minimum de leurs items (respecte l'ordre défini).
             var bySection = AllMenus
                 .GroupBy(m => m.Section)
                 .OrderBy(g => g.Min(m => m.Order));
 
-            // 2) Boucler sur chaque section
             foreach (var grp in bySection)
             {
                 string sectionKey = grp.Key;
@@ -310,7 +459,6 @@ public static class AuthHelper
                     ? SectionIcons[sectionKey]
                     : "fas fa-circle";
 
-                // En-tête de section
                 html.AppendFormat(
                     @"<div class=""perm-section"">
                         <div class=""perm-section-header"">
@@ -322,10 +470,8 @@ public static class AuthHelper
                     HttpUtility.HtmlAttributeEncode(sectionKey),
                     HttpUtility.HtmlEncode(T(sectionKey)));
 
-                // 3) Items de la section, triés par Order
                 foreach (var menu in grp.OrderBy(m => m.Order))
                 {
-                    // Filtre sécurité : "requetes" reste réservé au Super Admin
                     if (menu.Code == "requetes" && !IsSuperAdmin())
                         continue;
 
@@ -635,7 +781,6 @@ public static class AuthHelper
 
             var html = new StringBuilder();
 
-            // ✅ Brand link : logo + nom de l'application en tête du menu
             string logoUrl = "";
             try
             {
@@ -652,13 +797,10 @@ public static class AuthHelper
                     <span class=""brand-text"">Gestion de Stock</span>
                 </a>", logoUrl);
 
-            // Profil utilisateur
             html.Append(RenderUserProfileHTML());
 
-            // Container modern
             html.Append(@"<div class=""sidebar-nav-modern"">");
 
-            // Tri des sections par l'Order minimum de leurs items
             var orderedSections = sections
                 .OrderBy(kv => kv.Value.Min(m => m.Order));
 
@@ -741,9 +883,6 @@ public static class AuthHelper
                 isUsersPage = currentPage.Contains("utilisateur.aspx") || currentPage.Contains("users.aspx");
             }
 
-            // ============================================================
-            // STRUCTURE EN 3 SECTIONS : gauche | centre | droite
-            // ============================================================
             html.Append(@"
         <nav class=""main-header modern-topbar"">
             <ul class=""navbar-nav topbar-left"">
@@ -754,9 +893,6 @@ public static class AuthHelper
                 </li>
             </ul>");
 
-            // ============================================================
-            // SECTION CENTRALE : BADGE PROJET
-            // ============================================================
             string projetCode = GetProjectCode(HttpContext.Current);
             html.AppendFormat(@"
             <div class=""topbar-center"">
@@ -770,12 +906,8 @@ public static class AuthHelper
                 HttpUtility.HtmlEncode(projetCode),
                 HttpUtility.HtmlEncode(T("ProjetCourant")));
 
-            // ============================================================
-            // SECTION DROITE : langue, dark mode, notifications, etc.
-            // ============================================================
             html.Append(@"<ul class=""navbar-nav topbar-right"">");
 
-            // SÉLECTEUR DE LANGUE
             string currentCulture = LocalizationHelper.CurrentCultureCode;
             html.Append(@"
                 <li class=""nav-item"">
@@ -795,7 +927,6 @@ public static class AuthHelper
                     </div>
                 </li>");
 
-            // DARK MODE
             html.Append(@"
                 <li class=""nav-item"">
                     <label class=""switch switch-modern"" for=""toggleDarkMode"" title=""Mode sombre"">
@@ -804,7 +935,6 @@ public static class AuthHelper
                     </label>
                 </li>");
 
-            // NOTIFICATIONS
             if (HasPermission("requetes"))
             {
                 html.Append(@"
@@ -838,7 +968,6 @@ public static class AuthHelper
                 </li>");
             }
 
-            // LOGOUT
             html.Append(@"
                 <li class=""nav-item"">
                     <a href=""../../../auth/Logout.aspx"" class=""nav-link topbar-icon-btn topbar-logout"" title=""" + T("Logout") + @""">
@@ -846,7 +975,6 @@ public static class AuthHelper
                     </a>
                 </li>");
 
-            // FULLSCREEN
             html.Append(@"
                 <li class=""nav-item"">
                     <a class=""nav-link topbar-icon-btn"" id=""fullscreenToggle"" title=""" + T("Fullscreen") + @""">
@@ -854,7 +982,6 @@ public static class AuthHelper
                     </a>
                 </li>");
 
-            // SETTINGS
             if (isUsersPage && HasPermission("utilisateurs"))
             {
                 html.Append(@"
@@ -869,8 +996,9 @@ public static class AuthHelper
             </ul>
         </nav>");
 
-            // ✅ Injection du dictionnaire de la langue courante (window.__I18N__)
+            // ✅ Injection du dictionnaire i18n + meta CSRF
             html.Append(LocalizationHelper.RenderDictionaryScript());
+            html.Append(RenderCsrfMetaTag());
 
             return html.ToString();
         }
@@ -1097,9 +1225,6 @@ public static class AuthHelper
         return session[SK_USERNAME] as string ?? "Inconnu";
     }
 
-    // ============================================================
-    // ✅ Retourne le NOM complet de l'utilisateur connecté
-    // ============================================================
     public static string GetUserFullName()
     {
         int? userId = GetCurrentUserId();
