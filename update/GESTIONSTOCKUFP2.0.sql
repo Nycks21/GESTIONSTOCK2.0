@@ -36,7 +36,7 @@ END
 GO
 
 -- =====================================================
--- 2. TABLE USERS
+-- 2.a TABLE USERS
 -- =====================================================
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'USERS')
 BEGIN
@@ -65,6 +65,29 @@ BEGIN
         CONSTRAINT FK_USER_ROLE FOREIGN KEY (ROLEID) REFERENCES USERROLE(ROLEID)
     );
     PRINT '✓ Table USERS créée';
+END
+GO
+
+-- =====================================================
+-- 2.b TABLE LOGIN_LOG
+-- =====================================================
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'LOGIN_LOG')
+BEGIN
+    CREATE TABLE LOGIN_LOG
+    (
+        ID            INT IDENTITY(1,1) PRIMARY KEY,
+        USERNAME      NVARCHAR(100) NULL,
+        IP_ADDRESS    VARCHAR(45)   NULL,
+        SUCCESS       BIT           NOT NULL DEFAULT 0,
+        ATTEMPTED_AT  DATETIME      NOT NULL DEFAULT GETDATE(),
+        USER_AGENT    NVARCHAR(500) NULL,
+        REASON        NVARCHAR(200) NULL
+    );
+
+    CREATE INDEX IX_LOGIN_LOG_USERNAME_AT ON LOGIN_LOG(USERNAME, ATTEMPTED_AT DESC);
+    CREATE INDEX IX_LOGIN_LOG_IP_AT       ON LOGIN_LOG(IP_ADDRESS, ATTEMPTED_AT DESC);
+
+    PRINT '✓ Table LOGIN_LOG créée';
 END
 GO
 

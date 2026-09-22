@@ -12,8 +12,9 @@ packages/
 *.exe
 
 # Fichiers de log
+App_Data/
 *.log
-logs/
+*.txt
 
 # Fichiers temporaires
 *.tmp
@@ -21,6 +22,8 @@ logs/
 *.cache
 
 # IDE
+.deep-copilot
+.postman
 .vs/
 .vscode/
 .idea/
@@ -33,5 +36,3 @@ Thumbs.db
 *.config.local
 web.config.local
 web.config
-
-error_log.txt'

@@ -275,6 +275,37 @@ public static class AuthHelper
     }
 
     // ============================================================
+    // C4 — TRANSFERT D'AUTHENTIFICATION ENTRE SESSIONS
+    // ------------------------------------------------------------
+    // Utilisé pour régénérer le SessionId après login (anti session fixation).
+    // Les données sont stockées en Cache serveur pendant 60s avec un
+    // token à usage unique.
+    // ============================================================
+    private const string AUTH_TRANSFER_CACHE_PREFIX = "AUTH_TRANSFER_";
+
+    public static string StorePendingAuth(System.Collections.Generic.Dictionary<string, object> authData)
+    {
+        string token = Guid.NewGuid().ToString("N");
+        System.Web.HttpRuntime.Cache.Insert(
+            AUTH_TRANSFER_CACHE_PREFIX + token,
+            authData,
+            null,
+            DateTime.Now.AddSeconds(60),
+            System.Web.Caching.Cache.NoSlidingExpiration
+        );
+        return token;
+    }
+
+    public static System.Collections.Generic.Dictionary<string, object> RetrievePendingAuth(string token)
+    {
+        if (string.IsNullOrEmpty(token)) return null;
+        string key = AUTH_TRANSFER_CACHE_PREFIX + token;
+        var data = System.Web.HttpRuntime.Cache[key] as System.Collections.Generic.Dictionary<string, object>;
+        if (data != null) System.Web.HttpRuntime.Cache.Remove(key);
+        return data;
+    }
+
+    // ============================================================
     // VÉRIFICATION DU TOKEN DE SESSION EN BASE
     // ============================================================
     private static bool ValidateSessionToken(HttpContext context)

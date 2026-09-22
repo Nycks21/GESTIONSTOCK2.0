@@ -2,6 +2,7 @@
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Web;
 using System.Data.SqlClient;
 using System.Configuration;
 using System.Security.Cryptography;
@@ -23,7 +24,6 @@ public partial class Login : Page
     {
         connStr = AuthHelper.ConnectionString;
 
-        // ✅ Si déjà authentifié, rediriger vers index
         if (!IsPostBack && AuthHelper.IsAuthenticated(Context))
         {
             Response.Redirect("~/pages/accueil/index.aspx", true);
@@ -81,6 +81,7 @@ public partial class Login : Page
             if (msg == "maintenance") ShowNotification("Vous avez été déconnecté pour cause de maintenance.", "warning");
             else if (msg == "disconnected") ShowNotification("Vous avez été déconnecté par l'administrateur.", "info");
             else if (msg == "session_expired") ShowNotification("Votre session a expiré. Veuillez vous reconnecter.", "warning");
+            else if (msg == "session_error") ShowNotification("Erreur de session. Veuillez vous reconnecter.", "error");
             else if (msg == "blocked") ShowNotification("Compte bloqué temporairement. Réessayez dans 1 minute.", "error");
             else if (msg == "other_pc") ShowNotification("Déconnecté car une autre session a été ouverte.", "warning");
         }
@@ -141,6 +142,48 @@ public partial class Login : Page
     }
 
     // ============================================================
+    // M7 — JOURNALISATION DES TENTATIVES DE CONNEXION
+    // ------------------------------------------------------------
+    // Chaque tentative (succès ou échec) est enregistrée dans LOGIN_LOG
+    // avec l'IP, le User-Agent et la raison.
+    // Ne casse jamais la connexion en cas d'échec d'insertion.
+    // ============================================================
+    private void LogLoginAttempt(string username, bool success, string reason = null)
+    {
+        try
+        {
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                string sql = @"INSERT INTO LOGIN_LOG (USERNAME, IP_ADDRESS, SUCCESS, ATTEMPTED_AT, USER_AGENT, REASON)
+                               VALUES (@Username, @IP, @Success, GETDATE(), @UA, @Reason)";
+                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                {
+                    cmd.Parameters.AddWithValue("@Username",
+                        string.IsNullOrEmpty(username) ? (object)DBNull.Value : username);
+
+                    string ip = Request.UserHostAddress ?? "";
+                    cmd.Parameters.AddWithValue("@IP", ip.Length > 45 ? ip.Substring(0, 45) : ip);
+
+                    cmd.Parameters.AddWithValue("@Success", success ? 1 : 0);
+
+                    string ua = Request.UserAgent ?? "";
+                    cmd.Parameters.AddWithValue("@UA", ua.Length > 500 ? ua.Substring(0, 500) : ua);
+
+                    cmd.Parameters.AddWithValue("@Reason",
+                        string.IsNullOrEmpty(reason) ? (object)DBNull.Value : reason);
+
+                    conn.Open();
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+        catch
+        {
+            // Le log ne doit jamais casser la connexion
+        }
+    }
+
+    // ============================================================
     // CONNEXION
     // ============================================================
     protected void btnLogin_Click(object sender, EventArgs e)
@@ -151,7 +194,6 @@ public partial class Login : Page
             return;
         }
 
-        // Vérification du verrouillage temporaire
         DateTime lockoutEnd = Session[SK_LOCKOUT_END] as DateTime? ?? DateTime.MinValue;
         if (DateTime.Now < lockoutEnd)
         {
@@ -166,7 +208,6 @@ public partial class Login : Page
             Session.Remove(SK_LOCKOUT_END);
         }
 
-        // Vérification licence
         var licenceInfo = AuthHelper.GetLicenceInfo();
         if (!licenceInfo.IsValid)
         {
@@ -190,53 +231,43 @@ public partial class Login : Page
         bool accountDeleted = false;
         bool accountInactive = false;
 
-        // Authentification locale
         if (!AuthenticateUser(usernameOrEmail, password,
                               out idUser, out roleId, out nomComplet,
                               out errorMessage, out minutesLeft,
                               out accountNotFound, out accountDeleted, out accountInactive))
         {
             // ============================================================
-            // ✅ CAS SPÉCIAL 1 : COMPTE INEXISTANT
-            //    → Aucune trace dans la table pour ce username/email
-            //    → Blocage immédiat
-            //    → PAS d'incrémentation du compteur
-            //    → PAS de verrouillage temporaire
+            // CAS 1 : COMPTE INEXISTANT
             // ============================================================
             if (accountNotFound)
             {
-                ShowError("Nom d'utilisateur ou adresse mail n'existe pas");
+                LogLoginAttempt(usernameOrEmail, false, "Compte inexistant - CX2100");
+                ShowError("Nom d'utilisateur ou mot de passe incorrect - ERROR CX2100");
                 return;
             }
 
             // ============================================================
-            // ✅ CAS SPÉCIAL 2 : COMPTE SUPPRIMÉ (DELETION_AT renseigné)
-            //    → Blocage immédiat
-            //    → PAS d'incrémentation du compteur
-            //    → PAS de verrouillage temporaire
+            // CAS 2 : COMPTE SUPPRIMÉ
             // ============================================================
             if (accountDeleted)
             {
-                ShowError("Compte supprimé");
+                LogLoginAttempt(usernameOrEmail, false, "Compte supprimé - CX7898");
+                ShowError("Nom d'utilisateur ou mot de passe incorrect - ERROR CX7898");
                 return;
             }
 
             // ============================================================
-            // ✅ CAS SPÉCIAL 3 : COMPTE INACTIF (ACTIVE = 0)
-            //    → Blocage immédiat
-            //    → PAS d'incrémentation du compteur
-            //    → PAS de verrouillage temporaire
+            // CAS 3 : COMPTE INACTIF
             // ============================================================
             if (accountInactive)
             {
-                ShowError("Compte inactif");
+                LogLoginAttempt(usernameOrEmail, false, "Compte inactif - CX4561");
+                ShowError("Nom d'utilisateur ou mot de passe incorrect - ERROR CX4561");
                 return;
             }
 
             // ============================================================
-            // ✅ CAS NORMAL : MOT DE PASSE INCORRECT
-            //    → Seul ce cas incrémente le compteur de tentatives
-            //    → Verrouillage après MAX_ATTEMPTS
+            // CAS 4 : MOT DE PASSE INCORRECT (SEUL CAS AVEC COMPTEUR)
             // ============================================================
             int attempts = (Session[SK_ATTEMPTS] as int? ?? 0) + 1;
             Session[SK_ATTEMPTS] = attempts;
@@ -245,20 +276,33 @@ public partial class Login : Page
             {
                 Session[SK_LOCKOUT_END] = DateTime.Now.AddSeconds(LOCKOUT_SECONDS);
                 Session[SK_ATTEMPTS] = 0;
+                LogLoginAttempt(usernameOrEmail, false, "Verrouillage après " + MAX_ATTEMPTS + " échecs");
                 ShowError("⛔ Compte bloqué après " + MAX_ATTEMPTS + " échecs. Réessayez dans " + LOCKOUT_SECONDS + "s.");
                 StartCountdownScript(LOCKOUT_SECONDS);
             }
             else
             {
                 if (errorMessage.Contains("bloqué") && minutesLeft > 0)
+                {
+                    LogLoginAttempt(usernameOrEmail, false, "Bloqué maintenance: " + minutesLeft + " min");
                     ShowError("⚠️ Compte bloqué. Maintenance en cours. Réessayez dans " + minutesLeft + " min.");
+                }
                 else
+                {
+                    LogLoginAttempt(usernameOrEmail, false, "Mot de passe incorrect (tentative " + attempts + ")");
                     ShowError(errorMessage + " — " + (MAX_ATTEMPTS - attempts) + " tentative(s) restante(s).");
+                }
             }
             return;
         }
 
-        // ✅ Succès
+        // ════════════════════════════════════════════════════════════
+        // ✅ AUTHENTIFICATION RÉUSSIE
+        // ════════════════════════════════════════════════════════════
+
+        // M7 — Log succès
+        LogLoginAttempt(usernameOrEmail, true, "Connexion réussie");
+
         ShowSuccessNotification("Bienvenue " + nomComplet + " !");
         Session.Remove(SK_ATTEMPTS);
         Session.Remove(SK_LOCKOUT_END);
@@ -291,38 +335,60 @@ public partial class Login : Page
             return;
         }
 
-        Session.Clear();
-        Session["authenticated"] = true;
-        Session["IDUSER"] = idUser;
-        Session["username"] = nomComplet;
-        Session["USERROLE"] = roleId;
-        Session["SESSION_TOKEN"] = newToken;
-        Session["PC"] = currentPC;
-
-        var permissions = AuthHelper.GetUserPermissions();
+        // Préparer les données de session à transférer
+        var classesAutorisees = "[]";
+        var matieresAutorisees = "[]";
 
         if (roleId == 3)
         {
             var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
-            Session["ClassesAutorisees"] = serializer.Serialize(GetClassesForProfessor(idUser));
-            Session["MatieresAutorisees"] = serializer.Serialize(GetMatieresForProfessor(idUser));
+            classesAutorisees  = serializer.Serialize(GetClassesForProfessor(idUser));
+            matieresAutorisees = serializer.Serialize(GetMatieresForProfessor(idUser));
         }
-        else
+
+        var authData = new Dictionary<string, object>
         {
-            Session["ClassesAutorisees"] = "[]";
-            Session["MatieresAutorisees"] = "[]";
+            { "authenticated", true },
+            { "IDUSER", idUser },
+            { "username", nomComplet },
+            { "USERROLE", roleId },
+            { "SESSION_TOKEN", newToken },
+            { "PC", currentPC },
+            { "ClassesAutorisees", classesAutorisees },
+            { "MatieresAutorisees", matieresAutorisees }
+        };
+
+        // ════════════════════════════════════════════════════════════
+        // C4 — RÉGÉNÉRATION DE SESSION (ANTI SESSION FIXATION)
+        // ------------------------------------------------------------
+        // 1. Stocker les données d'auth dans le Cache serveur (60s)
+        // 2. Abandonner la session actuelle (détruit l'ancien SessionId)
+        // 3. Supprimer le cookie côté client
+        // 4. Rediriger vers EstablishSession.aspx qui reconstruit la session
+        //    → nouvelle session, nouveau SessionId, mêmes données
+        // ════════════════════════════════════════════════════════════
+
+        string transferToken = AuthHelper.StorePendingAuth(authData);
+
+        Session.Clear();
+        Session.RemoveAll();
+        Session.Abandon();
+
+        if (Request.Cookies["ASP.NET_SessionId"] != null)
+        {
+            var expiredCookie = new HttpCookie("ASP.NET_SessionId", "");
+            expiredCookie.Expires = DateTime.Now.AddYears(-1);
+            expiredCookie.HttpOnly = true;
+            expiredCookie.Secure = Request.IsSecureConnection;
+            Response.Cookies.Set(expiredCookie);
         }
 
         string redirectScript = @"
             sessionStorage.setItem('loginToast', 'success|Authentification réussie - Bienvenue !');
             setTimeout(function() {
-                if (typeof redirectTo === 'function') {
-                    redirectTo('/pages/accueil/index.aspx');
-                } else {
-                    window.isRedirecting = true;
-                    window.location.href = '/pages/accueil/index.aspx';
-                }
-            }, 3000);";
+                window.isRedirecting = true;
+                window.location.href = '/pages/accueil/EstablishSession.aspx?t=" + transferToken + @"';
+            }, 1500);";
         ScriptManager.RegisterStartupScript(this, GetType(), "redirectAfterLogin", redirectScript, true);
     }
 
@@ -397,15 +463,7 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // ✅ AUTHENTIFICATION LOCALE
-    //    Accepte USERNAME OU EMAIL comme identifiant.
-    //    4 cas de blocage immédiat (sans compteur) :
-    //       1. Identifiant inexistant
-    //       2. Compte supprimé (DELETION_AT renseigné)
-    //       3. Compte inactif  (ACTIVE = 0)
-    //       4. Compte bloqué temporairement (BLOCKED_UNTIL > now)
-    //    1 seul cas avec compteur :
-    //       → Mot de passe incorrect
+    // AUTHENTIFICATION LOCALE
     // ============================================================
     private bool AuthenticateUser(string usernameOrEmail, string password,
                                   out int idUser, out int roleId, out string nomComplet,
@@ -425,7 +483,6 @@ public partial class Login : Page
         {
             using (SqlConnection conn = new SqlConnection(connStr))
             {
-                // Vérifier l'existence de BLOCKED_UNTIL (migration optionnelle)
                 bool hasBlockedUntilColumn = false;
                 string checkColumnSql = @"
                     SELECT COUNT(*)
@@ -438,7 +495,6 @@ public partial class Login : Page
                     conn.Close();
                 }
 
-                // ✅ Accepte USERNAME OU EMAIL comme identifiant
                 string sql = @"SELECT IDUSER, ROLEID, ACTIVE, NOM, PWD, DELETION_AT";
                 if (hasBlockedUntilColumn) sql += ", BLOCKED_UNTIL";
                 sql += " FROM USERS WHERE USERNAME = @u OR EMAIL = @u";
@@ -449,53 +505,33 @@ public partial class Login : Page
                 conn.Open();
                 using (SqlDataReader rd = cmd.ExecuteReader())
                 {
-                    // ============================================================
-                    // ✅ ÉTAPE 0 : AUCUN ENREGISTREMENT TROUVÉ
-                    //    → Compte inexistant
-                    //    → Blocage immédiat, PAS de compteur
-                    // ============================================================
                     if (!rd.Read())
                     {
                         accountNotFound = true;
-                        errorMessage = "Compte ou adresse mail n'existe pas";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect - ERROR CX2100";
                         return false;
                     }
 
-                    // ============================================================
-                    // ✅ ÉTAPE 1 : COMPTE SUPPRIMÉ ? (DELETION_AT renseigné)
-                    //    → Blocage AVANT toute autre vérification
-                    //    → Même avec le bon mot de passe, la connexion échoue
-                    //    → N'incrémente PAS le compteur
-                    // ============================================================
                     if (rd["DELETION_AT"] != DBNull.Value)
                     {
                         accountDeleted = true;
-                        errorMessage = "Compte supprimé";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect - ERROR CX7898";
                         return false;
                     }
 
-                    // ============================================================
-                    // ✅ ÉTAPE 2 : COMPTE INACTIF ? (ACTIVE = 0)
-                    //    → Blocage AVANT vérification du mot de passe
-                    //    → N'incrémente PAS le compteur
-                    // ============================================================
                     bool isActive = Convert.ToInt32(rd["ACTIVE"]) == 1;
                     if (!isActive)
                     {
                         accountInactive = true;
-                        errorMessage = "Compte inactif";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect - ERROR CX4561";
                         return false;
                     }
 
-                    // ============================================================
-                    // ✅ ÉTAPE 3 : VÉRIFICATION DU MOT DE PASSE
-                    //    → SEUL CAS qui incrémente le compteur de tentatives
-                    // ============================================================
                     string storedPwd = rd["PWD"] != DBNull.Value ? rd["PWD"].ToString() : "";
                     bool needsRehash;
                     if (!PasswordHelper.VerifyPassword(storedPwd, password, out needsRehash))
                     {
-                        errorMessage = "Mot de passe incorrect";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
                         return false;
                     }
 
@@ -508,10 +544,6 @@ public partial class Login : Page
                         UpgradePasswordHash(idUser, password);
                     }
 
-                    // ============================================================
-                    // ✅ ÉTAPE 4 : BLOCAGE TEMPORAIRE (maintenance en cours)
-                    //    → Uniquement pour les non-SuperAdmin
-                    // ============================================================
                     if (roleId != 0 && hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
                     {
                         DateTime blockedUntil = Convert.ToDateTime(rd["BLOCKED_UNTIL"]);
