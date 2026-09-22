@@ -21,9 +21,9 @@ public partial class Login : Page
 
     protected void Page_Load(object sender, EventArgs e)
     {
-        connStr = AuthHelper.ConnectionString; // ✅ Utilisation centralisée
+        connStr = AuthHelper.ConnectionString;
 
-        // ✅ Si déjà authentifié, rediriger vers le index
+        // ✅ Si déjà authentifié, rediriger vers index
         if (!IsPostBack && AuthHelper.IsAuthenticated(Context))
         {
             Response.Redirect("~/pages/accueil/index.aspx", true);
@@ -40,7 +40,6 @@ public partial class Login : Page
                 return;
             }
 
-            // ✅ Utiliser AuthHelper pour la licence
             var licenceInfo = AuthHelper.GetLicenceInfo();
 
             if (!licenceInfo.IsValid)
@@ -54,7 +53,6 @@ public partial class Login : Page
                 return;
             }
 
-            // Affichage des jours restants (alerte)
             int daysLeft = licenceInfo.DaysLeft;
             int[] alertDays = { 45, 15, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0 };
 
@@ -71,7 +69,6 @@ public partial class Login : Page
                 lblLicenceInfo.Visible = true;
             }
 
-            // ✅ Nombre max d'utilisateurs
             if (AuthHelper.IsMaxUsersReached())
             {
                 lblUserLimitInfo.Text = "❌ Nombre maximum d'utilisateurs atteint (" + licenceInfo.MaxUsers + ").";
@@ -80,7 +77,6 @@ public partial class Login : Page
                 lblUserLimitInfo.Visible = true;
             }
 
-            // Messages de redirection (query string)
             string msg = Request.QueryString["msg"];
             if (msg == "maintenance") ShowNotification("Vous avez été déconnecté pour cause de maintenance.", "warning");
             else if (msg == "disconnected") ShowNotification("Vous avez été déconnecté par l'administrateur.", "info");
@@ -124,7 +120,7 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // NOTIFICATIONS (inchangées)
+    // NOTIFICATIONS
     // ============================================================
     private void ShowNotification(string message, string type = "info")
     {
@@ -145,7 +141,7 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // GESTION DU BLOCAGE
+    // CONNEXION
     // ============================================================
     protected void btnLogin_Click(object sender, EventArgs e)
     {
@@ -155,7 +151,7 @@ public partial class Login : Page
             return;
         }
 
-        // Vérification du verrouillage
+        // Vérification du verrouillage temporaire
         DateTime lockoutEnd = Session[SK_LOCKOUT_END] as DateTime? ?? DateTime.MinValue;
         if (DateTime.Now < lockoutEnd)
         {
@@ -184,16 +180,64 @@ public partial class Login : Page
             return;
         }
 
-        string username = txtUsername.Text.Trim();
+        string usernameOrEmail = txtUsername.Text.Trim();
         string password = txtPassword.Text.Trim();
 
         int idUser, roleId;
         string nomComplet, errorMessage;
         int minutesLeft = 0;
+        bool accountNotFound = false;
+        bool accountDeleted = false;
+        bool accountInactive = false;
 
-        // Authentification locale (spécifique au login)
-        if (!AuthenticateUser(username, password, out idUser, out roleId, out nomComplet, out errorMessage, out minutesLeft))
+        // Authentification locale
+        if (!AuthenticateUser(usernameOrEmail, password,
+                              out idUser, out roleId, out nomComplet,
+                              out errorMessage, out minutesLeft,
+                              out accountNotFound, out accountDeleted, out accountInactive))
         {
+            // ============================================================
+            // ✅ CAS SPÉCIAL 1 : COMPTE INEXISTANT
+            //    → Aucune trace dans la table pour ce username/email
+            //    → Blocage immédiat
+            //    → PAS d'incrémentation du compteur
+            //    → PAS de verrouillage temporaire
+            // ============================================================
+            if (accountNotFound)
+            {
+                ShowError("Nom d'utilisateur ou adresse mail n'existe pas");
+                return;
+            }
+
+            // ============================================================
+            // ✅ CAS SPÉCIAL 2 : COMPTE SUPPRIMÉ (DELETION_AT renseigné)
+            //    → Blocage immédiat
+            //    → PAS d'incrémentation du compteur
+            //    → PAS de verrouillage temporaire
+            // ============================================================
+            if (accountDeleted)
+            {
+                ShowError("Compte supprimé");
+                return;
+            }
+
+            // ============================================================
+            // ✅ CAS SPÉCIAL 3 : COMPTE INACTIF (ACTIVE = 0)
+            //    → Blocage immédiat
+            //    → PAS d'incrémentation du compteur
+            //    → PAS de verrouillage temporaire
+            // ============================================================
+            if (accountInactive)
+            {
+                ShowError("Compte inactif");
+                return;
+            }
+
+            // ============================================================
+            // ✅ CAS NORMAL : MOT DE PASSE INCORRECT
+            //    → Seul ce cas incrémente le compteur de tentatives
+            //    → Verrouillage après MAX_ATTEMPTS
+            // ============================================================
             int attempts = (Session[SK_ATTEMPTS] as int? ?? 0) + 1;
             Session[SK_ATTEMPTS] = attempts;
 
@@ -219,7 +263,6 @@ public partial class Login : Page
         Session.Remove(SK_ATTEMPTS);
         Session.Remove(SK_LOCKOUT_END);
 
-        // Générer nouveau token
         string newToken = Guid.NewGuid().ToString();
         string currentPC = Environment.MachineName;
 
@@ -248,7 +291,6 @@ public partial class Login : Page
             return;
         }
 
-        // ✅ Initialisation de la session avec les clés utilisées par AuthHelper
         Session.Clear();
         Session["authenticated"] = true;
         Session["IDUSER"] = idUser;
@@ -257,11 +299,8 @@ public partial class Login : Page
         Session["SESSION_TOKEN"] = newToken;
         Session["PC"] = currentPC;
 
-        // Chargement des permissions (pour le menu)
-        var permissions = AuthHelper.GetUserPermissions(); // cette méthode utilise la session
-        // (les permissions seront chargées automatiquement si GetUserPermissions est appelée ailleurs)
+        var permissions = AuthHelper.GetUserPermissions();
 
-        // Pour les professeurs, charger classes et matières
         if (roleId == 3)
         {
             var serializer = new System.Web.Script.Serialization.JavaScriptSerializer();
@@ -274,7 +313,6 @@ public partial class Login : Page
             Session["MatieresAutorisees"] = "[]";
         }
 
-        // Redirection après 3 secondes
         string redirectScript = @"
             sessionStorage.setItem('loginToast', 'success|Authentification réussie - Bienvenue !');
             setTimeout(function() {
@@ -289,7 +327,7 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // COMPTES À REBOURS (inchangés)
+    // COMPTES À REBOURS
     // ============================================================
     private void StartLoginCountdown(int seconds)
     {
@@ -359,16 +397,35 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // AUTHENTIFICATION LOCALE (utilise connStr)
+    // ✅ AUTHENTIFICATION LOCALE
+    //    Accepte USERNAME OU EMAIL comme identifiant.
+    //    4 cas de blocage immédiat (sans compteur) :
+    //       1. Identifiant inexistant
+    //       2. Compte supprimé (DELETION_AT renseigné)
+    //       3. Compte inactif  (ACTIVE = 0)
+    //       4. Compte bloqué temporairement (BLOCKED_UNTIL > now)
+    //    1 seul cas avec compteur :
+    //       → Mot de passe incorrect
     // ============================================================
-    private bool AuthenticateUser(string username, string password, out int idUser, out int roleId, out string nomComplet, out string errorMessage, out int minutesLeft)
+    private bool AuthenticateUser(string usernameOrEmail, string password,
+                                  out int idUser, out int roleId, out string nomComplet,
+                                  out string errorMessage, out int minutesLeft,
+                                  out bool accountNotFound, out bool accountDeleted, out bool accountInactive)
     {
-        idUser = 0; roleId = 0; nomComplet = ""; errorMessage = ""; minutesLeft = 0;
+        idUser = 0;
+        roleId = 0;
+        nomComplet = "";
+        errorMessage = "";
+        minutesLeft = 0;
+        accountNotFound = false;
+        accountDeleted = false;
+        accountInactive = false;
 
         try
         {
             using (SqlConnection conn = new SqlConnection(connStr))
             {
+                // Vérifier l'existence de BLOCKED_UNTIL (migration optionnelle)
                 bool hasBlockedUntilColumn = false;
                 string checkColumnSql = @"
                     SELECT COUNT(*)
@@ -381,55 +438,91 @@ public partial class Login : Page
                     conn.Close();
                 }
 
-                string sql = @"
-                    SELECT IDUSER, ROLEID, ACTIVE, NOM, PWD";
+                // ✅ Accepte USERNAME OU EMAIL comme identifiant
+                string sql = @"SELECT IDUSER, ROLEID, ACTIVE, NOM, PWD, DELETION_AT";
                 if (hasBlockedUntilColumn) sql += ", BLOCKED_UNTIL";
-                sql += " FROM USERS WHERE USERNAME = @u";
+                sql += " FROM USERS WHERE USERNAME = @u OR EMAIL = @u";
 
                 SqlCommand cmd = new SqlCommand(sql, conn);
-                cmd.Parameters.AddWithValue("@u", username);
+                cmd.Parameters.AddWithValue("@u", usernameOrEmail);
 
                 conn.Open();
                 using (SqlDataReader rd = cmd.ExecuteReader())
                 {
-                    if (rd.Read())
+                    // ============================================================
+                    // ✅ ÉTAPE 0 : AUCUN ENREGISTREMENT TROUVÉ
+                    //    → Compte inexistant
+                    //    → Blocage immédiat, PAS de compteur
+                    // ============================================================
+                    if (!rd.Read())
                     {
-                        bool isActive = Convert.ToInt32(rd["ACTIVE"]) == 1;
-                        if (!isActive)
-                        {
-                            errorMessage = "Compte inactif";
-                            return false;
-                        }
-
-                        string storedPwd = rd["PWD"] != DBNull.Value ? rd["PWD"].ToString() : "";
-                        bool needsRehash;
-                        if (!PasswordHelper.VerifyPassword(storedPwd, password, out needsRehash))
-                        {
-                            errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
-                            return false;
-                        }
-
-                        idUser = Convert.ToInt32(rd["IDUSER"]);
-                        roleId = Convert.ToInt32(rd["ROLEID"]);
-                        nomComplet = rd["NOM"].ToString();
-
-                        if (needsRehash)
-                        {
-                            UpgradePasswordHash(idUser, password);
-                        }
-
-                        if (roleId != 0 && hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
-                        {
-                            DateTime blockedUntil = Convert.ToDateTime(rd["BLOCKED_UNTIL"]);
-                            if (blockedUntil > DateTime.Now)
-                            {
-                                minutesLeft = (int)Math.Ceiling((blockedUntil - DateTime.Now).TotalMinutes);
-                                errorMessage = "⚠️ Compte bloqué. Maintenance en cours. Réessayez dans " + minutesLeft + " min.";
-                                return false;
-                            }
-                        }
-                        return true;
+                        accountNotFound = true;
+                        errorMessage = "Compte ou adresse mail n'existe pas";
+                        return false;
                     }
+
+                    // ============================================================
+                    // ✅ ÉTAPE 1 : COMPTE SUPPRIMÉ ? (DELETION_AT renseigné)
+                    //    → Blocage AVANT toute autre vérification
+                    //    → Même avec le bon mot de passe, la connexion échoue
+                    //    → N'incrémente PAS le compteur
+                    // ============================================================
+                    if (rd["DELETION_AT"] != DBNull.Value)
+                    {
+                        accountDeleted = true;
+                        errorMessage = "Compte supprimé";
+                        return false;
+                    }
+
+                    // ============================================================
+                    // ✅ ÉTAPE 2 : COMPTE INACTIF ? (ACTIVE = 0)
+                    //    → Blocage AVANT vérification du mot de passe
+                    //    → N'incrémente PAS le compteur
+                    // ============================================================
+                    bool isActive = Convert.ToInt32(rd["ACTIVE"]) == 1;
+                    if (!isActive)
+                    {
+                        accountInactive = true;
+                        errorMessage = "Compte inactif";
+                        return false;
+                    }
+
+                    // ============================================================
+                    // ✅ ÉTAPE 3 : VÉRIFICATION DU MOT DE PASSE
+                    //    → SEUL CAS qui incrémente le compteur de tentatives
+                    // ============================================================
+                    string storedPwd = rd["PWD"] != DBNull.Value ? rd["PWD"].ToString() : "";
+                    bool needsRehash;
+                    if (!PasswordHelper.VerifyPassword(storedPwd, password, out needsRehash))
+                    {
+                        errorMessage = "Mot de passe incorrect";
+                        return false;
+                    }
+
+                    idUser = Convert.ToInt32(rd["IDUSER"]);
+                    roleId = Convert.ToInt32(rd["ROLEID"]);
+                    nomComplet = rd["NOM"].ToString();
+
+                    if (needsRehash)
+                    {
+                        UpgradePasswordHash(idUser, password);
+                    }
+
+                    // ============================================================
+                    // ✅ ÉTAPE 4 : BLOCAGE TEMPORAIRE (maintenance en cours)
+                    //    → Uniquement pour les non-SuperAdmin
+                    // ============================================================
+                    if (roleId != 0 && hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
+                    {
+                        DateTime blockedUntil = Convert.ToDateTime(rd["BLOCKED_UNTIL"]);
+                        if (blockedUntil > DateTime.Now)
+                        {
+                            minutesLeft = (int)Math.Ceiling((blockedUntil - DateTime.Now).TotalMinutes);
+                            errorMessage = "⚠️ Compte bloqué. Maintenance en cours. Réessayez dans " + minutesLeft + " min.";
+                            return false;
+                        }
+                    }
+                    return true;
                 }
             }
         }
@@ -443,9 +536,6 @@ public partial class Login : Page
             errorMessage = "❌ Erreur: " + ex.Message;
             return false;
         }
-
-        errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
-        return false;
     }
 
     private void UpgradePasswordHash(int userId, string plainPassword)
@@ -468,7 +558,7 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // MÉTHODES PROFESSEUR (inchangées)
+    // MÉTHODES PROFESSEUR
     // ============================================================
     private List<object> GetClassesForProfessor(int professeurId)
     {

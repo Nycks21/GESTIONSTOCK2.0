@@ -1277,6 +1277,7 @@
 "users.updates.full_changelog_title": "📋 Journal des modifications v{version}",
 "users.updates.no_details": "Aucun détail disponible",
 "users.updates.close": "Fermer",
+"users.msg.ok": "OK",
 
 "users.notify.default_message": "⚠️ Maintenance programmée - Déconnexion imminente"
 }

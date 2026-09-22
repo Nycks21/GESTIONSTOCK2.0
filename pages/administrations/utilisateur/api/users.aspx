@@ -70,13 +70,13 @@ protected void Page_Load(object sender, EventArgs e)
             return;
         }
 
-        string username = GetStringValue(data, "USERNAME");
-        string nom = GetStringValue(data, "NOM");
-        string password = GetStringValue(data, "PWD");
-        string email = GetStringValue(data, "EMAIL");
+        string username  = GetStringValue(data, "USERNAME");
+        string nom       = GetStringValue(data, "NOM");
+        string password  = GetStringValue(data, "PWD");
+        string email     = GetStringValue(data, "EMAIL");
         string telephone = GetStringValue(data, "TELEPHONE");
-        int roleId = GetIntValue(data, "ROLEID", 1);
-        int active = GetIntValue(data, "ACTIVE", 1);
+        int roleId       = GetIntValue(data, "ROLEID", 1);
+        int active       = GetIntValue(data, "ACTIVE", 1);
 
         // Validation des entrées
         if (!ValidateUserData(username, nom, password, email, roleId))
@@ -116,7 +116,11 @@ protected void Page_Load(object sender, EventArgs e)
         {
             conn.Open();
 
-            using (SqlCommand checkCmd = new SqlCommand("SELECT COUNT(*) FROM USERS WHERE USERNAME = @USERNAME", conn))
+            // ============================================================
+            // ✅ VÉRIFICATION 1 : USERNAME unique (parmi les comptes actifs)
+            // ============================================================
+            using (SqlCommand checkCmd = new SqlCommand(
+                "SELECT COUNT(*) FROM USERS WHERE USERNAME = @USERNAME AND DELETION_AT IS NULL", conn))
             {
                 checkCmd.Parameters.AddWithValue("@USERNAME", username);
                 int existing = (int)checkCmd.ExecuteScalar();
@@ -127,6 +131,24 @@ protected void Page_Load(object sender, EventArgs e)
                 }
             }
 
+            // ============================================================
+            // ✅ VÉRIFICATION 2 : EMAIL unique (parmi les comptes actifs)
+            // ============================================================
+            using (SqlCommand checkCmd = new SqlCommand(
+                "SELECT COUNT(*) FROM USERS WHERE EMAIL = @EMAIL AND DELETION_AT IS NULL", conn))
+            {
+                checkCmd.Parameters.AddWithValue("@EMAIL", email);
+                int existing = (int)checkCmd.ExecuteScalar();
+                if (existing > 0)
+                {
+                    WriteResponse(false, "Cette adresse email est déjà utilisée");
+                    return;
+                }
+            }
+
+            // ============================================================
+            // INSERTION
+            // ============================================================
             string permissionsJson = serializer.Serialize(permissions);
 
             using (SqlCommand cmd = new SqlCommand(
@@ -155,10 +177,33 @@ protected void Page_Load(object sender, EventArgs e)
     }
     catch (SqlException ex)
     {
-        if (ex.Number == 2627)
-            WriteResponse(false, "Ce nom d'utilisateur existe déjà");
+        // ============================================================
+        // ✅ GESTION DES ERREURS SQL — Messages distincts par contrainte
+        // ============================================================
+        // 2627 = Violation de contrainte UNIQUE ou PRIMARY KEY
+        // 2601 = Violation de contrainte UNIQUE index
+        if (ex.Number == 2627 || ex.Number == 2601)
+        {
+            string msgLower = ex.Message.ToLowerInvariant();
+
+            if (msgLower.Contains("email"))
+            {
+                WriteResponse(false, "Cette adresse email est déjà utilisée");
+            }
+            else if (msgLower.Contains("username"))
+            {
+                WriteResponse(false, "Ce nom d'utilisateur existe déjà");
+            }
+            else
+            {
+                // Contrainte UNIQUE non identifiée explicitement
+                WriteResponse(false, "Cette valeur (username ou email) est déjà utilisée");
+            }
+        }
         else if (ex.Number == 547)
+        {
             WriteResponse(false, "Violation de contrainte de clé étrangère");
+        }
         else
         {
             LogSecurityAction(null, AuthHelper.GetUserId(Context), "SQL_ERROR", ex.Message);

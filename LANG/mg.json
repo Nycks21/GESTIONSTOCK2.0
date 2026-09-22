@@ -1171,5 +1171,6 @@
 "users.updates.check_btn": "Jereo ny fanavaozana",
 "users.updates.available_title": "🆕 Misy fanavaozana!",
 "users.updates.up_to_date_title": "✅ Vaovao ny rindranasa",
-"users.updates.close": "Hidio"
+"users.updates.close": "Hidio",
+"users.msg.ok": "OK"
 }

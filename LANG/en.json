@@ -1173,5 +1173,6 @@
 "users.updates.check_btn": "Check for updates",
 "users.updates.available_title": "🆕 Update available!",
 "users.updates.up_to_date_title": "✅ Application up to date",
-"users.updates.close": "Close"
+"users.updates.close": "Close",
+"users.msg.ok": "OK"
 }

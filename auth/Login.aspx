@@ -341,7 +341,7 @@
               <asp:Label ID="lblErreur" runat="server"></asp:Label>
             </asp:Panel>
             <div class="input-group mb-3">
-              <asp:TextBox ID="txtUsername" CssClass="form-control" runat="server" Placeholder="Nom d'utilisateur"
+              <asp:TextBox ID="txtUsername" CssClass="form-control" runat="server" Placeholder="Nom d'utilisateur ou adresse mail"
                 autocomplete="username"></asp:TextBox>
               <div class="input-group-append">
                 <div class="input-group-text">
@@ -464,7 +464,7 @@
 
         // Validation minimale côté client
         if (!usernameField.value.trim() || !passwordField.value.trim()) {
-          showNotification('Veuillez remplir tous les champs.', 'warning', 4000);
+          showNotification('Veuillez remplir tous les champs.', 'warning', 5000);
           return false;
         }
 

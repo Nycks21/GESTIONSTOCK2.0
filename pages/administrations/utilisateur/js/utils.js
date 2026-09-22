@@ -147,8 +147,6 @@ function getDefaultTime() {
     return now.toTimeString().slice(0, 5);
 }
 
-function apiUrl(path) { return path; }
-
 window.T                     = T;
 window.escapeHtml            = escapeHtml;
 window.formatDate            = formatDate;
@@ -159,4 +157,3 @@ window.safeJson              = safeJson;
 window.getActiveUsersCount   = getActiveUsersCount;
 window.showLicenceLimitAlert = showLicenceLimitAlert;
 window.getDefaultTime        = getDefaultTime;
-window.apiUrl                = apiUrl;
