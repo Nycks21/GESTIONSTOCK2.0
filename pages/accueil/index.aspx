@@ -80,7 +80,7 @@
                             <div class="kpi-val text-danger" id="valAlertes">—</div>
                             <div class="kpi-sub">
                               <span class="pill pill-dn" id="pillRuptures">—</span>
-                              <span class="pill pill-neu" id="pillAlertesCount">—</span>
+                              <span class="pill pill-neu2" id="pillAlertesCount">—</span>
                             </div>
                           </div>
                           <% } %>
@@ -94,8 +94,8 @@
                                 </div>
                                 <div class="kpi-val" id="valBons">—</div>
                                 <div class="kpi-sub">
-                                  <span class="pill pill-neu" id="pillEntree">—</span>
-                                  <span class="pill pill-neu" id="pillSortie">—</span>
+                                  <span class="pill pill-neu3" id="pillEntree">—</span>
+                                  <span class="pill pill-neu4" id="pillSortie">—</span>
                                 </div>
                               </div>
                               <% } %>

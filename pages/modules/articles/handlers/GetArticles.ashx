@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="GetArticles" %>
+﻿﻿<%@ WebHandler Language="C#" Class="GetArticles" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -61,7 +61,7 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
                     total = Convert.ToInt32(cmd.ExecuteScalar());
                 }
 
-                // Requête de liste
+                // Requête de liste — EST_PERISSABLE et DATE_PEREMPTION AJOUTÉS
                 string sql = @"
                     SELECT a.ID, a.CODE, a.NOM, a.DESCRIPTION,
                            a.CATEGORIE_ID, c.NOM AS CATEGORIE_NOM,
@@ -70,6 +70,7 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
                            a.EMPLACEMENT_ID, e.NOM AS EMPLACEMENT_NOM,
                            a.SEUIL_ALERTE, a.SEUIL_MIN,
                            a.ACTIVE, a.EST_SERVICE,
+                           a.EST_PERISSABLE, a.DATE_PEREMPTION,
                            ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) AS STOCK_TOTAL,
                            CASE
                                WHEN ISNULL((SELECT SUM(s.QUANTITE_ACTUELLE) FROM SSTOCK s WHERE s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL), 0) = 0 THEN 'rupture'
@@ -115,6 +116,18 @@ public class GetArticles : IHttpHandler, IRequiresSessionState
                                 SEUIL_MIN = Convert.ToDecimal(rdr["SEUIL_MIN"]),
                                 ACTIVE = Convert.ToBoolean(rdr["ACTIVE"]),
                                 EST_SERVICE = Convert.ToBoolean(rdr["EST_SERVICE"]),
+
+                                // ═══════════════════════════════════════════════
+                                // AJOUT : nécessaires pour pré-remplir le modal
+                                // de modification (PÉRISSABLE + DATE)
+                                // ═══════════════════════════════════════════════
+                                EST_PERISSABLE = rdr["EST_PERISSABLE"] == DBNull.Value
+                                                    ? false
+                                                    : Convert.ToBoolean(rdr["EST_PERISSABLE"]),
+                                DATE_PEREMPTION = rdr["DATE_PEREMPTION"] == DBNull.Value
+                                                    ? null
+                                                    : (DateTime?)Convert.ToDateTime(rdr["DATE_PEREMPTION"]),
+
                                 STOCK_TOTAL = Convert.ToDecimal(rdr["STOCK_TOTAL"]),
                                 STATUT_STOCK = Convert.ToString(rdr["STATUT_STOCK"])
                             });

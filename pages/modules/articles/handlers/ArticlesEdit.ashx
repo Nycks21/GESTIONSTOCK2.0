@@ -1,6 +1,7 @@
-﻿<%@ WebHandler Language="C#" Class="ArticlesEdit" %>
+﻿﻿﻿<%@ WebHandler Language="C#" Class="ArticlesEdit" %>
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -12,11 +13,15 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Cache.SetNoStore();
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
+
         if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            WriteJson(ctx, new {
+                success = false,
+                messageKey = "articles.server.unauthorized",
+                message = "Accès non autorisé"
+            });
             return;
         }
 
@@ -29,7 +34,11 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant\"}");
+                WriteJson(ctx, new {
+                    success = false,
+                    messageKey = "articles.server.id_missing",
+                    message = "ID manquant."
+                });
                 return;
             }
 
@@ -39,13 +48,68 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             string fournisseurId = GetString(data, "fournisseurId");
             string uniteId = GetString(data, "uniteId");
             string emplacementId = GetString(data, "emplacementId");
-            decimal seuilAlerte = GetDecimal(data, "seuilAlerte", 0);
             bool actif = GetBool(data, "actif", true);
             bool estService = GetBool(data, "estService", false);
+            bool estPerissable = GetBool(data, "estPerissable", false);
+            string datePeremptionStr = GetString(data, "datePeremption");
 
-            if (string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(uniteId))
+            // ─── Validation des champs obligatoires ───
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(nom))             missing.Add("NOM");
+            if (string.IsNullOrWhiteSpace(categorieId))     missing.Add("CATÉGORIE");
+            if (string.IsNullOrWhiteSpace(fournisseurId))   missing.Add("FOURNISSEUR");
+            if (string.IsNullOrWhiteSpace(uniteId))         missing.Add("UNITÉ DE MESURE");
+            if (string.IsNullOrWhiteSpace(emplacementId))   missing.Add("EMPLACEMENT PAR DÉFAUT");
+
+            // ─── Seuil d'alerte : obligatoire et numérique ───
+            bool hasSeuil = data.ContainsKey("seuilAlerte")
+                            && data["seuilAlerte"] != null
+                            && !string.IsNullOrWhiteSpace(data["seuilAlerte"].ToString());
+            decimal seuilAlerte = 0m;
+            bool seuilNumeric = false;
+            if (hasSeuil)
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Nom et unité sont obligatoires.\"}");
+                string seuilStr = data["seuilAlerte"].ToString().Trim();
+                seuilNumeric =
+                    decimal.TryParse(seuilStr, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out seuilAlerte)
+                    ||
+                    decimal.TryParse(seuilStr, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.GetCultureInfo("fr-FR"), out seuilAlerte);
+            }
+            if (!hasSeuil) missing.Add("SEUIL D'ALERTE");
+            else if (!seuilNumeric) missing.Add("SEUIL D'ALERTE (valeur numérique invalide)");
+
+            // ═══ COHÉRENCE PÉRISSABLE ↔ DATE DE PÉREMEPTION ═══
+            DateTime? datePeremption = null;
+            if (estPerissable)
+            {
+                if (string.IsNullOrWhiteSpace(datePeremptionStr))
+                {
+                    missing.Add("DATE DE PÉREMEPTION (obligatoire pour un article périssable)");
+                }
+                else
+                {
+                    datePeremption = TryParseDateFlexible(datePeremptionStr.Trim());
+                    if (!datePeremption.HasValue)
+                        missing.Add("DATE DE PÉREMEPTION (format invalide — jj/mm/aaaa attendu)");
+                }
+            }
+            else
+            {
+                // NON périssable → forcer NULL
+                datePeremption = null;
+            }
+
+            if (missing.Count > 0)
+            {
+                WriteJson(ctx, new {
+                    success = false,
+                    messageKey = "articles.server.required_fields_prefix",
+                    messageParams = new { fields = string.Join(", ", missing.ToArray()) },
+                    message = "Veuillez renseigner tous les champs obligatoires : "
+                              + string.Join(", ", missing.ToArray()) + "."
+                });
                 return;
             }
 
@@ -66,6 +130,8 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                         SEUIL_ALERTE = @seuilAlerte,
                         ACTIVE = @active,
                         EST_SERVICE = @service,
+                        EST_PERISSABLE = @perissable,
+                        DATE_PEREMPTION = @dper,
                         UPDATED_BY = @userId,
                         UPDATED_AT = GETDATE()
                     WHERE ID = @id AND DELETION_AT IS NULL";
@@ -75,30 +141,84 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@nom", nom);
                     cmd.Parameters.AddWithValue("@desc", description ?? (object)DBNull.Value);
-                    cmd.Parameters.AddWithValue("@cat", string.IsNullOrEmpty(categorieId) ? (object)DBNull.Value : categorieId);
-                    cmd.Parameters.AddWithValue("@four", string.IsNullOrEmpty(fournisseurId) ? (object)DBNull.Value : fournisseurId);
+                    cmd.Parameters.AddWithValue("@cat", categorieId);
+                    cmd.Parameters.AddWithValue("@four", fournisseurId);
                     cmd.Parameters.AddWithValue("@unite", uniteId);
-                    cmd.Parameters.AddWithValue("@empl", string.IsNullOrEmpty(emplacementId) ? (object)DBNull.Value : emplacementId);
+                    cmd.Parameters.AddWithValue("@empl", emplacementId);
                     cmd.Parameters.AddWithValue("@seuilAlerte", seuilAlerte);
                     cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                     cmd.Parameters.AddWithValue("@service", estService ? 1 : 0);
+                    cmd.Parameters.AddWithValue("@perissable", estPerissable ? 1 : 0);
+                    var pDate = cmd.Parameters.Add("@dper", SqlDbType.Date);
+                    pDate.Value = datePeremption.HasValue
+                        ? (object)datePeremption.Value.Date
+                        : DBNull.Value;
                     cmd.Parameters.AddWithValue("@userId", userId);
+
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
                     {
-                        ctx.Response.Write("{\"success\":false,\"message\":\"Article introuvable ou déjà supprimé.\"}");
+                        WriteJson(ctx, new {
+                            success = false,
+                            messageKey = "articles.server.not_found",
+                            message = "Article introuvable ou déjà supprimé."
+                        });
                         return;
                     }
                 }
 
-                ctx.Response.Write(serializer.Serialize(new { success = true, message = "Article modifié avec succès." }));
+                WriteJson(ctx, new {
+                    success = true,
+                    messageKey = "articles.server.updated",
+                    message = "Article modifié avec succès."
+                });
             }
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            WriteJson(ctx, new {
+                success = false,
+                messageKey = "message.error",
+                message = ex.Message.Replace("\"", "\\\"")
+            });
         }
+    }
+
+    // ─── Parsing de date flexible (ISO + FR) ───
+    private static DateTime? TryParseDateFlexible(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        string s = raw.Trim();
+
+        DateTime d;
+        // 1) ISO yyyy-MM-dd (envoyé par <input type="date">)
+        if (DateTime.TryParseExact(s, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out d))
+            return d.Date;
+
+        // 2) FR jj/mm/aaaa
+        if (DateTime.TryParseExact(s, "dd/MM/yyyy",
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
+                System.Globalization.DateTimeStyles.None, out d))
+            return d.Date;
+
+        // 3) Variantes FR avec - ou .
+        string[] formatsFr = { "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy",
+                                "d.M.yyyy", "dd.MM.yyyy" };
+        if (DateTime.TryParseExact(s, formatsFr,
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
+                System.Globalization.DateTimeStyles.None, out d))
+            return d.Date;
+
+        // 4) Dernier recours : invariant
+        if (DateTime.TryParse(s,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out d))
+            return d.Date;
+
+        return null;
     }
 
     private string GetString(Dictionary<string, object> data, string key)
@@ -106,26 +226,23 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
         return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
-    private decimal GetDecimal(Dictionary<string, object> data, string key, decimal defaultValue)
-    {
-        if (data.ContainsKey(key) && data[key] != null)
-        {
-            decimal val;
-            if (decimal.TryParse(data[key].ToString(), out val))
-                return val;
-        }
-        return defaultValue;
-    }
-
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
     {
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
-            if (bool.TryParse(data[key].ToString(), out val))
-                return val;
+            if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
+    }
+
+    private void WriteJson(HttpContext ctx, object obj)
+    {
+        var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+        ctx.Response.Write(ser.Serialize(obj));
     }
 
     public bool IsReusable { get { return false; } }

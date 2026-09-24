@@ -59,7 +59,10 @@
 }
 .pill-up  { background: #d4edda; color: #155724; }
 .pill-dn  { background: #f8d7da; color: #721c24; }
-.pill-neu { background: #e2e3e5; color: #383d41; }
+.pill-neu { background: #7d85f3; color: #f9f9fd; }
+.pill-neu2 { background: #d19a04; color: #f9f9fd; }
+.pill-neu3 { background: #d4edda; color: #155724; }
+.pill-neu4 { background: #f8d7da; color: #721c24; }
 
 /* ═══ DASH CARDS ═══ */
 .dash-card {

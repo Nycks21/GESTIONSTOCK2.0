@@ -60,9 +60,26 @@ public partial class index : Page
     {
       conn.Open();
 
-      // ── Articles actifs ──
-      using (SqlCommand cmd = new SqlCommand(
-          "SELECT COUNT(*) FROM MARTICLE WHERE ACTIVE = 1 AND DELETION_AT IS NULL", conn))
+      // ────────────────────────────────────────────────────────
+      // ✅ FIX valArticles : uniquement les articles en statut
+      //    NORMAL ou ALERTE  →  DISPONIBLE > 0
+      //    Les articles en RUPTURE (DISPONIBLE <= 0) sont EXCLUS.
+      //    Même logique que le stock : SUM(SSTOCK.QUANTITE_ACTUELLE)
+      // ────────────────────────────────────────────────────────
+      string sqlArticlesActifs = @"
+          WITH StockAgg AS (
+              SELECT
+                  a.ID AS ARTICLE_ID,
+                  SUM(s.QUANTITE_ACTUELLE) AS DISPONIBLE
+              FROM MARTICLE a
+              INNER JOIN SSTOCK s ON s.ARTICLE_ID = a.ID AND s.DELETION_AT IS NULL
+              WHERE a.DELETION_AT IS NULL
+              GROUP BY a.ID
+          )
+          SELECT COUNT(*)
+          FROM StockAgg
+          WHERE DISPONIBLE > 0";
+      using (SqlCommand cmd = new SqlCommand(sqlArticlesActifs, conn))
         result["articlesActifs"] = Convert.ToInt32(cmd.ExecuteScalar());
 
       // ── Total articles ──

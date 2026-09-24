@@ -96,5 +96,8 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
         return defaultValue;
     }
 
-    public bool IsReusable => false;
+    public bool IsReusable
+{
+    get { return false; }
+}
 }

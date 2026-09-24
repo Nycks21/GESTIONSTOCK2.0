@@ -234,8 +234,8 @@ function renderTable(stock) {
             '<td>' + articleHtml + '</td>' +
             '<td>' + entree + '</td>' +
             '<td>' + sortie + '</td>' +
-            '<td><strong>' + disponible + '</strong></td>' +
             '<td>' + seuil + '</td>' +
+            '<td><strong>' + disponible + '</strong></td>' +
             '<td>' + statusHtml + '</td>' +
             '<td>' +
                 '<button type="button" class="btn btn-sm btn-info" ' +

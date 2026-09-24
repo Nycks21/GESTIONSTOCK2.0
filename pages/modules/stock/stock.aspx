@@ -152,10 +152,10 @@
                   <th onclick="sortData('SORTIE')" style="cursor:pointer; width:110px;">
                     <span data-i18n="stock.table.sortie">SORTIE</span> <i class="fas fa-sort ml-1"></i>
                   </th>
+                  <th style="width:120px;" data-i18n="stock.table.seuil">SEUIL D'ALERTE</th>
                   <th onclick="sortData('DISPONIBLE')" style="cursor:pointer; width:120px;">
                     <span data-i18n="stock.table.disponible">DISPONIBLE</span> <i class="fas fa-sort ml-1"></i>
                   </th>
-                  <th style="width:120px;" data-i18n="stock.table.seuil">SEUIL D'ALERTE</th>
                   <th onclick="sortData('STATUT')" style="cursor:pointer; width:150px;">
                     <span data-i18n="stock.table.statut">STATUT</span> <i class="fas fa-sort ml-1"></i>
                   </th>

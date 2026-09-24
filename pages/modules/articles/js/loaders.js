@@ -12,6 +12,36 @@ function formatNumber(value, decimals) {
     return Number(value).toFixed(decimals || 0);
 }
 
+// ============================================================
+// RÉSOLUTION DU LIBELLÉ D'UNITÉ
+// Priorité : UNITE_NOM (serveur) → lookup par ID → UNITE → UNITE_CODE → UNITE_SYMBOLE
+// ============================================================
+function resolveUniteLabel(article) {
+    if (!article) return '';
+
+    // 1) Le serveur fournit explicitement le NOM
+    if (article.UNITE_NOM) return article.UNITE_NOM;
+
+    // 2) Champ historique "UNITE" qui contenait déjà le NOM
+    if (article.UNITE) return article.UNITE;
+
+    // 3) Lookup par ID dans AppState.unites (chargé via loadDropdowns)
+    if (article.UNITE_MESURE_ID &&
+        typeof AppState !== 'undefined' &&
+        AppState.unites && AppState.unites.length) {
+        var target = String(article.UNITE_MESURE_ID);
+        for (var i = 0; i < AppState.unites.length; i++) {
+            var u = AppState.unites[i];
+            if (u && String(u.ID) === target) {
+                return u.NOM || u.CODE || '';
+            }
+        }
+    }
+
+    // 4) Derniers recours (rétrocompatibilité)
+    return article.UNITE_CODE || article.UNITE_SYMBOLE || '';
+}
+
 // Sécurité : garantir que AppState existe
 if (typeof window.AppState === "undefined") {
     window.AppState = {
@@ -113,7 +143,7 @@ async function loadDropdownsArticle() {
         }
     } catch (e) { /* ignore */ }
 
-    // Unités
+    // Unités — textKey = "NOM" → affiche le libellé complet dans le select
     try {
         var url = API.BASE + API.HANDLERS_PATH + API.UNITES;
         var resp = await fetch(url);
@@ -267,6 +297,9 @@ function renderArticlesTable(articles) {
 
         var nomHtml = '<span style="font-weight:600;">' + (a.NOM || '') + '</span>';
 
+        // ✅ CORRECTION : affiche le NOM de l'unité (via resolveUniteLabel)
+        var uniteHtml = resolveUniteLabel(a);
+
         var stockTotalHtml = '<span style="display:inline-block;min-width:50px;text-align:center;padding:3px 8px;border-radius:8px;background:#007bff;color:#fff;font-weight:700;font-size:13px;">' +
             (a.STOCK_TOTAL || 0) + '</span>';
 
@@ -296,7 +329,7 @@ function renderArticlesTable(articles) {
             "<td>" + nomHtml + "</td>" +
             "<td>" + (a.CATEGORIE_NOM || "") + "</td>" +
             "<td>" + (a.FOURNISSEUR_NOM || "") + "</td>" +
-            "<td>" + (a.UNITE_SYMBOLE || a.UNITE || "") + "</td>" +
+            "<td>" + uniteHtml + "</td>" +               /* ✅ NOM de l'unité */
             '<td style="text-align:center;">' + stockTotalHtml + "</td>" +
             '<td style="text-align:center;">' + seuilAlerteHtml + "</td>" +
             "<td>" + statutBadge + "</td>" +
@@ -316,6 +349,7 @@ window.renderArticlesTable = renderArticlesTable;
 window.populateSelect = populateSelect;
 window.formatDateValue = formatDateValue;
 window.formatNumber = formatNumber;
+window.resolveUniteLabel = resolveUniteLabel;   /* ✅ nouvelle fonction exposée */
 
 // ✅ ALIAS de compatibilité
 window.loadStats = loadArticleStats;

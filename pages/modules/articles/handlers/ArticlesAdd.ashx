@@ -1,6 +1,7 @@
-﻿﻿<%@ WebHandler Language="C#" Class="ArticlesAdd" %>
+﻿﻿﻿<%@ WebHandler Language="C#" Class="ArticlesAdd" %>
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,11 +15,14 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
         if (!AuthHelper.RequireApiAuth(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            WriteJson(ctx, new {
+                success = false,
+                messageKey = "articles.server.unauthorized",
+                message = "Accès non autorisé"
+            });
             return;
         }
 
@@ -28,25 +32,86 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
-            // ⚠️ Le CODE n'est plus envoyé par le client : il est généré côté serveur.
+            if (data == null)
+            {
+                WriteJson(ctx, new {
+                    success = false,
+                    messageKey = "articles.server.invalid_body",
+                    message = "Corps de requête invalide."
+                });
+                return;
+            }
+
             string nom = GetString(data, "nom");
             string description = GetString(data, "description") ?? "";
             string categorieId = GetString(data, "categorieId");
             string fournisseurId = GetString(data, "fournisseurId");
             string uniteId = GetString(data, "uniteId");
             string emplacementId = GetString(data, "emplacementId");
-            decimal seuilAlerte = GetDecimal(data, "seuilAlerte", 0);
-            decimal stockInitial = GetDecimal(data, "stockInitial", 0);
             bool actif = GetBool(data, "actif", true);
             bool estService = GetBool(data, "estService", false);
+            bool estPerissable = GetBool(data, "estPerissable", false);
+            string datePeremptionStr = GetString(data, "datePeremption");
 
-            if (string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(uniteId) || string.IsNullOrEmpty(emplacementId))
+            // ─── Validation des 6 champs obligatoires ───
+            var missing = new List<string>();
+            if (string.IsNullOrWhiteSpace(nom))             missing.Add("NOM");
+            if (string.IsNullOrWhiteSpace(categorieId))     missing.Add("CATÉGORIE");
+            if (string.IsNullOrWhiteSpace(fournisseurId))   missing.Add("FOURNISSEUR");
+            if (string.IsNullOrWhiteSpace(uniteId))         missing.Add("UNITÉ DE MESURE");
+            if (string.IsNullOrWhiteSpace(emplacementId))   missing.Add("EMPLACEMENT PAR DÉFAUT");
+
+            bool hasSeuil = data.ContainsKey("seuilAlerte")
+                            && data["seuilAlerte"] != null
+                            && !string.IsNullOrWhiteSpace(data["seuilAlerte"].ToString());
+            decimal seuilAlerte = 0m;
+            bool seuilNumeric = false;
+            if (hasSeuil)
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"Nom, unité et emplacement sont obligatoires.\"}");
+                string seuilStr = data["seuilAlerte"].ToString().Trim();
+                seuilNumeric =
+                    decimal.TryParse(seuilStr, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out seuilAlerte)
+                    ||
+                    decimal.TryParse(seuilStr, System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.GetCultureInfo("fr-FR"), out seuilAlerte);
+            }
+            if (!hasSeuil) missing.Add("SEUIL D'ALERTE");
+            else if (!seuilNumeric) missing.Add("SEUIL D'ALERTE (valeur numérique invalide)");
+
+            DateTime? datePeremption = null;
+            if (estPerissable)
+            {
+                if (string.IsNullOrWhiteSpace(datePeremptionStr))
+                {
+                    missing.Add("DATE DE PÉREMEPTION (obligatoire pour un article périssable)");
+                }
+                else
+                {
+                    DateTime d;
+                    if (!DateTime.TryParse(datePeremptionStr, out d))
+                        missing.Add("DATE DE PÉREMEPTION (format invalide)");
+                    else
+                        datePeremption = d.Date;
+                }
+            }
+            else
+            {
+                datePeremption = null;
+            }
+
+            if (missing.Count > 0)
+            {
+                WriteJson(ctx, new {
+                    success = false,
+                    messageKey = "articles.server.required_fields_prefix",
+                    messageParams = new { fields = string.Join(", ", missing.ToArray()) },
+                    message = "Veuillez renseigner tous les champs obligatoires : "
+                              + string.Join(", ", missing.ToArray()) + "."
+                });
                 return;
             }
 
-            // 🔑 Récupération du code projet (Web.config : ProjectCode)
             string projetCode = AuthHelper.GetProjectCode(ctx);
             if (string.IsNullOrEmpty(projetCode)) projetCode = "TALIM";
             projetCode = projetCode.Trim().ToUpperInvariant().Replace(" ", "");
@@ -63,105 +128,89 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                 {
                     try
                     {
-                        // -----------------------------------------------------------
-                        // 1) Génération atomique du numéro de séquence pour le projet
-                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT
-                        // -----------------------------------------------------------
                         string sqlSeq = @"
-                            IF NOT EXISTS (
-                                SELECT 1 FROM MARTICLE_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
-                                WHERE PROJET_CODE = @projet
-                            )
+                            IF NOT EXISTS (SELECT 1 FROM MARTICLE_SEQUENCE WITH (UPDLOCK, HOLDLOCK) WHERE PROJET_CODE = @projet)
                             BEGIN
-                                INSERT INTO MARTICLE_SEQUENCE (PROJET_CODE, DERNIER_NUMERO)
-                                VALUES (@projet, 0);
+                                INSERT INTO MARTICLE_SEQUENCE (PROJET_CODE, DERNIER_NUMERO) VALUES (@projet, 0);
                             END
-
                             UPDATE MARTICLE_SEQUENCE
                             SET DERNIER_NUMERO = DERNIER_NUMERO + 1
                             OUTPUT INSERTED.DERNIER_NUMERO
                             WHERE PROJET_CODE = @projet;";
-
                         int numero;
                         using (var cmdSeq = new SqlCommand(sqlSeq, conn, trans))
                         {
                             cmdSeq.Parameters.AddWithValue("@projet", projetCode);
-                            object scalar = cmdSeq.ExecuteScalar();
-                            numero = Convert.ToInt32(scalar);
+                            numero = Convert.ToInt32(cmdSeq.ExecuteScalar());
                         }
 
-                        // -----------------------------------------------------------
-                        // 2) Construction du code : ART-{PROJET}-{00001}
-                        // -----------------------------------------------------------
                         code = string.Format("ART-{0}-{1:D5}", projetCode, numero);
 
-                        // -----------------------------------------------------------
-                        // 3) Vérification anti-doublon (ceinture + bretelles)
-                        // -----------------------------------------------------------
                         using (var cmdCheck = new SqlCommand(
                             "SELECT COUNT(1) FROM MARTICLE WHERE CODE = @code", conn, trans))
                         {
                             cmdCheck.Parameters.AddWithValue("@code", code);
-                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
-                            if (exists > 0)
-                                throw new Exception("Le code généré existe déjà, veuillez réessayer.");
+                            if (Convert.ToInt32(cmdCheck.ExecuteScalar()) > 0)
+                                throw new Exception("CodeExists");
                         }
 
-                        // -----------------------------------------------------------
-                        // 4) Insertion de l'article
-                        // -----------------------------------------------------------
                         string articleSql = @"
-                            INSERT INTO MARTICLE (ID, CODE, NOM, DESCRIPTION, CATEGORIE_ID, FOURNISSEUR_PREFERE_ID, UNITE_MESURE_ID, EMPLACEMENT_ID,
-                                                 SEUIL_ALERTE, ACTIVE, EST_SERVICE, CREATED_BY, CREATED_AT)
-                            VALUES (@id, @code, @nom, @desc, @cat, @four, @unite, @empl, @seuil, @active, @service, @userId, GETDATE())";
+                            INSERT INTO MARTICLE (
+                                ID, CODE, NOM, DESCRIPTION,
+                                CATEGORIE_ID, FOURNISSEUR_PREFERE_ID, UNITE_MESURE_ID, EMPLACEMENT_ID,
+                                SEUIL_ALERTE, ACTIVE, EST_SERVICE,
+                                EST_PERISSABLE, DATE_PEREMPTION,
+                                CREATED_BY, CREATED_AT)
+                            VALUES (
+                                @id, @code, @nom, @desc,
+                                @cat, @four, @unite, @empl,
+                                @seuil, @active, @service,
+                                @perissable, @dper,
+                                @userId, GETDATE())";
                         using (var cmd = new SqlCommand(articleSql, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", newId);
                             cmd.Parameters.AddWithValue("@code", code);
                             cmd.Parameters.AddWithValue("@nom", nom);
                             cmd.Parameters.AddWithValue("@desc", description ?? (object)DBNull.Value);
-                            cmd.Parameters.AddWithValue("@cat", string.IsNullOrEmpty(categorieId) ? (object)DBNull.Value : categorieId);
-                            cmd.Parameters.AddWithValue("@four", string.IsNullOrEmpty(fournisseurId) ? (object)DBNull.Value : fournisseurId);
+                            cmd.Parameters.AddWithValue("@cat", categorieId);
+                            cmd.Parameters.AddWithValue("@four", fournisseurId);
                             cmd.Parameters.AddWithValue("@unite", uniteId);
-                            cmd.Parameters.AddWithValue("@empl", string.IsNullOrEmpty(emplacementId) ? (object)DBNull.Value : emplacementId);
+                            cmd.Parameters.AddWithValue("@empl", emplacementId);
                             cmd.Parameters.AddWithValue("@seuil", seuilAlerte);
                             cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                             cmd.Parameters.AddWithValue("@service", estService ? 1 : 0);
+                            cmd.Parameters.AddWithValue("@perissable", estPerissable ? 1 : 0);
+                            var pDate = cmd.Parameters.Add("@dper", SqlDbType.Date);
+                            pDate.Value = datePeremption.HasValue
+                                ? (object)datePeremption.Value : DBNull.Value;
                             cmd.Parameters.AddWithValue("@userId", userId);
                             cmd.ExecuteNonQuery();
                         }
 
-                        // -----------------------------------------------------------
-                        // 5) Stock initial (si fourni)
-                        // -----------------------------------------------------------
-                        if (stockInitial > 0 && !string.IsNullOrEmpty(emplacementId))
-                        {
-                            string stockSql = @"
-                                INSERT INTO SSTOCK (ARTICLE_ID, EMPLACEMENT_ID, QUANTITE_MVT, QUANTITE_ACTUELLE, CREATED_BY, CREATED_AT)
-                                VALUES (@articleId, @empl, @stock, @stock, @userId, GETDATE())";
-                            using (var cmd = new SqlCommand(stockSql, conn, trans))
-                            {
-                                cmd.Parameters.AddWithValue("@articleId", newId);
-                                cmd.Parameters.AddWithValue("@empl", emplacementId);
-                                cmd.Parameters.AddWithValue("@stock", stockInitial);
-                                cmd.Parameters.AddWithValue("@userId", userId);
-                                cmd.ExecuteNonQuery();
-                            }
-                        }
-
                         trans.Commit();
 
-                        ctx.Response.Write(serializer.Serialize(new
-                        {
+                        WriteJson(ctx, new {
                             success = true,
                             id = newId,
                             code = code,
+                            messageKey = "articles.server.added_with_code",
+                            messageParams = new { code = code },
                             message = "Article ajouté avec succès (" + code + ")."
-                        }));
+                        });
                     }
-                    catch
+                    catch (Exception tex)
                     {
                         try { trans.Rollback(); } catch { /* ignore */ }
+                        if (tex.Message == "CodeExists")
+                        {
+                            WriteJson(ctx, new {
+                                success = false,
+                                messageKey = "articles.server.code_exists",
+                                message = "Le code généré existe déjà, veuillez réessayer."
+                            });
+                            return;
+                        }
                         throw;
                     }
                 }
@@ -170,11 +219,11 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
-            {
+            WriteJson(ctx, new {
                 success = false,
+                messageKey = "message.error",
                 message = ex.Message.Replace("\"", "\\\"")
-            }));
+            });
         }
     }
 
@@ -183,24 +232,23 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
         return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
-    private decimal GetDecimal(Dictionary<string, object> data, string key, decimal defaultValue)
-    {
-        if (data.ContainsKey(key) && data[key] != null)
-        {
-            decimal val;
-            if (decimal.TryParse(data[key].ToString(), out val)) return val;
-        }
-        return defaultValue;
-    }
-
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
     {
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
             if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
+    }
+
+    private void WriteJson(HttpContext ctx, object obj)
+    {
+        var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+        ctx.Response.Write(ser.Serialize(obj));
     }
 
     public bool IsReusable { get { return false; } }

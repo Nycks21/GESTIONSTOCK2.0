@@ -42,3 +42,205 @@
 body.dark-mode .toast-item.success { background: #16A34A; }
 body.dark-mode .toast-item.error   { background: #DC2626; }
 body.dark-mode .toast-item.info    { background: #0891B2; }
+
+/* ============================================================================
+   IMPORTATION ARTICLES — MODAL WIZARD
+   Préfixe .ai- pour isoler du reste de la page
+   ============================================================================ */
+
+.modal-content.modal-import {
+    width: min(1200px, 96vw);
+    max-width: min(1200px, 96vw);
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+}
+.modal-content.modal-import .modal-header { flex-shrink: 0; }
+.modal-content.modal-import .modal-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 320px;
+    max-height: calc(92vh - 180px);
+    padding: 18px 22px;
+}
+.modal-content.modal-import .modal-footer {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border-top: 1px solid #e9ecef;
+    background: #f8f9fa;
+}
+
+/* Wizard */
+.ai-wizard {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; padding: 6px 10px 22px; flex-wrap: wrap;
+}
+.ai-step {
+    flex: 1 1 0; min-width: 110px;
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    opacity: .55; transition: opacity .2s;
+}
+.ai-step.active { opacity: 1; }
+.ai-step.done   { opacity: .95; }
+.ai-step-circle {
+    width: 34px; height: 34px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; background: #e9ecef; color: #6c757d;
+    border: 2px solid #dee2e6;
+}
+.ai-step.active .ai-step-circle { background: #007bff; color: #fff; border-color: #007bff; box-shadow: 0 0 0 4px rgba(0,123,255,.15); }
+.ai-step.done   .ai-step-circle { background: #28a745; color: #fff; border-color: #28a745; }
+.ai-step-label  { font-size: 12.5px; text-align: center; color: #495057; font-weight: 600; }
+
+/* Dropzone */
+.ai-dropzone {
+    border: 2px dashed #17a2b8; border-radius: 10px;
+    padding: 34px 20px; text-align: center; cursor: pointer;
+    background: #f8fdfe; transition: background .2s, border-color .2s;
+}
+.ai-dropzone:hover { background: #eaf8fb; border-color: #138496; }
+.ai-dropzone.drag-over { background: #d4edfb; border-color: #0069d9; }
+.ai-dropzone i { font-size: 42px; color: #17a2b8; margin-bottom: 10px; }
+.ai-dropzone p { margin: 4px 0; color: #495057; font-size: 13.5px; }
+
+/* File info */
+.ai-file-info {
+    display: flex; align-items: center; gap: 12px; margin-top: 14px;
+    padding: 12px 14px; background: #f8f9fa; border-radius: 8px; border: 1px solid #e9ecef;
+}
+.ai-file-info > i { font-size: 28px; color: #28a745; }
+.ai-file-name   { font-weight: 600; color: #212529; }
+.ai-file-status { font-size: 12.5px; color: #6c757d; margin-top: 2px; }
+
+/* Columns preview */
+.ai-cols-preview { display: none; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ai-cols-preview .col-badge {
+    display: inline-block; padding: 4px 10px;
+    background: #eef2f7; border: 1px solid #d7dee6; border-radius: 14px;
+    font-size: 12px; color: #495057;
+}
+.ai-cols-preview .col-badge strong { color: #007bff; margin-right: 4px; }
+
+/* Mapping */
+.ai-help { font-size: 13px; color: #6c757d; margin-bottom: 12px; }
+.ai-scroll-table { max-height: 420px; overflow-y: auto; border: 1px solid #e9ecef; border-radius: 8px; }
+.ai-mapping-table { width: 100%; border-collapse: collapse; }
+.ai-mapping-table th, .ai-mapping-table td {
+    padding: 8px 10px; border-bottom: 1px solid #e9ecef; font-size: 13px; vertical-align: middle;
+}
+.ai-mapping-table thead th {
+    position: sticky; top: 0; background: #f8f9fa; z-index: 2;
+    font-weight: 600; text-align: left; color: #495057;
+}
+.ai-mapping-table .champ-label { font-weight: 600; color: #343a40; display: block; }
+.ai-mapping-table .champ-label.required::after { content: ' *'; color: #dc3545; font-weight: 700; }
+.ai-mapping-table .champ-hint { font-size: 11.5px; color: #8a94a0; }
+.ai-mapping-table .mapping-select { width: 100%; padding: 6px 8px; border: 1px solid #ced4da; border-radius: 6px; }
+.ai-mapping-table .preview-val {
+    display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: #fffbea; padding: 3px 8px; border-radius: 4px; border: 1px solid #ffe9a8; font-size: 12px;
+}
+
+/* Stats bar */
+.ai-stats-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.ai-stats-bar .stat {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px; border-radius: 8px; font-size: 13.5px; font-weight: 600;
+}
+.ai-stats-bar .stat.ok    { background: #e7f6ec; color: #1b7d3a; }
+.ai-stats-bar .stat.err   { background: #fdecea; color: #b72a2a; }
+.ai-stats-bar .stat.total { background: #eef4fb; color: #1a5fb4; }
+
+/* Preview table */
+.ai-preview-wrapper { max-height: 420px; overflow: auto; border: 1px solid #e9ecef; border-radius: 8px; }
+.ai-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ai-table thead th {
+    position: sticky; top: 0; background: #f8f9fa; padding: 8px; text-align: left;
+    border-bottom: 1px solid #e9ecef; z-index: 2; font-weight: 600; color: #495057;
+}
+.ai-table td { padding: 6px 8px; border-bottom: 1px solid #f1f3f5; }
+.ai-table tr.row-valid { background: #fff; }
+.ai-table tr.row-error { background: #fff7f7; }
+.ai-table .badge-ok {
+    display: inline-block; padding: 2px 8px; background: #e7f6ec; color: #1b7d3a;
+    border-radius: 12px; font-weight: 600; font-size: 11.5px;
+}
+.ai-table .badge-err {
+    background: #fdecea; color: #b72a2a; padding: 4px 8px; border-radius: 6px;
+    font-size: 11.5px; display: inline-block;
+}
+
+/* Result */
+.ai-result-summary { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.ai-result-summary .res-stat {
+    flex: 1 1 120px; display: flex; flex-direction: column; align-items: center;
+    padding: 14px 10px; border-radius: 10px; background: #f8f9fa;
+}
+.ai-result-summary .res-stat i { font-size: 20px; margin-bottom: 6px; }
+.ai-result-summary .res-stat strong { font-size: 22px; line-height: 1; }
+.ai-result-summary .res-stat span { font-size: 12px; color: #6c757d; margin-top: 4px; text-transform: uppercase; letter-spacing: .5px; }
+.ai-result-summary .res-stat.ok   { background: #e7f6ec; color: #1b7d3a; }
+.ai-result-summary .res-stat.warn { background: #fff4e5; color: #a15b00; }
+.ai-result-summary .res-stat.err  { background: #fdecea; color: #b72a2a; }
+
+.ai-section {
+    margin: 14px 0; padding: 12px 14px;
+    border: 1px solid #e9ecef; border-radius: 10px; background: #fff;
+}
+.ai-section h5 { margin: 0 0 10px; font-size: 14px; color: #343a40; }
+
+.ai-success-msg {
+    padding: 12px 14px; background: #e7f6ec; color: #1b7d3a;
+    border-radius: 8px; font-size: 13.5px;
+}
+
+/* Progress */
+.ai-progress { height: 8px; border-radius: 4px; background: #e9ecef; overflow: hidden; margin: 12px 0; }
+.ai-progress-bar { height: 100%; background: linear-gradient(90deg,#28a745,#17a2b8); width: 0; transition: width .3s; }
+
+@media (max-width: 720px) {
+    .modal-content.modal-import { width: 98vw; max-width: 98vw; }
+    .ai-step-label { font-size: 11px; }
+    .ai-step { min-width: 70px; }
+    .ai-step-circle { width: 28px; height: 28px; font-size: 13px; }
+    .ai-scroll-table, .ai-preview-wrapper { max-height: 300px; }
+}
+
+/* ============================================================
+   IMPORTATION — Blocage strict : bandeau anomalie
+   ============================================================ */
+.ai-alert-block {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 12px 14px;
+    margin: 12px 0;
+    border-radius: 8px;
+    background: #fdecea;
+    border-left: 4px solid #dc3545;
+    color: #8b1a1a;
+    font-size: 13.5px;
+    line-height: 1.5;
+}
+.ai-alert-block i {
+    font-size: 18px;
+    color: #dc3545;
+    margin-top: 1px;
+    flex-shrink: 0;
+}
+.ai-alert-block strong {
+    color: #8b1a1a;
+}
+
+/* Bouton Suivant désactivé à l'étape 3 (VALIDER) */
+#ai-btn-next:disabled {
+    background: #e2e3e5 !important;
+    color: #6c757d !important;
+    border-color: #ced4da !important;
+    box-shadow: none !important;
+}

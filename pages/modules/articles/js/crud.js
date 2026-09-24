@@ -6,6 +6,47 @@ function _t(key, params) {
     return key;
 }
 
+// ─── Résolution d'un message serveur (priorité messageKey → message → fallback) ───
+function _resolveServerMessage(result, fallbackKey) {
+    if (!result) return fallbackKey ? _t(fallbackKey) : '';
+    if (result.messageKey && typeof window.t === 'function') {
+        return window.t(result.messageKey, result.messageParams || undefined);
+    }
+    if (result.message) return result.message;
+    return fallbackKey ? _t(fallbackKey) : '';
+}
+
+// ─── Conversion robuste booléen (accepte bool, 1/0, "1"/"0", "true"/"false") ───
+function _toBool(v, defaultVal) {
+    if (v === undefined || v === null || v === '') return !!defaultVal;
+    if (typeof v === 'boolean') return v;
+    if (typeof v === 'number') return v !== 0;
+    var s = String(v).trim().toLowerCase();
+    if (['true', '1', 'oui', 'o', 'yes', 'y', 'vrai', 'eny', 'e', 'actif'].indexOf(s) !== -1) return true;
+    if (['false', '0', 'non', 'n', 'no', 'faux', 'tsia', 't', 'inactif'].indexOf(s) !== -1) return false;
+    return !!defaultVal;
+}
+
+// ============================================================
+// GESTION CONDITIONNELLE : PÉRISSABLE → DATE DE PÉREMPTION
+// ============================================================
+function toggleDatePeremption() {
+    var sel = document.getElementById('articleEstPerissable');
+    var group = document.getElementById('articleDatePeremptionGroup');
+    var dateInput = document.getElementById('articleDatePeremption');
+    if (!sel || !group) return;
+
+    var isPerissable = (sel.value === '1');
+    if (isPerissable) {
+        group.style.display = '';
+    } else {
+        group.style.display = 'none';
+        // NON périssable → on efface la date (sera forcée NULL en base)
+        if (dateInput) dateInput.value = '';
+        clearFieldErrors(['articleDatePeremption']);
+    }
+}
+
 // ============================================================
 // OUVERTURE / FERMETURE MODAL ARTICLE
 // ============================================================
@@ -30,11 +71,22 @@ function openAddArticleModal(e) {
     document.getElementById('articleFournisseur').value = '';
     document.getElementById('articleUnite').value = '';
     document.getElementById('articleEmplacement').value = '';
-    document.getElementById('articleSeuilAlerte').value = '0';
+    document.getElementById('articleSeuilAlerte').value = '';
     document.getElementById('articleActif').value = '1';
     document.getElementById('articleEstService').value = '0';
 
-    clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
+    // ═══ NOUVEL ARTICLE : PÉRISSABLE = NON par défaut, date masquée ═══
+    var perissableEl = document.getElementById('articleEstPerissable');
+    var dateEl = document.getElementById('articleDatePeremption');
+    if (perissableEl) perissableEl.value = '0';
+    if (dateEl) dateEl.value = '';
+    var grp = document.getElementById('articleDatePeremptionGroup');
+    if (grp) grp.style.display = 'none';
+
+    clearFieldErrors([
+        'articleCode', 'articleNom', 'articleCategorie', 'articleFournisseur',
+        'articleUnite', 'articleEmplacement', 'articleSeuilAlerte', 'articleDatePeremption'
+    ]);
     document.getElementById('articleModal').style.display = 'flex';
 }
 
@@ -62,12 +114,99 @@ function editArticle(id) {
     document.getElementById('articleFournisseur').value = article.FOURNISSEUR_PREFERE_ID || '';
     document.getElementById('articleUnite').value = article.UNITE_MESURE_ID || '';
     document.getElementById('articleEmplacement').value = article.EMPLACEMENT_ID || '';
-    document.getElementById('articleSeuilAlerte').value = article.SEUIL_ALERTE || 0;
-    document.getElementById('articleActif').value = article.ACTIVE ? '1' : '0';
-    document.getElementById('articleEstService').value = article.EST_SERVICE ? '1' : '0';
+    document.getElementById('articleSeuilAlerte').value =
+        (article.SEUIL_ALERTE !== undefined && article.SEUIL_ALERTE !== null)
+            ? article.SEUIL_ALERTE : '';
+    document.getElementById('articleActif').value = _toBool(article.ACTIVE, true) ? '1' : '0';
+    document.getElementById('articleEstService').value = _toBool(article.EST_SERVICE, false) ? '1' : '0';
 
-    clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
+    // ═══════════════════════════════════════════════════════════════
+    // CORRECTION BUG : PÉRISSABLE doit refléter la valeur EXACTE en base
+    // - accepte true/false, 1/0, "1"/"0", "true"/"false"
+    // ═══════════════════════════════════════════════════════════════
+    var isPerissable = _toBool(article.EST_PERISSABLE, false);
+
+    var perissableEl = document.getElementById('articleEstPerissable');
+    if (perissableEl) perissableEl.value = isPerissable ? '1' : '0';
+
+    var dateEl = document.getElementById('articleDatePeremption');
+    var grp = document.getElementById('articleDatePeremptionGroup');
+
+    if (isPerissable) {
+        if (grp) grp.style.display = '';
+        if (dateEl) {
+            // Le serveur renvoie "/Date(...)/" ou null → converti en yyyy-MM-dd
+            dateEl.value = _toDateInputValue(article.DATE_PEREMPTION);
+        }
+    } else {
+        if (grp) grp.style.display = 'none';
+        if (dateEl) dateEl.value = '';
+    }
+
+    clearFieldErrors([
+        'articleCode', 'articleNom', 'articleCategorie', 'articleFournisseur',
+        'articleUnite', 'articleEmplacement', 'articleSeuilAlerte', 'articleDatePeremption'
+    ]);
     document.getElementById('articleModal').style.display = 'flex';
+}
+
+// ─── Helper : convertit une valeur serveur en yyyy-MM-dd pour <input type="date"> ───
+// Accepte : Objet Date, /Date(...)/, ISO yyyy-MM-dd, jj/mm/aaaa, null
+function _toDateInputValue(value) {
+    if (!value) return '';
+
+    // 1) Objet Date natif
+    if (value instanceof Date) {
+        if (isNaN(value.getTime())) return '';
+        return value.getFullYear() + '-' +
+            String(value.getMonth() + 1).padStart(2, '0') + '-' +
+            String(value.getDate()).padStart(2, '0');
+    }
+
+    if (typeof value === 'string') {
+        var s = value.trim();
+        if (!s) return '';
+
+        // 2) Format Microsoft /Date(ms)/
+        var m = s.match(/\/Date\((-?\d+)\)\//);
+        if (m) {
+            var d1 = new Date(parseInt(m[1], 10));
+            if (isNaN(d1.getTime())) return '';
+            return d1.getFullYear() + '-' +
+                String(d1.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d1.getDate()).padStart(2, '0');
+        }
+
+        // 3) ISO yyyy-MM-dd
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+
+        // 4) Format français jj/mm/aaaa (ou - ou .)
+        var mfr = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+        if (mfr) {
+            var day = parseInt(mfr[1], 10);
+            var month = parseInt(mfr[2], 10);
+            var year = parseInt(mfr[3], 10);
+            if (year < 100) year += (year < 70 ? 2000 : 1900);
+            var d2 = new Date(year, month - 1, day);
+            if (d2.getFullYear() === year &&
+                d2.getMonth() === month - 1 &&
+                d2.getDate() === day) {
+                return d2.getFullYear() + '-' +
+                    String(d2.getMonth() + 1).padStart(2, '0') + '-' +
+                    String(d2.getDate()).padStart(2, '0');
+            }
+            return '';
+        }
+
+        // 5) Parsing natif (ISO complet par ex.)
+        var d3 = new Date(s);
+        if (!isNaN(d3.getTime())) {
+            return d3.getFullYear() + '-' +
+                String(d3.getMonth() + 1).padStart(2, '0') + '-' +
+                String(d3.getDate()).padStart(2, '0');
+        }
+    }
+    return '';
 }
 
 function closeArticleModal() {
@@ -82,6 +221,14 @@ function closeArticleModal() {
         codeEl.style.backgroundColor = '#e9ecef';
         codeEl.style.cursor = 'not-allowed';
     }
+
+    // Reset périssable/date
+    var perissableEl = document.getElementById('articleEstPerissable');
+    var dateEl = document.getElementById('articleDatePeremption');
+    var grp = document.getElementById('articleDatePeremptionGroup');
+    if (perissableEl) perissableEl.value = '0';
+    if (dateEl) dateEl.value = '';
+    if (grp) grp.style.display = 'none';
 }
 
 // ============================================================
@@ -91,34 +238,113 @@ async function saveArticle(e) {
     e.preventDefault();
     const editingId = document.getElementById('editingId').value;
 
+    // ─── Lecture brute du seuil d'alerte ───
+    const seuilRaw = document.getElementById('articleSeuilAlerte').value;
+    const seuilNum = (seuilRaw === '' || seuilRaw === null) ? NaN : parseFloat(seuilRaw);
+    const seuilProvided = !isNaN(seuilNum);
+
+    // ─── Lecture PÉRISSABLE + DATE ───
+    const perissableEl = document.getElementById('articleEstPerissable');
+    const dateEl = document.getElementById('articleDatePeremption');
+    const estPerissable = !!(perissableEl && perissableEl.value === '1');
+    let datePeremption = null;
+
     const data = {
         id: editingId || null,
-        nom: document.getElementById('articleNom').value.trim(),
-        description: document.getElementById('articleDescription').value.trim(),
+        nom: (document.getElementById('articleNom').value || '').trim(),
+        description: (document.getElementById('articleDescription').value || '').trim(),
         categorieId: document.getElementById('articleCategorie').value || null,
         fournisseurId: document.getElementById('articleFournisseur').value || null,
         uniteId: document.getElementById('articleUnite').value || null,
         emplacementId: document.getElementById('articleEmplacement').value || null,
-        seuilAlerte: parseFloat(document.getElementById('articleSeuilAlerte').value) || 0,
+        seuilAlerte: seuilProvided ? seuilNum : null,
         actif: document.getElementById('articleActif').value === '1',
-        estService: document.getElementById('articleEstService').value === '1'
+        estService: document.getElementById('articleEstService').value === '1',
+        estPerissable: estPerissable,
+        datePeremption: null
     };
 
+    // ─── Validation ───
     let valid = true;
-    clearFieldErrors(['articleCode', 'articleNom', 'articleUnite', 'articleEmplacement']);
+    clearFieldErrors([
+        'articleCode', 'articleNom', 'articleCategorie', 'articleFournisseur',
+        'articleUnite', 'articleEmplacement', 'articleSeuilAlerte', 'articleDatePeremption'
+    ]);
+
+    const missing = [];
+
     if (!data.nom) {
         showFieldError('articleNom', _t('articles.msg.name_required'));
+        missing.push(_t('articles.import.field.nom').toUpperCase());
+        valid = false;
+    }
+    if (!data.categorieId) {
+        showFieldError('articleCategorie', _t('articles.msg.categorie_required'));
+        missing.push(_t('articles.import.field.categorie').toUpperCase());
+        valid = false;
+    }
+    if (!data.fournisseurId) {
+        showFieldError('articleFournisseur', _t('articles.msg.fournisseur_required'));
+        missing.push(_t('articles.import.field.fournisseur').toUpperCase());
         valid = false;
     }
     if (!data.uniteId) {
         showFieldError('articleUnite', _t('articles.msg.unit_required'));
+        missing.push(_t('articles.import.field.unite').toUpperCase());
         valid = false;
     }
     if (!data.emplacementId) {
         showFieldError('articleEmplacement', _t('articles.msg.location_required'));
+        missing.push(_t('articles.import.field.emplacement').toUpperCase());
         valid = false;
     }
-    if (!valid) return;
+    if (!seuilProvided) {
+        showFieldError('articleSeuilAlerte', _t('articles.msg.seuil_required'));
+        missing.push(_t('articles.import.field.seuil_alerte').toUpperCase());
+        valid = false;
+    }
+
+    // ─── Cohérence PÉRISSABLE / DATE DE PÉREMEPTION ───
+    if (estPerissable) {
+        const dateRaw = (dateEl && dateEl.value) ? dateEl.value.trim() : '';
+        if (!dateRaw) {
+            showFieldError('articleDatePeremption', _t('articles.msg.date_peremption_required'));
+            missing.push(_t('articles.import.field.date_peremption').toUpperCase());
+            valid = false;
+        } else {
+            // <input type="date"> renvoie toujours yyyy-MM-dd
+            if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+                datePeremption = dateRaw;
+            } else {
+                const dt = new Date(dateRaw);
+                if (isNaN(dt.getTime())) {
+                    showFieldError('articleDatePeremption', _t('articles.msg.date_peremption_invalid'));
+                    missing.push(_t('articles.import.field.date_peremption').toUpperCase());
+                    valid = false;
+                } else {
+                    // Normalise en yyyy-MM-dd pour envoi serveur
+                    datePeremption = dt.getFullYear() + '-' +
+                        String(dt.getMonth() + 1).padStart(2, '0') + '-' +
+                        String(dt.getDate()).padStart(2, '0');
+                }
+            }
+        }
+    } else {
+        // NON périssable → forcer NULL
+        datePeremption = null;
+    }
+    data.datePeremption = datePeremption;
+
+    if (!valid) {
+        if (missing.length > 1) {
+            showToast(
+                _t('articles.msg.required_fields_title'),
+                _t('articles.msg.required_fields_text').replace('{fields}', missing.join(', ')),
+                'error'
+            );
+        }
+        return;
+    }
 
     const isEdit = !!editingId;
     const url = API.BASE + API.HANDLERS_PATH + (isEdit ? API.EDIT : API.ADD);
@@ -133,16 +359,22 @@ async function saveArticle(e) {
         const result = await resp.json();
 
         if (result.success) {
-            let msg = result.message || (isEdit ? _t('articles.msg.updated') : _t('articles.msg.added'));
-            if (result.code && !isEdit) {
-                msg = _t('articles.msg.added_with_code').replace('{code}', result.code);
+            let msg;
+            if (!isEdit && result.code) {
+                msg = result.messageKey
+                    ? _t(result.messageKey, { code: result.code })
+                    : _t('articles.msg.added_with_code', { code: result.code });
+            } else {
+                msg = _resolveServerMessage(result,
+                    isEdit ? 'articles.msg.updated' : 'articles.msg.added');
             }
             showToast(_t('message.success'), msg, 'success');
             closeArticleModal();
             loadArticles();
             loadStats();
         } else {
-            showToast(_t('message.error'), result.message || _t('articles.msg.operation_failed'), 'error');
+            const errMsg = _resolveServerMessage(result, 'articles.msg.operation_failed');
+            showToast(_t('message.error'), errMsg, 'error');
         }
     } catch (err) {
         showToast(_t('message.error'), err.message, 'error');
@@ -180,7 +412,8 @@ async function deleteArticle(id) {
             loadArticles();
             loadStats();
         } else {
-            showToast(_t('message.warning'), result.message || _t('articles.msg.delete_failed'), 'error');
+            const errMsg = _resolveServerMessage(result, 'articles.msg.delete_failed');
+            showToast(_t('message.warning'), errMsg, 'error');
         }
     } catch (err) {
         showToast(_t('message.warning'), err.message, 'error');
@@ -249,12 +482,14 @@ async function saveAdjust(e) {
         });
         const result = await resp.json();
         if (result.success) {
-            showToast(_t('message.success'), result.message || _t('articles.msg.adjusted'), 'success');
+            const msg = _resolveServerMessage(result, 'articles.msg.adjusted');
+            showToast(_t('message.success'), msg, 'success');
             closeAdjustModal();
             loadArticles();
             loadStats();
         } else {
-            showToast(_t('message.error'), result.message || _t('articles.msg.adjust_failed'), 'error');
+            const errMsg = _resolveServerMessage(result, 'articles.msg.adjust_failed');
+            showToast(_t('message.error'), errMsg, 'error');
         }
     } catch (err) {
         showToast(_t('message.error'), err.message, 'error');
@@ -302,7 +537,8 @@ async function loadHistory() {
             historyTotalPages = data.totalPages || 1;
             renderHistoryPagination(historyTotalPages);
         } else {
-            showToast(_t('message.error'), data.message || _t('articles.msg.history_load_error'), 'error');
+            const errMsg = _resolveServerMessage(data, 'articles.msg.history_load_error');
+            showToast(_t('message.error'), errMsg, 'error');
         }
     } catch (err) {
         showToast(_t('message.error'), err.message, 'error');
@@ -396,3 +632,5 @@ window.loadHistory = loadHistory;
 window.closeHistoryModal = closeHistoryModal;
 window.showFieldError = showFieldError;
 window.clearFieldErrors = clearFieldErrors;
+window.toggleDatePeremption = toggleDatePeremption;
+window._resolveServerMessage = _resolveServerMessage;

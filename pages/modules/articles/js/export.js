@@ -6,6 +6,27 @@ function formatNumber(value) {
     return isNaN(num) ? '' : num.toFixed(2);
 }
 
+// ─── Résolution du libellé d'unité (même logique que loaders.js) ───
+function resolveUniteLabelForExport(article) {
+    if (!article) return '';
+    if (article.UNITE_NOM) return article.UNITE_NOM;
+    if (article.UNITE) return article.UNITE;
+
+    if (article.UNITE_MESURE_ID &&
+        typeof AppState !== 'undefined' &&
+        AppState.unites && AppState.unites.length) {
+        var target = String(article.UNITE_MESURE_ID);
+        for (var i = 0; i < AppState.unites.length; i++) {
+            var u = AppState.unites[i];
+            if (u && String(u.ID) === target) {
+                return u.NOM || u.CODE || '';
+            }
+        }
+    }
+
+    return article.UNITE_CODE || article.UNITE_SYMBOLE || '';
+}
+
 function buildExportRowsFromArticles(articles) {
     const rows = [['CODE', 'NOM', 'CATÉGORIE', 'FOURNISSEUR', 'UNITÉ', 'STOCK TOTAL', 'SEUIL ALERTE', 'STATUT']];
     const data = articles || (typeof AppState !== 'undefined' && AppState.articles) || [];
@@ -15,7 +36,7 @@ function buildExportRowsFromArticles(articles) {
             a.NOM || '',
             a.CATEGORIE_NOM || '',
             a.FOURNISSEUR_NOM || '',
-            a.UNITE_SYMBOLE || a.UNITE || '',
+            resolveUniteLabelForExport(a),   /* ✅ NOM de l'unité */
             formatNumber(a.STOCK_TOTAL),
             formatNumber(a.SEUIL_ALERTE),
             a.STATUT_STOCK || ''
@@ -70,9 +91,14 @@ window.exportArticlesPDF = function() {
         const doc = new jsPDF('l', 'mm', 'a4');
         const head = [['CODE', 'NOM', 'CATÉGORIE', 'FOURNISSEUR', 'UNITÉ', 'STOCK TOTAL', 'SEUIL', 'STATUT']];
         const body = articles.map(a => [
-            a.CODE || '', a.NOM || '', a.CATEGORIE_NOM || '', a.FOURNISSEUR_NOM || '',
-            a.UNITE_SYMBOLE || a.UNITE || '', formatNumber(a.STOCK_TOTAL),
-            formatNumber(a.SEUIL_ALERTE), a.STATUT_STOCK || ''
+            a.CODE || '',
+            a.NOM || '',
+            a.CATEGORIE_NOM || '',
+            a.FOURNISSEUR_NOM || '',
+            resolveUniteLabelForExport(a),   /* ✅ NOM de l'unité */
+            formatNumber(a.STOCK_TOTAL),
+            formatNumber(a.SEUIL_ALERTE),
+            a.STATUT_STOCK || ''
         ]);
         doc.text('Liste des articles', 14, 12);
         doc.autoTable({
@@ -92,3 +118,4 @@ window.exportArticlesPDF = function() {
 
 window.exportArticlesToExcelOnly = exportArticlesToExcelOnly;
 window.exportArticlesToCsvOnly = exportArticlesToCsvOnly;
+window.resolveUniteLabelForExport = resolveUniteLabelForExport;
