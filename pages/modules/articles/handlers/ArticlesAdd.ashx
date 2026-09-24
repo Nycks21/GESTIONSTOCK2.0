@@ -1,4 +1,4 @@
-﻿﻿﻿<%@ WebHandler Language="C#" Class="ArticlesAdd" %>
+﻿﻿<%@ WebHandler Language="C#" Class="ArticlesAdd" %>
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -15,7 +15,8 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             WriteJson(ctx, new {
@@ -88,11 +89,9 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                 }
                 else
                 {
-                    DateTime d;
-                    if (!DateTime.TryParse(datePeremptionStr, out d))
-                        missing.Add("DATE DE PÉREMEPTION (format invalide)");
-                    else
-                        datePeremption = d.Date;
+                    datePeremption = TryParseDateFlexible(datePeremptionStr.Trim());
+                    if (!datePeremption.HasValue)
+                        missing.Add("DATE DE PÉREMEPTION (format invalide — jj/mm/aaaa attendu)");
                 }
             }
             else
@@ -183,7 +182,7 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                             cmd.Parameters.AddWithValue("@perissable", estPerissable ? 1 : 0);
                             var pDate = cmd.Parameters.Add("@dper", SqlDbType.Date);
                             pDate.Value = datePeremption.HasValue
-                                ? (object)datePeremption.Value : DBNull.Value;
+                                ? (object)datePeremption.Value.Date : DBNull.Value;
                             cmd.Parameters.AddWithValue("@userId", userId);
                             cmd.ExecuteNonQuery();
                         }
@@ -225,6 +224,27 @@ public class ArticlesAdd : IHttpHandler, IRequiresSessionState
                 message = ex.Message.Replace("\"", "\\\"")
             });
         }
+    }
+
+    private static DateTime? TryParseDateFlexible(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        string s = raw.Trim();
+        DateTime d;
+        if (DateTime.TryParseExact(s, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
+        if (DateTime.TryParseExact(s, "dd/MM/yyyy",
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
+        string[] formatsFr = { "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy", "d.M.yyyy", "dd.MM.yyyy" };
+        if (DateTime.TryParseExact(s, formatsFr,
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
+        if (DateTime.TryParse(s,
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
+        return null;
     }
 
     private string GetString(Dictionary<string, object> data, string key)

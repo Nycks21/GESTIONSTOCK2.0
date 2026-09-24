@@ -1,4 +1,4 @@
-﻿﻿﻿<%@ WebHandler Language="C#" Class="ArticlesEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="ArticlesEdit" %>
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -14,7 +14,8 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.ContentType = "application/json";
         ctx.Response.Cache.SetNoStore();
 
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             WriteJson(ctx, new {
@@ -53,7 +54,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             bool estPerissable = GetBool(data, "estPerissable", false);
             string datePeremptionStr = GetString(data, "datePeremption");
 
-            // ─── Validation des champs obligatoires ───
             var missing = new List<string>();
             if (string.IsNullOrWhiteSpace(nom))             missing.Add("NOM");
             if (string.IsNullOrWhiteSpace(categorieId))     missing.Add("CATÉGORIE");
@@ -61,7 +61,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             if (string.IsNullOrWhiteSpace(uniteId))         missing.Add("UNITÉ DE MESURE");
             if (string.IsNullOrWhiteSpace(emplacementId))   missing.Add("EMPLACEMENT PAR DÉFAUT");
 
-            // ─── Seuil d'alerte : obligatoire et numérique ───
             bool hasSeuil = data.ContainsKey("seuilAlerte")
                             && data["seuilAlerte"] != null
                             && !string.IsNullOrWhiteSpace(data["seuilAlerte"].ToString());
@@ -80,7 +79,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             if (!hasSeuil) missing.Add("SEUIL D'ALERTE");
             else if (!seuilNumeric) missing.Add("SEUIL D'ALERTE (valeur numérique invalide)");
 
-            // ═══ COHÉRENCE PÉRISSABLE ↔ DATE DE PÉREMEPTION ═══
             DateTime? datePeremption = null;
             if (estPerissable)
             {
@@ -97,7 +95,6 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
             }
             else
             {
-                // NON périssable → forcer NULL
                 datePeremption = null;
             }
 
@@ -151,8 +148,7 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@perissable", estPerissable ? 1 : 0);
                     var pDate = cmd.Parameters.Add("@dper", SqlDbType.Date);
                     pDate.Value = datePeremption.HasValue
-                        ? (object)datePeremption.Value.Date
-                        : DBNull.Value;
+                        ? (object)datePeremption.Value.Date : DBNull.Value;
                     cmd.Parameters.AddWithValue("@userId", userId);
 
                     int rows = cmd.ExecuteNonQuery();
@@ -185,39 +181,24 @@ public class ArticlesEdit : IHttpHandler, IRequiresSessionState
         }
     }
 
-    // ─── Parsing de date flexible (ISO + FR) ───
     private static DateTime? TryParseDateFlexible(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
         string s = raw.Trim();
-
         DateTime d;
-        // 1) ISO yyyy-MM-dd (envoyé par <input type="date">)
         if (DateTime.TryParseExact(s, "yyyy-MM-dd",
                 System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out d))
-            return d.Date;
-
-        // 2) FR jj/mm/aaaa
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
         if (DateTime.TryParseExact(s, "dd/MM/yyyy",
                 System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
-                System.Globalization.DateTimeStyles.None, out d))
-            return d.Date;
-
-        // 3) Variantes FR avec - ou .
-        string[] formatsFr = { "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy",
-                                "d.M.yyyy", "dd.MM.yyyy" };
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
+        string[] formatsFr = { "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy", "d.M.yyyy", "dd.MM.yyyy" };
         if (DateTime.TryParseExact(s, formatsFr,
                 System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
-                System.Globalization.DateTimeStyles.None, out d))
-            return d.Date;
-
-        // 4) Dernier recours : invariant
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
         if (DateTime.TryParse(s,
                 System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.None, out d))
-            return d.Date;
-
+                System.Globalization.DateTimeStyles.None, out d)) return d.Date;
         return null;
     }
 

@@ -12,8 +12,9 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
     {
         ctx.Response.ContentType = "application/json";
         ctx.Response.Cache.SetNoStore();
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -23,7 +24,7 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
         try
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
-            var serializer = new JavaScriptSerializer(); // ← instance créée
+            var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
             string id = data.ContainsKey("id") && data["id"] != null ? data["id"].ToString() : null;
             if (string.IsNullOrEmpty(id))
@@ -82,7 +83,7 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
                     cmd.ExecuteNonQuery();
                 }
 
-                // Optionnel : supprimer logiquement les mouvements dans MSTOCK (pas obligatoire, mais cohérent)
+                // Suppression logique des mouvements dans MSTOCK
                 string mvtSql = "UPDATE MSTOCK SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ARTICLE_ID = @id AND DELETION_AT IS NULL";
                 using (SqlCommand cmd = new SqlCommand(mvtSql, conn))
                 {
@@ -101,8 +102,5 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
         }
     }
 
-    public bool IsReusable
-    {
-        get { return false; }
-    }
+    public bool IsReusable { get { return false; } }
 }

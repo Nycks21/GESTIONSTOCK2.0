@@ -80,8 +80,9 @@ public class ArticlesImport : IHttpHandler, IRequiresSessionState
         context.Response.ContentEncoding = System.Text.UTF8Encoding.UTF8;
         context.Response.Cache.SetNoStore();
 
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
         // SuperAdmin (0) ou Admin (1)
-        if (!AuthHelper.RequireApiAuth(context, 1))
+        if (!AuthHelper.RequireCsrfSafePost(context, 1))
         {
             context.Response.StatusCode = 403;
             WriteJson(context, ErrorResponse(
@@ -89,6 +90,7 @@ public class ArticlesImport : IHttpHandler, IRequiresSessionState
                 "Accès non autorisé"));
             return;
         }
+
 
         try
         {
