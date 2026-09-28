@@ -133,7 +133,7 @@
                     <span data-i18n="accuses.table.date_reception">Date réception</span> <i class="fas fa-sort ml-1"></i>
                   </th>
                   <th style="width:240px; text-align:left;" data-i18n="accuses.table.articles">Articles</th>
-                  <th style="width:100px; text-align:right;" data-i18n="accuses.table.qte_recue">Qté reçue</th>
+                  <th style="width:100px; text-align:right;" data-i18n="accuses.table.qte">Qté</th>
                   <th onclick="sortData('DESTINATION')" style="cursor:pointer; width:150px; text-align:left;">
                     <span data-i18n="accuses.table.destination">Destination</span> <i class="fas fa-sort ml-1"></i>
                   </th>

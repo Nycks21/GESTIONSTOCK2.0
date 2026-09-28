@@ -1,5 +1,11 @@
 // ============================================================
 // CHARGEMENT DES DEMANDES – SAISIE
+// Version alignée sur accusés/loaders.js
+//   ✅ 9 colonnes (dont Bénéficiaire)
+//   ✅ Format date identique à accusés
+//   ✅ Format quantité "Dem → Reçu" (formatQuantitePair)
+//   ✅ Colonne DATE_RECEPTION
+//   ✅ colspan dynamique
 // ============================================================
 
 if (typeof window.AppState === 'undefined') {
@@ -101,34 +107,33 @@ function formatNumber(value, decimals) {
     return Number(value).toFixed(decimals || 0);
 }
 
+// ✅ Identique à accusés/loaders.js
+//    Gère : ISO "yyyy-MM-dd", ISO avec T, /Date(ms)/, Date natif
 function formatDateValue(value, includeTime) {
     if (value === null || value === undefined || value === "") return "-";
-    var str = String(value).trim();
-    if (!str) return "-";
-
     var date = null;
-    var m1 = str.match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
-    if (m1) {
-        date = new Date(
-            parseInt(m1[1], 10),
-            parseInt(m1[2], 10) - 1,
-            parseInt(m1[3], 10),
-            parseInt(m1[4] || '0', 10),
-            parseInt(m1[5] || '0', 10),
-            parseInt(m1[6] || '0', 10)
-        );
+
+    if (typeof value === "string") {
+        var str = value.trim();
+        if (!str) return "-";
+        var msMatch = str.match(/-?\d+/);
+        if (str.indexOf("/Date(") !== -1 && msMatch) {
+            date = new Date(parseInt(msMatch[0], 10));
+        } else {
+            date = new Date(str);
+        }
+    } else if (value instanceof Date) {
+        date = value;
+    } else {
+        date = new Date(value);
     }
-    if (!date) {
-        var m2 = str.match(/^\/Date\((-?\d+)\)\/$/);
-        if (m2) date = new Date(parseInt(m2[1], 10));
-    }
-    if (!date) date = new Date(str);
+
     if (!date || isNaN(date.getTime())) return "-";
 
-    var pad = function (n) { return String(n).padStart(2, '0'); };
-    var result = pad(date.getDate()) + '/' + pad(date.getMonth() + 1) + '/' + date.getFullYear();
-    if (includeTime) result += ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
-    return result;
+    var options = includeTime
+        ? { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }
+        : { day: "2-digit", month: "2-digit", year: "numeric" };
+    return date.toLocaleString("fr-FR", options);
 }
 
 // ============================================================
@@ -169,8 +174,37 @@ function getSaisieStatusBadge(statut) {
         'background:#e2e3e5;color:#383d41;">' + (statut || '—') + '</span>');
 }
 
+// ═══════════════════════════════════════════════════════════
+// Rendu "Dem → Reçu" (identique à accusés)
+//   - Vert  : Qté demandée == Qté reçue
+//   - Orange: quantités différentes (réception partielle)
+// ═══════════════════════════════════════════════════════════
+function formatQuantitePair(quantiteD, quantiteR) {
+    var qD = Number(quantiteD);
+    var qR = Number(quantiteR);
+    var isMatch = !isNaN(qD) && !isNaN(qR) && qD === qR;
+    var colorR = isMatch ? '#28a745' : '#ff9800';
+    var tooltipR = isMatch
+        ? 'Réception complète'
+        : 'Réception partielle (écart : ' + (qR - qD).toFixed(2) + ')';
+
+    return '' +
+        '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;white-space:nowrap;">' +
+            '<span style="color:#6c757d;font-size:12px;" title="Quantité demandée">' +
+                formatNumber(qD, 2) +
+            '</span>' +
+            '<i class="fas fa-arrow-right" style="color:#adb5bd;font-size:9px;"></i>' +
+            '<span style="color:' + colorR + ';font-weight:700;font-size:13px;" title="' + tooltipR + '">' +
+                formatNumber(qR, 2) +
+            '</span>' +
+        '</div>';
+}
+
 // ============================================================
-// RENDU DU TABLEAU
+// RENDU DU TABLEAU (9 colonnes = 9 <td>)
+//   1. N°            2. Date sortie     3. Date réception
+//   4. Articles      5. Qté demandée    6. Destination
+//   7. Bénéficiaire  8. Statut          9. Actions
 // ============================================================
 function renderDemandesTable(sorties) {
     var tbody = document.getElementById('saisieTableBody');
@@ -178,12 +212,14 @@ function renderDemandesTable(sorties) {
 
     var noDat = T('saisies.msg.no_data', 'Aucune demande trouvée');
     var noArt = T('saisies.msg.no_article', 'Aucun article');
+    var dash  = T('saisies.msg.dash', '—');
     var btnView   = T('sorties.btn.view',   'Voir détails');
     var btnEdit   = T('button.edit',        'Modifier');
     var btnDelete = T('button.delete',      'Supprimer');
 
     if (!sorties.length) {
-        tbody.innerHTML = '<tr><td colspan="7" class="text-center">' + noDat + '</td></tr>';
+        // ✅ 9 colonnes → colspan="9"
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center">' + noDat + '</td></tr>';
         var c0 = document.getElementById('resultsCounter');
         if (c0) c0.textContent = T('saisies.counter.zero', '0 demande(s)');
         return;
@@ -195,6 +231,7 @@ function renderDemandesTable(sorties) {
         var statutBadge = getSaisieStatusBadge(statut);
         var lignes = s.Lignes || [];
 
+        // ─── Articles ───
         var articlesHtml = lignes.length
             ? lignes.map(function (ligne) {
                 return '<div class="bon-article-item"><span>' +
@@ -204,12 +241,46 @@ function renderDemandesTable(sorties) {
             }).join('')
             : '<span class="text-muted">' + noArt + '</span>';
 
+        // ─── Quantités : "Dem → Reçu" si QUANTITE_R renseignée, sinon Qté demandée seule ───
         var quantitesHtml = lignes.length
             ? lignes.map(function (ligne) {
-                return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE_D, 2) + '</div>';
+                var qD = Number(ligne.QUANTITE_D || 0);
+                var qR = Number(ligne.QUANTITE_R || 0);
+                // Si la réception a été saisie (> 0), on affiche la paire
+                if (ligne.QUANTITE_R !== undefined && ligne.QUANTITE_R !== null && qR > 0) {
+                    return '<div class="bon-quantity-item">' +
+                        formatQuantitePair(qD, qR) +
+                    '</div>';
+                }
+                return '<div class="bon-quantity-item" ' +
+                       'style="text-align:right;font-weight:700;color:#212529;">' +
+                    formatNumber(qD, 2) +
+                '</div>';
             }).join('')
             : '<span class="text-muted">-</span>';
 
+        // ─── Date réception ───
+        var dateReceptionHtml = s.DATE_RECEPTION
+            ? '<span style="color:#009688;font-weight:600;font-size:12.5px;">' +
+                  '<i class="fas fa-calendar-check" style="margin-right:4px;opacity:0.7;"></i>' +
+                  formatDateValue(s.DATE_RECEPTION, false) + '</span>'
+            : '<span class="text-muted" style="font-size:12px;">' + dash + '</span>';
+
+        // ─── Bénéficiaire (NOM + FONCTION en sous-titre) ───
+        var beneficiaireHtml =
+            '<div style="display:flex;flex-direction:column;gap:2px;">' +
+                '<strong style="font-size:13px;color:#212529;">' +
+                    (s.NOM || dash) +
+                '</strong>' +
+                (s.FONCTION
+                    ? '<small style="font-size:11px;color:#6c757d;">' +
+                          '<i class="fas fa-user-tie" style="opacity:0.7;margin-right:3px;"></i>' +
+                          s.FONCTION +
+                      '</small>'
+                    : '') +
+            '</div>';
+
+        // ─── Actions ───
         var actionsHtml = '';
         actionsHtml +=
             '<button type="button" class="btn-icon btn-info" ' +
@@ -228,21 +299,33 @@ function renderDemandesTable(sorties) {
                 '<i class="fas fa-trash"></i></button>';
         }
 
+        // ─── Ligne complète (9 <td>) ───
         html += '<tr>' +
             '<td><strong><span class="badge bg-secondary" style="color:#333;font-weight:bold;' +
                 'background-color:#e9e9e9;padding:4px 10px;border-radius:20px;">' +
                 s.NUMERO +
             '</span></strong></td>' +
-            '<td>' + formatDateValue(s.DATE_SORTIE, false) + '</td>' +
+
+            '<td>' + formatDateValue(s.DATE_SORTIE, true) + '</td>' +
+
+            '<td>' + dateReceptionHtml + '</td>' +
+
             '<td class="bon-articles-cell">' + articlesHtml + '</td>' +
+
             '<td class="bon-quantities-cell">' + quantitesHtml + '</td>' +
+
             '<td><strong>' + (s.DESTINATION || '') + '</strong></td>' +
+
+            '<td>' + beneficiaireHtml + '</td>' +
+
             '<td>' + statutBadge + '</td>' +
+
             '<td>' + actionsHtml + '</td>' +
-            '</tr>';
+        '</tr>';
     });
 
     tbody.innerHTML = html;
+
     var cEl = document.getElementById('resultsCounter');
     if (cEl) cEl.textContent = T('saisies.counter', '{n} demande(s)', { n: AppState.total });
 }
@@ -250,10 +333,11 @@ function renderDemandesTable(sorties) {
 // ============================================================
 // EXPOSITIONS
 // ============================================================
-window.loadDemandes           = loadDemandes;
-window.loadDemandesStats      = loadDemandesStats;
-window.loadArticlesForSaisie  = loadArticlesForSaisie;
-window.renderDemandesTable    = renderDemandesTable;
-window.getSaisieStatusBadge   = getSaisieStatusBadge;
-window.formatDateValue        = formatDateValue;
-window.formatNumber           = formatNumber;
+window.loadDemandes          = loadDemandes;
+window.loadDemandesStats     = loadDemandesStats;
+window.loadArticlesForSaisie = loadArticlesForSaisie;
+window.renderDemandesTable   = renderDemandesTable;
+window.getSaisieStatusBadge  = getSaisieStatusBadge;
+window.formatDateValue       = formatDateValue;
+window.formatNumber          = formatNumber;
+window.formatQuantitePair    = formatQuantitePair;

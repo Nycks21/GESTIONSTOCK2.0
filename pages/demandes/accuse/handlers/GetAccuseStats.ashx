@@ -50,7 +50,7 @@ public class GetAccuseStats : IHttpHandler, IRequiresSessionState
           FROM SSORTIE
           WHERE CREATED_BY = @userId
             AND DELETION_AT IS NULL
-            AND STATUT IN ('VALIDE','TERMINE')";
+            AND STATUT = 'VALIDE'";
 
         using (var cmd = new SqlCommand(sql, conn))
         {

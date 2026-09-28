@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -15,10 +15,23 @@ public partial class Login : Page
 {
     string connStr = "";
 
+    // ═══════════════════════════════════════════════════════════
+    // PROTECTION 1 : verrouillage par session (comportement existant)
+    // ═══════════════════════════════════════════════════════════
     const int MAX_ATTEMPTS = 5;
     const int LOCKOUT_SECONDS = 60;
     const string SK_ATTEMPTS = "login_attempts";
     const string SK_LOCKOUT_END = "login_lockout_end";
+
+    // ═══════════════════════════════════════════════════════════
+    // PROTECTION 2 : rate-limit SERVEUR (indépendant de la session)
+    // Basé sur la table LOGIN_LOG existante.
+    // Empêche le contournement par création de nouvelles sessions
+    // ou par attaque distribuée (plusieurs IP).
+    // ═══════════════════════════════════════════════════════════
+    const int SERVER_MAX_FAILED_BY_USERNAME = 10;  // 10 échecs / 15 min pour un username
+    const int SERVER_MAX_FAILED_BY_IP       = 20;  // 20 échecs / 15 min pour une IP
+    const int SERVER_WINDOW_MINUTES         = 15;  // Fenêtre glissante
 
     protected void Page_Load(object sender, EventArgs e)
     {
@@ -77,13 +90,24 @@ public partial class Login : Page
                 lblUserLimitInfo.Visible = true;
             }
 
-            string msg = Request.QueryString["msg"];
-            if (msg == "maintenance") ShowNotification("Vous avez été déconnecté pour cause de maintenance.", "warning");
-            else if (msg == "disconnected") ShowNotification("Vous avez été déconnecté par l'administrateur.", "info");
-            else if (msg == "session_expired") ShowNotification("Votre session a expiré. Veuillez vous reconnecter.", "warning");
-            else if (msg == "session_error") ShowNotification("Erreur de session. Veuillez vous reconnecter.", "error");
-            else if (msg == "blocked") ShowNotification("Compte bloqué temporairement. Réessayez dans 1 minute.", "error");
-            else if (msg == "other_pc") ShowNotification("Déconnecté car une autre session a été ouverte.", "warning");
+                        string msg = Request.QueryString["msg"];
+
+            if (msg == "maintenance")
+                ShowNotification("Vous avez été déconnecté pour cause de maintenance.", "warning");
+            else if (msg == "disconnected")
+                ShowNotification("Vous avez été déconnecté par l'administrateur.", "info");
+            else if (msg == "session_expired")
+                ShowNotification("Votre session a expiré. Veuillez vous reconnecter.", "warning");
+            else if (msg == "session_error")
+                ShowNotification("Erreur de session. Veuillez vous reconnecter.", "error");
+            else if (msg == "blocked")
+                ShowNotification("Compte bloqué temporairement. Réessayez dans 1 minute.", "error");
+            else if (msg == "other_pc")
+                ShowNotification("Déconnecté car une autre session a été ouverte.", "warning");
+            else if (msg == "restore")
+                ShowNotification("Déconnecté car il y a une restauration de la base de données en cours. Veuillez vous reconnecter.", "info");
+            else if (msg == "restore_done")
+                ShowNotification("Restauration de la base de données terminée avec succès. Veuillez vous reconnecter.", "success");
         }
     }
 
@@ -143,10 +167,6 @@ public partial class Login : Page
 
     // ============================================================
     // M7 — JOURNALISATION DES TENTATIVES DE CONNEXION
-    // ------------------------------------------------------------
-    // Chaque tentative (succès ou échec) est enregistrée dans LOGIN_LOG
-    // avec l'IP, le User-Agent et la raison.
-    // Ne casse jamais la connexion en cas d'échec d'insertion.
     // ============================================================
     private void LogLoginAttempt(string username, bool success, string reason = null)
     {
@@ -177,10 +197,72 @@ public partial class Login : Page
                 }
             }
         }
-        catch
+        catch { /* le log ne doit jamais casser la connexion */ }
+    }
+
+    // ============================================================
+    // ✅ NOUVEAU : RATE-LIMIT SERVEUR (indépendant de la session)
+    // ------------------------------------------------------------
+    // Compte les tentatives ÉCHOUÉES récentes dans LOGIN_LOG :
+    //   - par USERNAME → empêche l'attaque distribuée sur un compte
+    //   - par IP       → empêche l'attaque distribuée sur plusieurs comptes
+    // Retourne true si la limite est atteinte.
+    // ============================================================
+    private bool IsServerRateLimited(string username, string ip, out string reason)
+    {
+        reason = "";
+        try
         {
-            // Le log ne doit jamais casser la connexion
+            using (SqlConnection conn = new SqlConnection(connStr))
+            {
+                conn.Open();
+
+                // ── Comptage par USERNAME ──
+                if (!string.IsNullOrEmpty(username))
+                {
+                    string sqlUser = @"
+                        SELECT COUNT(*) FROM LOGIN_LOG
+                        WHERE SUCCESS = 0
+                          AND USERNAME = @u
+                          AND ATTEMPTED_AT > DATEADD(MINUTE, -@win, GETDATE())";
+                    using (SqlCommand cmd = new SqlCommand(sqlUser, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@u", username);
+                        cmd.Parameters.AddWithValue("@win", SERVER_WINDOW_MINUTES);
+                        int attemptsUser = Convert.ToInt32(cmd.ExecuteScalar());
+                        if (attemptsUser >= SERVER_MAX_FAILED_BY_USERNAME)
+                        {
+                            reason = "username";
+                            return true;
+                        }
+                    }
+                }
+
+                // ── Comptage par IP ──
+                if (!string.IsNullOrEmpty(ip))
+                {
+                    string sqlIp = @"
+                        SELECT COUNT(*) FROM LOGIN_LOG
+                        WHERE SUCCESS = 0
+                          AND IP_ADDRESS = @ip
+                          AND ATTEMPTED_AT > DATEADD(MINUTE, -@win, GETDATE())";
+                    using (SqlCommand cmd = new SqlCommand(sqlIp, conn))
+                    {
+                        cmd.Parameters.AddWithValue("@ip", ip);
+                        cmd.Parameters.AddWithValue("@win", SERVER_WINDOW_MINUTES);
+                        int attemptsIp = Convert.ToInt32(cmd.ExecuteScalar());
+                        if (attemptsIp >= SERVER_MAX_FAILED_BY_IP)
+                        {
+                            reason = "ip";
+                            return true;
+                        }
+                    }
+                }
+            }
         }
+        catch { /* En cas d'erreur, ne pas bloquer */ }
+
+        return false;
     }
 
     // ============================================================
@@ -194,6 +276,9 @@ public partial class Login : Page
             return;
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // PROTECTION 1 (existant) : verrouillage par session
+        // ═══════════════════════════════════════════════════════════
         DateTime lockoutEnd = Session[SK_LOCKOUT_END] as DateTime? ?? DateTime.MinValue;
         if (DateTime.Now < lockoutEnd)
         {
@@ -208,6 +293,29 @@ public partial class Login : Page
             Session.Remove(SK_LOCKOUT_END);
         }
 
+        // ═══════════════════════════════════════════════════════════
+        // ✅ PROTECTION 2 (nouveau) : rate-limit SERVEUR
+        //    Indépendant de la session → impossible à contourner
+        //    par création de nouvelles sessions.
+        // ═══════════════════════════════════════════════════════════
+        string earlyUsername = (txtUsername.Text ?? "").Trim();
+        string earlyIp = Request.UserHostAddress ?? "";
+
+        string rateReason;
+        if (IsServerRateLimited(earlyUsername, earlyIp, out rateReason))
+        {
+            // Message générique (ne pas révéler la raison réelle)
+            LogLoginAttempt(earlyUsername, false,
+                rateReason == "username"
+                    ? "Rate-limit username atteint (serveur)"
+                    : "Rate-limit IP atteint (serveur)");
+            ShowError("⛔ Trop de tentatives. Veuillez patienter quelques minutes avant de réessayer.");
+            return;
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // Vérifications licence / utilisateurs
+        // ═══════════════════════════════════════════════════════════
         var licenceInfo = AuthHelper.GetLicenceInfo();
         if (!licenceInfo.IsValid)
         {
@@ -236,39 +344,32 @@ public partial class Login : Page
                               out errorMessage, out minutesLeft,
                               out accountNotFound, out accountDeleted, out accountInactive))
         {
-            // ============================================================
-            // CAS 1 : COMPTE INEXISTANT
-            // ============================================================
+            // ═══════════════════════════════════════════════════════
+            // Messages GÉNÉRIQUES (anti-énumération de comptes)
+            // Les détails réels sont UNIQUEMENT dans les logs.
+            // ═══════════════════════════════════════════════════════
             if (accountNotFound)
             {
                 LogLoginAttempt(usernameOrEmail, false, "Compte inexistant - CX2100");
-                ShowError("Nom d'utilisateur ou mot de passe incorrect - ERROR CX2100");
+                ShowError("Nom d'utilisateur ou mot de passe incorrect");
                 return;
             }
 
-            // ============================================================
-            // CAS 2 : COMPTE SUPPRIMÉ
-            // ============================================================
             if (accountDeleted)
             {
                 LogLoginAttempt(usernameOrEmail, false, "Compte supprimé - CX7898");
-                ShowError("Nom d'utilisateur ou mot de passe incorrect - ERROR CX7898");
+                ShowError("Nom d'utilisateur ou mot de passe incorrect");
                 return;
             }
 
-            // ============================================================
-            // CAS 3 : COMPTE INACTIF
-            // ============================================================
             if (accountInactive)
             {
-                LogLoginAttempt(usernameOrEmail, false, "Compte inactif - CX4561");
-                ShowError("Nom d'utilisateur ou mot de passe incorrect - ERROR CX4561");
+                LogLoginAttempt(usernameOrEmail, false, "Compte inactif");
+                ShowError("Nom d'utilisateur ou mot de passe incorrect");
                 return;
             }
 
-            // ============================================================
-            // CAS 4 : MOT DE PASSE INCORRECT (SEUL CAS AVEC COMPTEUR)
-            // ============================================================
+            // Mot de passe incorrect OU compte bloqué temporairement
             int attempts = (Session[SK_ATTEMPTS] as int? ?? 0) + 1;
             Session[SK_ATTEMPTS] = attempts;
 
@@ -276,7 +377,7 @@ public partial class Login : Page
             {
                 Session[SK_LOCKOUT_END] = DateTime.Now.AddSeconds(LOCKOUT_SECONDS);
                 Session[SK_ATTEMPTS] = 0;
-                LogLoginAttempt(usernameOrEmail, false, "Verrouillage après " + MAX_ATTEMPTS + " échecs");
+                LogLoginAttempt(usernameOrEmail, false, "Verrouillage session après " + MAX_ATTEMPTS + " échecs");
                 ShowError("⛔ Compte bloqué après " + MAX_ATTEMPTS + " échecs. Réessayez dans " + LOCKOUT_SECONDS + "s.");
                 StartCountdownScript(LOCKOUT_SECONDS);
             }
@@ -285,7 +386,7 @@ public partial class Login : Page
                 if (errorMessage.Contains("bloqué") && minutesLeft > 0)
                 {
                     LogLoginAttempt(usernameOrEmail, false, "Bloqué maintenance: " + minutesLeft + " min");
-                    ShowError("⚠️ Compte bloqué. Maintenance en cours. Réessayez dans " + minutesLeft + " min.");
+                    ShowError("⚠️ Compte temporairement indisponible. Réessayez dans " + minutesLeft + " min.");
                 }
                 else
                 {
@@ -300,7 +401,6 @@ public partial class Login : Page
         // ✅ AUTHENTIFICATION RÉUSSIE
         // ════════════════════════════════════════════════════════════
 
-        // M7 — Log succès
         LogLoginAttempt(usernameOrEmail, true, "Connexion réussie");
 
         ShowSuccessNotification("Bienvenue " + nomComplet + " !");
@@ -357,16 +457,6 @@ public partial class Login : Page
             { "ClassesAutorisees", classesAutorisees },
             { "MatieresAutorisees", matieresAutorisees }
         };
-
-        // ════════════════════════════════════════════════════════════
-        // C4 — RÉGÉNÉRATION DE SESSION (ANTI SESSION FIXATION)
-        // ------------------------------------------------------------
-        // 1. Stocker les données d'auth dans le Cache serveur (60s)
-        // 2. Abandonner la session actuelle (détruit l'ancien SessionId)
-        // 3. Supprimer le cookie côté client
-        // 4. Rediriger vers EstablishSession.aspx qui reconstruit la session
-        //    → nouvelle session, nouveau SessionId, mêmes données
-        // ════════════════════════════════════════════════════════════
 
         string transferToken = AuthHelper.StorePendingAuth(authData);
 
@@ -464,6 +554,14 @@ public partial class Login : Page
 
     // ============================================================
     // AUTHENTIFICATION LOCALE
+    // ------------------------------------------------------------
+    // ✅ ORDRE CORRIGÉ :
+    //   1. Utilisateur trouvé ?
+    //   2. Compte supprimé ?
+    //   3. Compte actif ?
+    //   4. BLOCKED_UNTIL encore actif ?  ← AVANT le mot de passe
+    //   5. Vérification mot de passe
+    //   6. Rehash si nécessaire
     // ============================================================
     private bool AuthenticateUser(string usernameOrEmail, string password,
                                   out int idUser, out int roleId, out string nomComplet,
@@ -508,14 +606,14 @@ public partial class Login : Page
                     if (!rd.Read())
                     {
                         accountNotFound = true;
-                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect - ERROR CX2100";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
                         return false;
                     }
 
                     if (rd["DELETION_AT"] != DBNull.Value)
                     {
                         accountDeleted = true;
-                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect - ERROR CX7898";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
                         return false;
                     }
 
@@ -523,10 +621,29 @@ public partial class Login : Page
                     if (!isActive)
                     {
                         accountInactive = true;
-                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect - ERROR CX4561";
+                        errorMessage = "Nom d'utilisateur ou mot de passe incorrect";
                         return false;
                     }
 
+                    // ═══════════════════════════════════════════════════
+                    // ✅ VÉRIFICATION BLOCKED_UNTIL — AVANT le mot de passe
+                    // Un compte bloqué ne doit jamais faire l'objet
+                    // d'une vérification de mot de passe (anti brute-force).
+                    // ═══════════════════════════════════════════════════
+                    if (hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
+                    {
+                        DateTime blockedUntil = Convert.ToDateTime(rd["BLOCKED_UNTIL"]);
+                        if (blockedUntil > DateTime.Now)
+                        {
+                            minutesLeft = (int)Math.Ceiling((blockedUntil - DateTime.Now).TotalMinutes);
+                            errorMessage = "⚠️ Compte bloqué. Maintenance en cours. Réessayez dans " + minutesLeft + " min.";
+                            return false;
+                        }
+                    }
+
+                    // ═══════════════════════════════════════════════════
+                    // ✅ Vérification du mot de passe
+                    // ═══════════════════════════════════════════════════
                     string storedPwd = rd["PWD"] != DBNull.Value ? rd["PWD"].ToString() : "";
                     bool needsRehash;
                     if (!PasswordHelper.VerifyPassword(storedPwd, password, out needsRehash))
@@ -544,16 +661,6 @@ public partial class Login : Page
                         UpgradePasswordHash(idUser, password);
                     }
 
-                    if (roleId != 0 && hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
-                    {
-                        DateTime blockedUntil = Convert.ToDateTime(rd["BLOCKED_UNTIL"]);
-                        if (blockedUntil > DateTime.Now)
-                        {
-                            minutesLeft = (int)Math.Ceiling((blockedUntil - DateTime.Now).TotalMinutes);
-                            errorMessage = "⚠️ Compte bloqué. Maintenance en cours. Réessayez dans " + minutesLeft + " min.";
-                            return false;
-                        }
-                    }
                     return true;
                 }
             }

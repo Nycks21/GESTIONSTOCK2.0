@@ -42,3 +42,77 @@
 body.dark-mode .toast-item.success { background: #16A34A; }
 body.dark-mode .toast-item.error   { background: #DC2626; }
 body.dark-mode .toast-item.info    { background: #0891B2; }
+
+/* ═══════════════════════════════════════════════════════════
+   STEPPER DE QUANTITÉ — flèches ▲▼ pour ajuster la valeur
+   ═══════════════════════════════════════════════════════════ */
+.qty-stepper {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fff;
+    width: 100%;
+    max-width: 140px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+.qty-stepper:focus-within {
+    border-color: #17a2b8;
+    box-shadow: 0 0 0 0.2rem rgba(23, 162, 184, 0.25);
+}
+
+.qty-stepper .qty-input {
+    flex: 1;
+    border: none !important;
+    outline: none !important;
+    box-shadow: none !important;
+    text-align: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #212529;
+    padding: 6px 4px;
+    min-width: 40px;
+    background: transparent;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+/* Cache les spinners natifs du navigateur */
+.qty-stepper .qty-input::-webkit-outer-spin-button,
+.qty-stepper .qty-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.qty-stepper .qty-btn {
+    width: 30px;
+    border: none;
+    background: #f1f3f5;
+    color: #495057;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.15s ease, color 0.15s ease;
+    user-select: none;
+    padding: 0;
+}
+.qty-stepper .qty-btn:hover {
+    background: #17a2b8;
+    color: #fff;
+}
+.qty-stepper .qty-btn:active {
+    background: #117a8b;
+    color: #fff;
+}
+.qty-stepper .qty-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    background: #f1f3f5;
+    color: #adb5bd;
+}
+.qty-stepper .qty-minus { border-right: 1px solid #ced4da; }
+.qty-stepper .qty-plus  { border-left:  1px solid #ced4da; }
+
+.qty-stepper .qty-btn i { font-size: 10px; }

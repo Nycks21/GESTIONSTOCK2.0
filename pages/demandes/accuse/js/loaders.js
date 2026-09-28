@@ -148,6 +148,34 @@ function getAccuseStatusBadge(statut) {
         'background:#e2e3e5;color:#383d41;">' + (statut || '—') + '</span>');
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ✅ Rendu d'une ligne de quantité : "Dem → Reçu"
+// ─────────────────────────────────────────────────────────────
+// Affiche les 2 quantités avec un code couleur :
+//   - Vert  : Qté demandée == Qté reçue (réception complète)
+//   - Orange: quantités différentes (réception partielle)
+// ═══════════════════════════════════════════════════════════════
+function formatQuantitePair(quantiteD, quantiteR) {
+    var qD = Number(quantiteD);
+    var qR = Number(quantiteR);
+    var isMatch = !isNaN(qD) && !isNaN(qR) && qD === qR;
+    var colorR = isMatch ? '#28a745' : '#ff9800';
+    var tooltipR = isMatch
+        ? 'Réception complète'
+        : 'Réception partielle (écart : ' + (qR - qD).toFixed(2) + ')';
+
+    return '' +
+        '<div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;white-space:nowrap;">' +
+            '<span style="color:#6c757d;font-size:12px;" title="Quantité demandée">' +
+                formatNumber(qD, 2) +
+            '</span>' +
+            '<i class="fas fa-arrow-right" style="color:#adb5bd;font-size:9px;"></i>' +
+            '<span style="color:' + colorR + ';font-weight:700;font-size:13px;" title="' + tooltipR + '">' +
+                formatNumber(qR, 2) +
+            '</span>' +
+        '</div>';
+}
+
 // ─── RENDU DU TABLEAU ───
 function renderAccuseTable(sorties) {
     var tbody = document.getElementById("accuseTableBody");
@@ -182,9 +210,12 @@ function renderAccuseTable(sorties) {
             }).join("")
             : '<span class="text-muted">' + noArt + '</span>';
 
+        // ✅ CORRECTION : afficher Qté demandée ET Qté reçue
         var quantitesHtml = lignes.length
             ? lignes.map(function (ligne) {
-                return '<div class="bon-quantity-item">' + formatNumber(ligne.QUANTITE_R, 2) + "</div>";
+                return '<div class="bon-quantity-item">' +
+                    formatQuantitePair(ligne.QUANTITE_D, ligne.QUANTITE_R) +
+                '</div>';
             }).join("")
             : '<span class="text-muted">-</span>';
 
@@ -227,10 +258,12 @@ function renderAccuseTable(sorties) {
     if (cEl) cEl.textContent = T('accuses.counter', '{n} bon(s)', { n: AppState.total });
 }
 
-window.loadAccuse           = loadAccuse;
-window.loadAccuseStats      = loadAccuseStats;
+// ─── EXPOSITIONS ───
+window.loadAccuse            = loadAccuse;
+window.loadAccuseStats       = loadAccuseStats;
 window.loadArticlesForAccuse = loadArticlesForAccuse;
-window.renderAccuseTable    = renderAccuseTable;
-window.getAccuseStatusBadge = getAccuseStatusBadge;
-window.formatDateValue      = formatDateValue;
-window.formatNumber         = formatNumber;
+window.renderAccuseTable     = renderAccuseTable;
+window.getAccuseStatusBadge  = getAccuseStatusBadge;
+window.formatDateValue       = formatDateValue;
+window.formatNumber          = formatNumber;
+window.formatQuantitePair    = formatQuantitePair;

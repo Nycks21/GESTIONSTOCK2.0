@@ -11,6 +11,7 @@ var API_USERS = {
     delete: 'api/DeleteUser.aspx',
     checkLicence: 'api/CheckLicence.aspx',
     backup: 'api/BackupDatabase.aspx',
+    downloadBackup:  'api/DownloadBackup.aspx', 
     restore: 'api/RestoreDatabase.aspx',
     restoreUpload: 'api/RestoreDatabaseForm.aspx',
     checkFile: 'api/CheckFile.aspx',

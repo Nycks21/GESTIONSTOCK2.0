@@ -397,8 +397,10 @@ async function supprimerContact(id, event) {
 }
 
 // ============================================================================
-// BACKUP
+// BACKUP — Programmation + Exécution + Téléchargement sécurisé
 // ============================================================================
+
+// Étape 1 : Ouverture de la modale + planification (prepare)
 async function backupDatabase() {
     var userRole = document.getElementById("hfUserRole")?.value;
     if (userRole !== "0") {
@@ -499,8 +501,25 @@ async function backupDatabase() {
 
     showSpinner();
     try {
-        await fetch(apiUrl(API_USERS.backup + "?action=prepare&time=" +
-            encodeURIComponent(selectedTime) + "&block=" + blockUsers));
+        // ✅ FIX 403 : POST + form-urlencoded (au lieu de GET)
+        var prepareForm = new URLSearchParams();
+        prepareForm.append("time", selectedTime);
+        prepareForm.append("block", blockUsers ? "true" : "false");
+
+        var prepareResp = await fetch(apiUrl(API_USERS.backup + "?action=prepare"), {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: prepareForm.toString()
+        });
+
+        if (!prepareResp.ok) {
+            throw new Error(T('users.backup.error_server', 'Erreur serveur') + " (HTTP " + prepareResp.status + ")");
+        }
+
+        var prepareData = await prepareResp.json();
+        if (!prepareData.success) {
+            throw new Error(prepareData.message || T('users.backup.error_default', 'Erreur lors de la programmation'));
+        }
 
         await notifyAllUsers(
             T('users.backup.notify_msg', '⚠️ MAINTENANCE PROGRAMMÉE - Sauvegarde à {time}', { time: selectedTime }),
@@ -578,66 +597,190 @@ function startAdminCountdown(targetTime) {
     }, 1000);
 }
 
+// ═══════════════════════════════════════════════════════════════
+// Étape 2 : Exécution de la sauvegarde + téléchargement AUTOMATIQUE
+// ─────────────────────────────────────────────────────────────
+// Comportement d'origine : dès que le compte à rebours atteint 0,
+// la sauvegarde est lancée côté serveur puis le fichier .bak est
+// téléchargé automatiquement par le navigateur.
+//
+// 🔧 Correctif : le handler DownloadBackup.aspx a été corrigé pour
+//    éviter l'exception ThreadAbortException qui provoquait un
+//    spinner infini (voir fichier DownloadBackup.aspx).
+// ═══════════════════════════════════════════════════════════════
 async function executeScheduledBackup() {
     console.log(T('users.backup.executing', "⏰ Heure programmée atteinte - Exécution de la sauvegarde..."));
+
     var spinner = document.getElementById("spinnerOverlay");
     if (spinner) spinner.style.display = "flex";
 
     try {
-        var response = await fetch(apiUrl(API_USERS.backup + "?action=execute"));
-        if (response.ok) {
-            var contentType = response.headers.get("content-type");
-            if (contentType && contentType.indexOf("application/octet-stream") !== -1) {
-                var filename = "backup_" + new Date().toISOString().slice(0, 19).replace(/:/g, "-") + ".bak";
-                var blob = await response.blob();
-                var fileSize = (blob.size / 1024 / 1024).toFixed(2);
-                var url = window.URL.createObjectURL(blob);
-                var a = document.createElement("a");
-                a.href = url; a.download = filename;
-                document.body.appendChild(a); a.click();
-                document.body.removeChild(a); window.URL.revokeObjectURL(url);
+        // ═══════════════════════════════════════════════════════════
+        // ÉTAPE 1 : Lancer la sauvegarde côté serveur (POST + CSRF)
+        // Le serveur crée le .bak dans App_Data/Backups/ et renvoie
+        // uniquement son nom + sa taille.
+        // ═══════════════════════════════════════════════════════════
+        var execResp = await fetch(apiUrl(API_USERS.backup + "?action=execute"), {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: ""
+        });
 
-                await Swal.fire({
-                    icon: "success",
-                    title: T('users.backup.done_title', '✅ Sauvegarde terminée'),
-                    html:
-                        '<div style="text-align:left;">' +
-                            '<p><strong>' + T('users.backup.done_intro', '...') + '</strong></p>' +
-                            '<hr style="margin:15px 0;">' +
-                            '<p><i class="fas fa-database"></i> <strong>' + T('users.backup.done_file', 'Fichier :') + '</strong> ' + filename + '</p>' +
-                            '<p><i class="fas fa-hdd"></i> <strong>' + T('users.backup.done_size', 'Taille :') + '</strong> ' + fileSize + ' Mo</p>' +
-                            '<p><i class="fas fa-folder-open"></i> <strong>' + T('users.backup.done_location', 'Emplacement :') + '</strong> App_Data/Backups/</p>' +
-                        '</div>',
-                    confirmButtonText: T('users.msg.ok', 'OK'),
-                    confirmButtonColor: "#28a745"
-                });
-
-                await fetch(apiUrl(API_USERS.backup + "?action=check"));
-                location.reload();
-            } else {
-                var error = await response.json();
-                await Swal.fire({
-                    icon: "error", title: T('users.msg.error_title', 'Erreur'),
-                    text: error.message || T('users.backup.error_default', 'Erreur lors de la sauvegarde'),
-                    confirmButtonText: T('users.msg.ok', 'OK')
-                });
-            }
-        } else {
-            var error2 = await response.json();
-            await Swal.fire({
-                icon: "error", title: T('users.msg.error_title', 'Erreur'),
-                text: error2.message || T('users.backup.error_server', 'Erreur serveur'),
-                confirmButtonText: T('users.msg.ok', 'OK')
-            });
+        if (!execResp.ok) {
+            var errText = "";
+            try { errText = await execResp.text(); } catch (e) { }
+            throw new Error(errText || (T('users.backup.error_server', 'Erreur serveur') + " (HTTP " + execResp.status + ")"));
         }
+
+        var execData = await execResp.json();
+        if (!execData.success) {
+            throw new Error(execData.message || T('users.backup.error_default', 'Erreur lors de la sauvegarde'));
+        }
+
+        var fileName = execData.fileName;
+        var fileSize = execData.fileSize;
+        if (!fileName) {
+            throw new Error(T('users.backup.error_server', 'Réponse serveur invalide : nom de fichier manquant'));
+        }
+
+        // ═══════════════════════════════════════════════════════════
+        // ÉTAPE 2 : Téléchargement AUTOMATIQUE du fichier via
+        // DownloadBackup.aspx (handler corrigé — plus de spinner infini)
+        // ═══════════════════════════════════════════════════════════
+        var dlForm = new URLSearchParams();
+        dlForm.append("fileName", fileName);
+
+        var dlResp = await fetch(apiUrl(API_USERS.downloadBackup), {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: dlForm.toString()
+        });
+
+        if (!dlResp.ok) {
+            var dlErr = "";
+            try { dlErr = await dlResp.text(); } catch (e) { }
+            throw new Error(dlErr || (T('users.backup.error_server', 'Erreur de téléchargement') + " (HTTP " + dlResp.status + ")"));
+        }
+
+        // Lire le blob complet (le handler corrigé envoie la bonne taille)
+        var blob = await dlResp.blob();
+        var fileSizeMb = (blob.size / 1024 / 1024).toFixed(2);
+
+        // Déclencher le téléchargement par le navigateur
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        // ═══════════════════════════════════════════════════════════
+        // ÉTAPE 3 : Notification de succès
+        // ═══════════════════════════════════════════════════════════
+        await Swal.fire({
+            icon: "success",
+            title: T('users.backup.done_title', '✅ Sauvegarde terminée'),
+            html:
+                '<div style="text-align:left;">' +
+                    '<p><strong>' + T('users.backup.done_intro', 'La base de données a été sauvegardée avec succès !') + '</strong></p>' +
+                    '<hr style="margin:15px 0;">' +
+                    '<p><i class="fas fa-database"></i> <strong>' + T('users.backup.done_file', 'Fichier :') + '</strong> ' +
+                        escapeHtml(fileName) + '</p>' +
+                    '<p><i class="fas fa-hdd"></i> <strong>' + T('users.backup.done_size', 'Taille :') + '</strong> ' +
+                        fileSizeMb + ' Mo</p>' +
+                    '<p><i class="fas fa-folder-open"></i> <strong>' + T('users.backup.done_location', 'Emplacement :') + '</strong> ' +
+                        'App_Data/Backups/</p>' +
+                '</div>',
+            confirmButtonText: T('users.msg.ok', 'OK'),
+            confirmButtonColor: "#28a745"
+        });
+
+        // Nettoyage silencieux du mode maintenance (best effort)
+        try {
+            await fetch(apiUrl(API_USERS.backup + "?action=check"));
+        } catch (e) { /* ignore */ }
+
+        // Recharger la page pour rafraîchir l'état
+        location.reload();
+
     } catch (err) {
         await Swal.fire({
-            icon: "error", title: T('users.msg.error_title', 'Erreur'),
-            text: err.message, confirmButtonText: T('users.msg.ok', 'OK')
+            icon: "error",
+            title: T('users.msg.error_title', 'Erreur'),
+            text: err.message,
+            confirmButtonText: T('users.msg.ok', 'OK')
         });
     } finally {
         if (spinner) spinner.style.display = "none";
         if (window.backupCountdownTimer) clearInterval(window.backupCountdownTimer);
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Téléchargement sécurisé d'un fichier .bak via DownloadBackup.aspx
+// Peut être appelé depuis n'importe où (bouton, menu, etc.)
+// ═══════════════════════════════════════════════════════════════
+async function downloadBackupFile(fileName) {
+    if (!fileName) {
+        await Swal.fire({
+            icon: "error",
+            title: T('users.msg.error_title', 'Erreur'),
+            text: "Nom de fichier manquant"
+        });
+        return;
+    }
+
+    try {
+        // Afficher un petit loader
+        var loadResp = await Swal.fire({
+            title: 'Téléchargement...',
+            html: '<i class="fas fa-spinner fa-spin" style="font-size:32px;color:#007bff;"></i><br><br>' +
+                  '<small>' + escapeHtml(fileName) + '</small>',
+            showConfirmButton: false,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: function () {
+                Swal.showLoading();
+            }
+        });
+
+        var dlForm = new URLSearchParams();
+        dlForm.append("fileName", fileName);
+
+        var dlResp = await fetch(apiUrl(API_USERS.downloadBackup), {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: dlForm.toString()
+        });
+
+        if (!dlResp.ok) {
+            var dlErr = "";
+            try { dlErr = await dlResp.text(); } catch (e) { }
+            throw new Error(dlErr || ("Erreur de téléchargement (HTTP " + dlResp.status + ")"));
+        }
+
+        var blob = await dlResp.blob();
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        Swal.close();
+
+    } catch (err) {
+        Swal.close();
+        await Swal.fire({
+            icon: "error",
+            title: T('users.msg.error_title', 'Erreur'),
+            text: err.message,
+            confirmButtonText: T('users.msg.ok', 'OK')
+        });
     }
 }
 
@@ -1217,6 +1360,9 @@ function autoCheckForUpdates() {
     }, 5000);
 }
 
+// ============================================================================
+// EXPOSITIONS GLOBALES
+// ============================================================================
 window.applyDefaultPermissionsByRole   = applyDefaultPermissionsByRole;
 window.setPermissionsCheckboxes        = setPermissionsCheckboxes;
 window.getSelectedPermissions          = getSelectedPermissions;

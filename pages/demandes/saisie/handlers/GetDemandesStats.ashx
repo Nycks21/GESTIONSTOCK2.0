@@ -35,7 +35,7 @@ public class GetDemandesStats : IHttpHandler, IRequiresSessionState
                         SUM(CASE WHEN STATUT = 'BROUILLON' THEN 1 ELSE 0 END) AS Brouillon,
                         SUM(CASE WHEN STATUT = 'ANNULE' THEN 1 ELSE 0 END) AS Annule
                     FROM SSORTIE
-                    WHERE CREATED_BY = @userId AND DELETION_AT IS NULL";
+                    WHERE CREATED_BY = @userId AND DELETION_AT IS NULL AND STATUT <> 'VALIDE'";
                 int total = 0, valide = 0, brouillon = 0, annule = 0;
                 using (SqlCommand cmd = new SqlCommand(sql, conn))
                 {

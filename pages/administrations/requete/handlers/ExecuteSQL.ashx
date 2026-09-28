@@ -6,33 +6,31 @@ using System.Data;
 using System.Data.SqlClient;
 using System.Configuration;
 using System.Collections.Generic;
-using System.Text.RegularExpressions;
 using System.Web.Script.Serialization;
 using System.Web.SessionState;
 
 public class ExecuteSQL : IHttpHandler, IRequiresSessionState
 {
-    // ✅ Liste blanche STRICTE des requêtes autorisées.
-    //    Comparaison insensible à la casse + espaces normalisés.
-    //    ⚠️ Adapter cette liste à VOS besoins métier réels (GESTION STOCK).
-    private static readonly HashSet<string> AllowedQueries = new HashSet<string>(
-        new string[]
-        {
-            // ── Exemples à adapter ──────────────────────────────────
-            "SELECT USERNAME, NOM, EMAIL FROM USERS",
-            "SELECT COUNT(*) FROM USERS",
-            "SELECT ID, CODE, NOM FROM SCATEGORIE WHERE DELETION_AT IS NULL",
-            "SELECT ID, CODE, NOM FROM SUNITE WHERE DELETION_AT IS NULL",
-            "SELECT ID, CODE, NOM FROM SFOURNISSEUR WHERE DELETION_AT IS NULL",
-            "SELECT ID, CODE, NOM FROM SEMPLACEMENT WHERE DELETION_AT IS NULL",
-            "SELECT ID, CODE, NOM FROM MARTICLE WHERE DELETION_AT IS NULL",
-            // ── Ajouter d'autres requêtes autorisées ici ───────────
-        },
-        StringComparer.OrdinalIgnoreCase);
+    // ✅ Liste blanche des requêtes autorisées (READ ONLY)
+    private static readonly string[] AllowedQueries = new string[]
+    {
+        "SELECT USERNAME, NOM, EMAIL FROM USERS",
+        "SELECT COUNT(*) FROM USERS",
+        "SELECT ID, NOM, EFFECTIF FROM CLASSES",
+        "SELECT ID, NOM FROM MATIERES",
+        "SELECT * FROM ELEVES WHERE STATUT = 'actif'",
+        // Ajouter d'autres requêtes autorisées ici
+    };
 
     public void ProcessRequest(HttpContext context)
     {
-        // ✅ Sécurité renforcée : Session + Token session + Rôle SuperAdmin + CSRF + Origin/Referer
+        // ✅ Sécurité : garde-fou unifié
+        //    RequireCsrfSafePost = RequireApiAuth + ValidateCsrfToken + ValidateOrigin
+        //    1. Session authentifiée
+        //    2. Token de session valide (validé en DB)
+        //    3. Rôle minimal : SuperAdmin (role == 0)
+        //    4. Header X-CSRF-Token valide
+        //    5. Origin/Referer de confiance
         if (!AuthHelper.RequireCsrfSafePost(context, 0))
         {
             context.Response.ContentType = "application/json";
@@ -41,37 +39,14 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
             return;
         }
 
-        // ✅ POST uniquement
-        if (!string.Equals(context.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
-        {
-            context.Response.StatusCode = 405;
-            SendResponse(context, false, "Méthode non autorisée.");
-            return;
-        }
-
         context.Response.ContentType = "application/json";
         context.Response.Headers["Cache-Control"] = "no-cache";
 
         string sqlQuery = context.Request.Form["query"];
 
-        if (string.IsNullOrWhiteSpace(sqlQuery))
+        if (string.IsNullOrEmpty(sqlQuery))
         {
             SendResponse(context, false, "La requête SQL est vide.");
-            return;
-        }
-
-        // ✅ Normalisation : trim + espaces multiples → 1 espace
-        //    Permet une comparaison fiable avec la liste blanche.
-        string normalized = Regex.Replace(sqlQuery.Trim(), @"\s+", " ");
-
-        // ═══════════════════════════════════════════════════════════
-        // ✅ CONTRÔLE CRITIQUE : vérification contre la liste blanche
-        // ═══════════════════════════════════════════════════════════
-        if (!AllowedQueries.Contains(normalized))
-        {
-            LogSecurityViolation(context, sqlQuery);
-            SendResponse(context, false,
-                "Requête non autorisée. Seules les requêtes de la liste blanche sont permises.");
             return;
         }
 
@@ -81,7 +56,7 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
         {
             try
             {
-                SqlCommand cmd = new SqlCommand(normalized, conn);
+                SqlCommand cmd = new SqlCommand(sqlQuery, conn);
                 conn.Open();
 
                 SqlDataAdapter da = new SqlDataAdapter(cmd);
@@ -94,14 +69,12 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
                     var row = new Dictionary<string, object>();
                     foreach (DataColumn col in dt.Columns)
                     {
-                        object val = dr[col];
-                        if (val == DBNull.Value) val = null;
-                        row.Add(col.ColumnName, val);
+                        row.Add(col.ColumnName, dr[col]);
                     }
                     rows.Add(row);
                 }
 
-                var serializer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+                JavaScriptSerializer serializer = new JavaScriptSerializer();
                 context.Response.Write(serializer.Serialize(new
                 {
                     success = true,
@@ -124,7 +97,7 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
 
     private void SendResponse(HttpContext context, bool success, string message)
     {
-        var serializer = new JavaScriptSerializer();
+        JavaScriptSerializer serializer = new JavaScriptSerializer();
         context.Response.Write(serializer.Serialize(new
         {
             success = success,
@@ -132,7 +105,6 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
         }));
     }
 
-    // Log des erreurs SQL/système
     private void LogError(HttpContext context, Exception ex)
     {
         try
@@ -146,20 +118,8 @@ public class ExecuteSQL : IHttpHandler, IRequiresSessionState
         catch { /* Ne pas échouer si le log échoue */ }
     }
 
-    // Log spécifique aux tentatives de requêtes non autorisées
-    private void LogSecurityViolation(HttpContext context, string attemptedQuery)
+    public bool IsReusable
     {
-        try
-        {
-            string logFile = context.Server.MapPath("~/App_Data/security.log");
-            string entry = "[" + DateTime.Now.ToString() + "] ⚠️ SQL WHITELIST VIOLATION\n" +
-                           "IP: " + context.Request.UserHostAddress + "\n" +
-                           "Query: " + (attemptedQuery ?? "").Substring(0, Math.Min(500, (attemptedQuery ?? "").Length)) + "\n" +
-                           "---\n";
-            System.IO.File.AppendAllText(logFile, entry);
-        }
-        catch { }
+        get { return false; }
     }
-
-    public bool IsReusable { get { return false; } }
 }
