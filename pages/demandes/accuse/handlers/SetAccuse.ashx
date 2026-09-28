@@ -1,4 +1,4 @@
-﻿﻿<%@ WebHandler Language="C#" Class="SetAccuse" %>
+﻿﻿﻿﻿<%@ WebHandler Language="C#" Class="SetAccuse" %>
 using System;
 using System.Data.SqlClient;
 using System.Web;
@@ -13,19 +13,20 @@ public class SetAccuse : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
-        {
-            ctx.Response.StatusCode = 403;
-            WriteJson(ctx, false, "Accès non autorisé");
-            return;
-        }
-
-        // ✅ Méthode : uniquement POST
+        // ✅ 1. Méthode : uniquement POST
         if (!string.Equals(ctx.Request.HttpMethod, "POST", StringComparison.OrdinalIgnoreCase))
         {
             ctx.Response.StatusCode = 405;
             WriteJson(ctx, false, "Méthode non autorisée");
+            return;
+        }
+
+        // ✅ 2. Sécurité CRITIQUE : Session + Token CSRF + Origin/Referer
+        //    Cette action clôture une sortie (statut VALIDE → TERMINE).
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
+        {
+            ctx.Response.StatusCode = 403;
+            WriteJson(ctx, false, "Accès non autorisé");
             return;
         }
 
@@ -55,9 +56,16 @@ public class SetAccuse : IHttpHandler, IRequiresSessionState
             }
 
             DateTime dateReception;
-            if (!DateTime.TryParse(dateReceptionStr, out dateReception))
+            if (!TryParseDateFlexible(dateReceptionStr.Trim(), out dateReception))
             {
-                WriteJson(ctx, false, "Date de réception invalide");
+                WriteJson(ctx, false, "Date de réception invalide (format attendu : jj/mm/aaaa)");
+                return;
+            }
+
+            // ✅ Contrôle métier : la date ne peut pas être dans le futur
+            if (dateReception.Date > DateTime.Now.Date)
+            {
+                WriteJson(ctx, false, "La date de réception ne peut pas être dans le futur");
                 return;
             }
 
@@ -97,7 +105,7 @@ public class SetAccuse : IHttpHandler, IRequiresSessionState
                     return;
                 }
 
-                // ✅ 3) Mise à jour du statut + date de réception
+                // ✅ 3) Mise à jour du statut + date de réception (atomique)
                 using (var cmd = new SqlCommand(
                     @"UPDATE SSORTIE
                       SET STATUT = 'TERMINE',
@@ -109,7 +117,7 @@ public class SetAccuse : IHttpHandler, IRequiresSessionState
                         AND STATUT = 'VALIDE'", conn))
                 {
                     cmd.Parameters.AddWithValue("@id", bonId);
-                    cmd.Parameters.AddWithValue("@dateReception", dateReception);
+                    cmd.Parameters.AddWithValue("@dateReception", dateReception.Date);
                     cmd.Parameters.AddWithValue("@updatedBy",
                         currentUserId == 0 ? (object)DBNull.Value : currentUserId);
 
@@ -135,6 +143,34 @@ public class SetAccuse : IHttpHandler, IRequiresSessionState
             ctx.Response.StatusCode = 500;
             WriteJson(ctx, false, "Erreur système : " + ex.Message.Replace("\"", "\\\""));
         }
+    }
+
+    // Parse flexible : ISO yyyy-MM-dd + FR dd/MM/yyyy + variantes
+    private static bool TryParseDateFlexible(string raw, out DateTime result)
+    {
+        result = DateTime.MinValue;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        // 1) ISO
+        if (DateTime.TryParseExact(raw, "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out result)) return true;
+
+        // 2) FR strict
+        if (DateTime.TryParseExact(raw, "dd/MM/yyyy",
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
+                System.Globalization.DateTimeStyles.None, out result)) return true;
+
+        // 3) FR variantes
+        string[] formatsFr = { "d/M/yyyy", "dd/MM/yyyy", "d-M-yyyy", "dd-MM-yyyy", "d.M.yyyy", "dd.MM.yyyy" };
+        if (DateTime.TryParseExact(raw, formatsFr,
+                System.Globalization.CultureInfo.GetCultureInfo("fr-FR"),
+                System.Globalization.DateTimeStyles.None, out result)) return true;
+
+        // 4) Invariant fallback
+        return DateTime.TryParse(raw,
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out result);
     }
 
     private void WriteJson(HttpContext ctx, bool success, string message)

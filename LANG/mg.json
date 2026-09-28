@@ -599,6 +599,8 @@
   "articles.server.fk_guid_not_found": "Tsy hita ny {label} (GUID).",
   "articles.server.fk_not_found": "Tsy hita ny {label}: \"{value}\"",
   "articles.server.import_summary": "{inserted} vokatra nampiana, {updated} nohavaozina, {skipped} nadinoina ({errors} olana).",
+  "articles.server.delete_used": "Tsy azo fafana: ampiasaina ao amin'ny taratasy fidirana na fivoahana ny vokatra.",
+  "articles.server.deleted": "Voafafa ny vokatra.",
   "articles.import.duplicate_in_file": "Dika mitovy ny kaody ao amin'ny rakitra",
   "articles.server.import_errors": "olana",
   "articles.confirm.delete_title": "Hofafana?",

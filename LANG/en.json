@@ -600,6 +600,8 @@
   "articles.server.fk_guid_not_found": "{label} not found (GUID).",
   "articles.server.fk_not_found": "{label} not found: \"{value}\"",
   "articles.server.import_summary": "{inserted} article(s) added, {updated} updated, {skipped} skipped ({errors} error(s)).",
+  "articles.server.delete_used": "Cannot delete: the article is used in entry or exit notes.",
+  "articles.server.deleted": "Article deleted.",
   "articles.import.duplicate_in_file": "Duplicate code in file",
   "articles.confirm.delete_title": "Delete?",
   "articles.confirm.delete_text": "This action is irreversible (logical deletion).",

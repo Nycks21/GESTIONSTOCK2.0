@@ -1,6 +1,8 @@
 ﻿﻿<%@ Page Language="C#" AutoEventWireup="true" %>
 <%@ Import Namespace="System.Data.SqlClient" %>
 <%@ Import Namespace="System.Configuration" %>
+<%@ Import Namespace="System.Collections.Generic" %>
+<%@ Import Namespace="System.Web.Script.Serialization" %>
 
 <script runat="server">
 protected void Page_Load(object sender, EventArgs e)
@@ -33,8 +35,33 @@ protected void Page_Load(object sender, EventArgs e)
         return;
     }
 
-    string id = Request.Form["id"];
-    if (string.IsNullOrEmpty(id))
+    // ✅ Lecture depuis JSON body (cohérent avec users.aspx / updateUser.aspx)
+    string jsonString = "";
+    using (var reader = new System.IO.StreamReader(Request.InputStream))
+    {
+        jsonString = reader.ReadToEnd();
+    }
+    if (string.IsNullOrEmpty(jsonString))
+    {
+        Response.StatusCode = 400;
+        WriteResponse("error", "Données JSON vides");
+        return;
+    }
+
+    Dictionary<string, object> data = null;
+    try
+    {
+        var serializer = new JavaScriptSerializer();
+        data = serializer.Deserialize<Dictionary<string, object>>(jsonString);
+    }
+    catch
+    {
+        Response.StatusCode = 400;
+        WriteResponse("error", "Format JSON invalide");
+        return;
+    }
+
+    if (data == null || !data.ContainsKey("id") || data["id"] == null)
     {
         Response.StatusCode = 400;
         WriteResponse("error", "ID manquant");
@@ -42,7 +69,7 @@ protected void Page_Load(object sender, EventArgs e)
     }
 
     int userId;
-    if (!int.TryParse(id, out userId))
+    if (!int.TryParse(data["id"].ToString(), out userId))
     {
         Response.StatusCode = 400;
         WriteResponse("error", "ID utilisateur invalide");
@@ -66,9 +93,7 @@ protected void Page_Load(object sender, EventArgs e)
         {
             conn.Open();
 
-            // ============================================================
             // 1. Vérifier existence + statut + rôle
-            // ============================================================
             int targetRole;
             bool alreadyDeleted;
 
@@ -94,9 +119,7 @@ protected void Page_Load(object sender, EventArgs e)
                 return;
             }
 
-            // ============================================================
             // 2. Protéger les SuperAdmin
-            // ============================================================
             int callerRole = AuthHelper.GetUserRole(Context);
             if (targetRole == 0 && callerRole != 0)
             {
@@ -104,19 +127,8 @@ protected void Page_Load(object sender, EventArgs e)
                 return;
             }
 
-            // ============================================================
             // 3. SOFT DELETE STRICT
-            //    - DELETION_AT : horodatage de la suppression
-            //    - DELETION_BY : ID de l'admin qui supprime
-            //    - ACTIVE = 0  : compte désactivé
-            //    - SESSION_TOKEN = NULL : session invalidée immédiatement
-            //    - LAST_PC = NULL : trace de connexion effacée
-            //
-            //    ⚠️ USERNAME et EMAIL NE SONT PAS modifiés :
-            //       → ils restent réservés à vie (contrainte UNIQUE globale)
-            //       → l'historique complet est conservé
-            //       → impossible de recréer un compte avec ces identifiants
-            // ============================================================
+            //    - USERNAME et EMAIL restent intacts (contrainte UNIQUE globale)
             const string sql = @"
                 UPDATE USERS
                    SET DELETION_AT    = GETDATE(),
@@ -135,20 +147,8 @@ protected void Page_Load(object sender, EventArgs e)
 
                 if (rows > 0)
                 {
-                    // Log de sécurité (ne casse pas la suppression si échec)
-                    try
-                    {
-                        using (SqlCommand logCmd = new SqlCommand(
-                            @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
-                              VALUES (@UserId, 'USER_DELETE', @Details, @IP, GETDATE())", conn))
-                        {
-                            logCmd.Parameters.AddWithValue("@UserId", currentUserId);
-                            logCmd.Parameters.AddWithValue("@Details", "Suppression logique de l'utilisateur IDUSER=" + userId);
-                            logCmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
-                            logCmd.ExecuteNonQuery();
-                        }
-                    }
-                    catch { /* ignore */ }
+                    LogSecurityAction(conn, currentUserId, "USER_DELETE",
+                        "Suppression logique de l'utilisateur IDUSER=" + userId);
 
                     WriteResponse("success", "Utilisateur supprimé avec succès");
                 }
@@ -172,5 +172,23 @@ private void WriteResponse(string status, string message)
     string safeMessage = message.Replace("\"", "\\\"").Replace("\r", "").Replace("\n", "");
     string json = "{\"status\":\"" + status + "\",\"success\":" + success + ",\"message\":\"" + safeMessage + "\"}";
     Response.Write(json);
+}
+
+private void LogSecurityAction(SqlConnection conn, int userId, string action, string details)
+{
+    try
+    {
+        string sql = @"INSERT INTO SECURITY_LOG (USER_ID, ACTION, DETAILS, IP_ADDRESS, CREATED_AT)
+                       VALUES (@UserId, @Action, @Details, @IP, GETDATE())";
+        using (SqlCommand cmd = new SqlCommand(sql, conn))
+        {
+            cmd.Parameters.AddWithValue("@UserId", userId);
+            cmd.Parameters.AddWithValue("@Action", action);
+            cmd.Parameters.AddWithValue("@Details", details);
+            cmd.Parameters.AddWithValue("@IP", Request.UserHostAddress);
+            cmd.ExecuteNonQuery();
+        }
+    }
+    catch { /* table absente → ignore */ }
 }
 </script>

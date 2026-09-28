@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="EmplacementDelete" %>
+﻿﻿<%@ WebHandler Language="C#" Class="EmplacementDelete" %>
 
 using System;
 using System.Collections.Generic;
@@ -15,8 +15,8 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -28,8 +28,14 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
-            string id = GetString(data, "id");
 
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
+            string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant.\"}");
@@ -42,12 +48,16 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
             using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-                // Vérifier si l'emplacement a des sous-emplacements
-                string checkSql = "SELECT COUNT(*) FROM SEMPLACEMENT WHERE PARENT_ID = @id AND DELETION_AT IS NULL";
+
+                // Vérification : sous-emplacements rattachés ?
+                string checkSql = @"
+                    SELECT COUNT(*)
+                    FROM SEMPLACEMENT
+                    WHERE PARENT_ID = @id AND DELETION_AT IS NULL";
                 using (var cmd = new SqlCommand(checkSql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
-                    int count = (int)cmd.ExecuteScalar();
+                    int count = Convert.ToInt32(cmd.ExecuteScalar());
                     if (count > 0)
                     {
                         ctx.Response.Write("{\"success\":false,\"message\":\"Impossible de supprimer cet emplacement car il possède des sous-emplacements.\"}");
@@ -55,12 +65,12 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
                     }
                 }
 
-                // Vérifier si l'emplacement est utilisé par un article
+                // Vérification : emplacement utilisé par un article ?
                 string referenceSql = @"
                     SELECT COUNT(*)
                     FROM MARTICLE
                     WHERE EMPLACEMENT_ID = @id AND DELETION_AT IS NULL";
-                using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
+                using (var referenceCmd = new SqlCommand(referenceSql, conn))
                 {
                     referenceCmd.Parameters.AddWithValue("@id", id);
                     if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
@@ -75,7 +85,11 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
                 }
 
                 // Suppression logique
-                string sql = "UPDATE SEMPLACEMENT SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ID = @id AND DELETION_AT IS NULL";
+                string sql = @"
+                    UPDATE SEMPLACEMENT
+                    SET DELETION_AT = GETDATE(),
+                        DELETION_BY = @userId
+                    WHERE ID = @id AND DELETION_AT IS NULL";
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
@@ -89,24 +103,45 @@ public class EmplacementDelete : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Emplacement supprimé avec succès." }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = true,
+                message = "Emplacement supprimé avec succès."
+            }));
+        }
+        catch (SqlException ex)
+        {
+            if (ex.Number == 547) // Contrainte FK violée
+            {
+                ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                {
+                    success = false,
+                    message = "Impossible de supprimer, codification rattachée."
+                }));
+                return;
+            }
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
-    public bool IsReusable
-    {
-        get { return false; }
-    }
-}   // ← Accolade fermante manquante ajoutée
+    public bool IsReusable { get { return false; } }
+}

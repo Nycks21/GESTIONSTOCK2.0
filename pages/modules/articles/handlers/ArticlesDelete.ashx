@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="ArticlesDelete" %>
+﻿﻿<%@ WebHandler Language="C#" Class="ArticlesDelete" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -17,7 +17,11 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
         if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
-            ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
+            WriteJson(ctx, new {
+                success = false,
+                messageKey = "articles.server.unauthorized",
+                message = "Accès non autorisé"
+            });
             return;
         }
 
@@ -26,15 +30,31 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                WriteJson(ctx, new {
+                    success = false,
+                    messageKey = "articles.server.invalid_body",
+                    message = "Corps de requête invalide."
+                });
+                return;
+            }
+
             string id = data.ContainsKey("id") && data["id"] != null ? data["id"].ToString() : null;
             if (string.IsNullOrEmpty(id))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant\"}");
+                WriteJson(ctx, new {
+                    success = false,
+                    messageKey = "articles.server.id_missing",
+                    message = "ID manquant."
+                });
                 return;
             }
 
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
+
             using (SqlConnection conn = new SqlConnection(connStr))
             {
                 conn.Open();
@@ -51,17 +71,21 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
                     int totalReferences = Convert.ToInt32(referenceCmd.ExecuteScalar());
                     if (totalReferences > 0)
                     {
-                        ctx.Response.Write(serializer.Serialize(new
-                        {
+                        WriteJson(ctx, new {
                             success = false,
+                            messageKey = "articles.server.delete_used",
                             message = "Impossible de supprimer, l'article est utilisé dans des bons d'entrée ou de sortie."
-                        }));
+                        });
                         return;
                     }
                 }
 
                 // Suppression logique de l'article
-                string sql = "UPDATE MARTICLE SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ID = @id AND DELETION_AT IS NULL";
+                string sql = @"
+                    UPDATE MARTICLE
+                    SET DELETION_AT = GETDATE(),
+                        DELETION_BY = @userId
+                    WHERE ID = @id AND DELETION_AT IS NULL";
                 using (SqlCommand cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
@@ -69,13 +93,21 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
                     {
-                        ctx.Response.Write(serializer.Serialize(new { success = false, message = "Article introuvable ou déjà supprimé." }));
+                        WriteJson(ctx, new {
+                            success = false,
+                            messageKey = "articles.server.not_found",
+                            message = "Article introuvable ou déjà supprimé."
+                        });
                         return;
                     }
                 }
 
                 // Suppression logique des lignes de stock associées
-                string stockSql = "UPDATE SSTOCK SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ARTICLE_ID = @id AND DELETION_AT IS NULL";
+                string stockSql = @"
+                    UPDATE SSTOCK
+                    SET DELETION_AT = GETDATE(),
+                        DELETION_BY = @userId
+                    WHERE ARTICLE_ID = @id AND DELETION_AT IS NULL";
                 using (SqlCommand cmd = new SqlCommand(stockSql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
@@ -84,7 +116,11 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
                 }
 
                 // Suppression logique des mouvements dans MSTOCK
-                string mvtSql = "UPDATE MSTOCK SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ARTICLE_ID = @id AND DELETION_AT IS NULL";
+                string mvtSql = @"
+                    UPDATE MSTOCK
+                    SET DELETION_AT = GETDATE(),
+                        DELETION_BY = @userId
+                    WHERE ARTICLE_ID = @id AND DELETION_AT IS NULL";
                 using (SqlCommand cmd = new SqlCommand(mvtSql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
@@ -92,14 +128,28 @@ public class ArticlesDelete : IHttpHandler, IRequiresSessionState
                     cmd.ExecuteNonQuery();
                 }
 
-                ctx.Response.Write(serializer.Serialize(new { success = true, message = "Article supprimé." }));
+                WriteJson(ctx, new {
+                    success = true,
+                    messageKey = "articles.server.deleted",
+                    message = "Article supprimé."
+                });
             }
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            WriteJson(ctx, new {
+                success = false,
+                messageKey = "message.error",
+                message = ex.Message.Replace("\"", "\\\"")
+            });
         }
+    }
+
+    private void WriteJson(HttpContext ctx, object obj)
+    {
+        var ser = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
+        ctx.Response.Write(ser.Serialize(obj));
     }
 
     public bool IsReusable { get { return false; } }

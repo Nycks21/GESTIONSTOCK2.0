@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="CategorieDelete" %>
+﻿﻿<%@ WebHandler Language="C#" Class="CategorieDelete" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -14,8 +14,8 @@ public class CategorieDelete : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -25,8 +25,14 @@ public class CategorieDelete : IHttpHandler, IRequiresSessionState
         try
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
-            JavaScriptSerializer serializer = new JavaScriptSerializer();
-            Dictionary<string, object> data = serializer.Deserialize<Dictionary<string, object>>(json);
+            var serializer = new JavaScriptSerializer();
+            var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
@@ -38,14 +44,16 @@ public class CategorieDelete : IHttpHandler, IRequiresSessionState
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
 
-            using (SqlConnection conn = new SqlConnection(connStr))
+            using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
+
+                // Vérification : catégorie référencée par un article ?
                 string referenceSql = @"
                     SELECT COUNT(*)
                     FROM MARTICLE
-                    WHERE CATEGORIE_ID = @id";
-                using (SqlCommand referenceCmd = new SqlCommand(referenceSql, conn))
+                    WHERE CATEGORIE_ID = @id AND DELETION_AT IS NULL";
+                using (var referenceCmd = new SqlCommand(referenceSql, conn))
                 {
                     referenceCmd.Parameters.AddWithValue("@id", id);
                     if (Convert.ToInt32(referenceCmd.ExecuteScalar()) > 0)
@@ -58,12 +66,32 @@ public class CategorieDelete : IHttpHandler, IRequiresSessionState
                         return;
                     }
                 }
+
+                // Vérification : sous-catégories rattachées ?
+                string childrenSql = @"
+                    SELECT COUNT(*)
+                    FROM SCATEGORIE
+                    WHERE PARENT_ID = @id AND DELETION_AT IS NULL";
+                using (var childCmd = new SqlCommand(childrenSql, conn))
+                {
+                    childCmd.Parameters.AddWithValue("@id", id);
+                    if (Convert.ToInt32(childCmd.ExecuteScalar()) > 0)
+                    {
+                        ctx.Response.Write(serializer.Serialize(new
+                        {
+                            success = false,
+                            message = "Impossible de supprimer, sous-catégories rattachées"
+                        }));
+                        return;
+                    }
+                }
+
                 string sql = @"
                     UPDATE SCATEGORIE
                     SET DELETION_AT = GETDATE(),
                         DELETION_BY = @userId
                     WHERE ID = @id AND DELETION_AT IS NULL";
-                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@userId", userId);
@@ -78,18 +106,38 @@ public class CategorieDelete : IHttpHandler, IRequiresSessionState
 
             ctx.Response.Write(serializer.Serialize(new { success = true, message = "Catégorie supprimée." }));
         }
+        catch (SqlException ex)
+        {
+            if (ex.Number == 547) // Contrainte FK violée
+            {
+                ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                {
+                    success = false,
+                    message = "Impossible de supprimer, codification rattachée"
+                }));
+                return;
+            }
+            ctx.Response.StatusCode = 500;
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
+        }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
     public bool IsReusable { get { return false; } }

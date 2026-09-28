@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="CategorieEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="CategorieEdit" %>
 using System;
 using System.Collections.Generic;
 using System.Data.SqlClient;
@@ -14,8 +14,8 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -25,25 +25,32 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
         try
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
-            JavaScriptSerializer serializer = new JavaScriptSerializer();
-            Dictionary<string, object> data = serializer.Deserialize<Dictionary<string, object>>(json);
+            var serializer = new JavaScriptSerializer();
+            var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             string id = GetString(data, "id");
+            // ⚠️ Le CODE est immuable : il n'est ni lu ni mis à jour
             string nom = GetString(data, "nom");
             string description = GetString(data, "description") ?? "";
             string parentId = GetString(data, "parentId");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(nom))
+            if (string.IsNullOrEmpty(id) || string.IsNullOrWhiteSpace(nom))
             {
-                ctx.Response.Write("{\"success\":false,\"message\":\"ID, code et nom sont obligatoires.\"}");
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID et nom sont obligatoires.\"}");
                 return;
             }
 
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
 
-            using (SqlConnection conn = new SqlConnection(connStr))
+            using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
                 string sql = @"
@@ -56,14 +63,15 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
                         UPDATED_BY = @userId,
                         UPDATED_AT = GETDATE()
                     WHERE ID = @id AND DELETION_AT IS NULL";
-                using (SqlCommand cmd = new SqlCommand(sql, conn))
+                using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@nom", nom);
-                    cmd.Parameters.AddWithValue("@desc", description);
+                    cmd.Parameters.AddWithValue("@desc", string.IsNullOrEmpty(description) ? (object)DBNull.Value : description);
                     cmd.Parameters.AddWithValue("@parent", string.IsNullOrEmpty(parentId) ? (object)DBNull.Value : parentId);
                     cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                     cmd.Parameters.AddWithValue("@userId", userId);
+
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
                     {
@@ -73,20 +81,26 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            ctx.Response.Write(serializer.Serialize(new { success = true, message = "Catégorie modifiée avec succès." }));
+            ctx.Response.Write(serializer.Serialize(new
+            {
+                success = true,
+                message = "Catégorie modifiée avec succès."
+            }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
@@ -94,8 +108,10 @@ public class CategorieEdit : IHttpHandler, IRequiresSessionState
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
-            if (bool.TryParse(data[key].ToString(), out val))
-                return val;
+            if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
     }

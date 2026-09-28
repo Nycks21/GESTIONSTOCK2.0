@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="EmplacementEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="EmplacementEdit" %>
 
 using System;
 using System.Collections.Generic;
@@ -15,8 +15,8 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -29,13 +29,21 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
             string id = GetString(data, "id");
             string nom = GetString(data, "nom");
             string type = GetString(data, "type");
             string parentId = GetString(data, "parentId");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(type))
+            if (string.IsNullOrEmpty(id)
+                || string.IsNullOrWhiteSpace(nom)
+                || string.IsNullOrWhiteSpace(type))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"ID, nom et type sont obligatoires.\"}");
                 return;
@@ -49,8 +57,12 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
                 conn.Open();
                 string sql = @"
                     UPDATE SEMPLACEMENT
-                    SET NOM = @nom, TYPE = @type, PARENT_ID = @parent, ACTIVE = @active,
-                        UPDATED_BY = @userId, UPDATED_AT = GETDATE()
+                    SET NOM = @nom,
+                        TYPE = @type,
+                        PARENT_ID = @parent,
+                        ACTIVE = @active,
+                        UPDATED_BY = @userId,
+                        UPDATED_AT = GETDATE()
                     WHERE ID = @id AND DELETION_AT IS NULL";
                 using (var cmd = new SqlCommand(sql, conn))
                 {
@@ -60,6 +72,7 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
                     cmd.Parameters.AddWithValue("@parent", string.IsNullOrEmpty(parentId) ? (object)DBNull.Value : parentId);
                     cmd.Parameters.AddWithValue("@active", actif ? 1 : 0);
                     cmd.Parameters.AddWithValue("@userId", userId);
+
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
                     {
@@ -69,20 +82,26 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
                 }
             }
 
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Emplacement modifié avec succès." }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = true,
+                message = "Emplacement modifié avec succès."
+            }));
         }
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
@@ -90,14 +109,13 @@ public class EmplacementEdit : IHttpHandler, IRequiresSessionState
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
-            if (bool.TryParse(data[key].ToString(), out val))
-                return val;
+            if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
     }
 
-    public bool IsReusable
-{
-    get { return false; }
-}
+    public bool IsReusable { get { return false; } }
 }

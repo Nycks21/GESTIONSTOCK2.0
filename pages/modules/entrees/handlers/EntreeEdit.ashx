@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="EntreeEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="EntreeEdit" %>
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -15,8 +15,8 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -28,6 +28,12 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
@@ -47,7 +53,7 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
             ArrayList lignes = data.ContainsKey("lignes") ? (ArrayList)data["lignes"] : new ArrayList();
 
             if (lignes.Count == 0)
-                throw new Exception("Au moins une ligne d’article est requise.");
+                throw new Exception("Au moins une ligne d'article est requise.");
 
             // Vérifier que le bon est en BROUILLON
             if (!CanEdit(ctx, id))
@@ -153,7 +159,11 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
                         }
 
                         trans.Commit();
-                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Bon modifié avec succès." }));
+                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                        {
+                            success = true,
+                            message = "Bon modifié avec succès."
+                        }));
                     }
                     catch
                     {
@@ -166,7 +176,11 @@ public class EntreeEdit : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

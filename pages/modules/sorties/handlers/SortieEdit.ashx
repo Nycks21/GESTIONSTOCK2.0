@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="SortieEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="SortieEdit" %>
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -16,20 +16,25 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-// ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
-
         try
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
@@ -127,7 +132,11 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
 
                         // 4. Pas de mise à jour du statut (reste 'BROUILLON')
                         trans.Commit();
-                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Bon de sortie modifié avec succès." }));
+                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                        {
+                            success = true,
+                            message = "Bon de sortie modifié avec succès."
+                        }));
                     }
                     catch
                     {
@@ -140,7 +149,11 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

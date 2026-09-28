@@ -1,7 +1,8 @@
-﻿﻿<%@ WebHandler Language="C#" Class="EmplacementAdd" %>
+﻿﻿﻿<%@ WebHandler Language="C#" Class="EmplacementAdd" %>
 
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -15,8 +16,8 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -29,13 +30,19 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
             // ⚠️ Le CODE n'est plus envoyé par le client : il est généré côté serveur.
             string nom = GetString(data, "nom");
             string type = GetString(data, "type");
             string parentId = GetString(data, "parentId");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(nom) || string.IsNullOrEmpty(type))
+            if (string.IsNullOrWhiteSpace(nom) || string.IsNullOrWhiteSpace(type))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Le nom et le type sont obligatoires.\"}");
                 return;
@@ -55,14 +62,11 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                using (SqlTransaction tx = conn.BeginTransaction())
+                using (var tx = conn.BeginTransaction())
                 {
                     try
                     {
-                        // -----------------------------------------------------------
                         // 1) Génération atomique du numéro de séquence pour le projet
-                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT
-                        // -----------------------------------------------------------
                         string sqlSeq = @"
                             IF NOT EXISTS (
                                 SELECT 1 FROM SEMPLACEMENT_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
@@ -82,30 +86,22 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
                         using (var cmdSeq = new SqlCommand(sqlSeq, conn, tx))
                         {
                             cmdSeq.Parameters.AddWithValue("@projet", projetCode);
-                            object scalar = cmdSeq.ExecuteScalar();
-                            numero = Convert.ToInt32(scalar);
+                            numero = Convert.ToInt32(cmdSeq.ExecuteScalar());
                         }
 
-                        // -----------------------------------------------------------
                         // 2) Construction du code : EMP-{PROJET}-{00001}
-                        // -----------------------------------------------------------
                         code = string.Format("EMP-{0}-{1:D5}", projetCode, numero);
 
-                        // -----------------------------------------------------------
-                        // 3) Vérification anti-doublon (ceinture + bretelles)
-                        // -----------------------------------------------------------
+                        // 3) Vérification anti-doublon
                         using (var cmdCheck = new SqlCommand(
                             "SELECT COUNT(1) FROM SEMPLACEMENT WHERE CODE = @code", conn, tx))
                         {
                             cmdCheck.Parameters.AddWithValue("@code", code);
-                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
-                            if (exists > 0)
+                            if (Convert.ToInt32(cmdCheck.ExecuteScalar()) > 0)
                                 throw new Exception("Le code généré existe déjà, veuillez réessayer.");
                         }
 
-                        // -----------------------------------------------------------
                         // 4) Insertion de l'emplacement
-                        // -----------------------------------------------------------
                         string sqlInsert = @"
                             INSERT INTO SEMPLACEMENT (ID, CODE, NOM, TYPE, PARENT_ID, ACTIVE, CREATED_BY, CREATED_AT)
                             VALUES (@id, @code, @nom, @type, @parent, @active, @userId, GETDATE())";
@@ -153,9 +149,7 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
@@ -163,14 +157,13 @@ public class EmplacementAdd : IHttpHandler, IRequiresSessionState
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
-            if (bool.TryParse(data[key].ToString(), out val))
-                return val;
+            if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
     }
 
-    public bool IsReusable
-    {
-        get { return false; }
-    }
+    public bool IsReusable { get { return false; } }
 }

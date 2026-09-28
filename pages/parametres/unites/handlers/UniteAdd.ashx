@@ -1,6 +1,7 @@
-﻿﻿<%@ WebHandler Language="C#" Class="UniteAdd" %>
+﻿﻿﻿<%@ WebHandler Language="C#" Class="UniteAdd" %>
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -14,8 +15,8 @@ public class UniteAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -25,21 +26,26 @@ public class UniteAdd : IHttpHandler, IRequiresSessionState
         try
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
-            JavaScriptSerializer serializer = new JavaScriptSerializer();
-            Dictionary<string, object> data = serializer.Deserialize<Dictionary<string, object>>(json);
+            var serializer = new JavaScriptSerializer();
+            var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             // ⚠️ Le CODE n'est plus envoyé par le client : il est généré côté serveur.
             string nom = GetString(data, "nom");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(nom))
+            if (string.IsNullOrWhiteSpace(nom))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Le nom est obligatoire.\"}");
                 return;
             }
 
-            // 🔑 Récupération du code projet (à adapter à votre AuthHelper).
-            //    Ex : session, table projet, config… → renvoie "TALIM"
+            // 🔑 Récupération du code projet
             string projetCode = AuthHelper.GetProjectCode(ctx);
             if (string.IsNullOrEmpty(projetCode)) projetCode = "TALIM";
             projetCode = projetCode.Trim().ToUpperInvariant().Replace(" ", "");
@@ -49,19 +55,14 @@ public class UniteAdd : IHttpHandler, IRequiresSessionState
             string newId = Guid.NewGuid().ToString();
             string code;
 
-            using (SqlConnection conn = new SqlConnection(connStr))
+            using (var conn = new SqlConnection(connStr))
             {
                 conn.Open();
-
-                using (SqlTransaction tx = conn.BeginTransaction())
+                using (var tx = conn.BeginTransaction())
                 {
                     try
                     {
-                        // -----------------------------------------------------------
-                        // 1) Génération atomique du numéro de séquence pour le projet
-                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT,
-                        //    ce qui empêche toute collision entre utilisateurs simultanés.
-                        // -----------------------------------------------------------
+                        // 1) Génération atomique du numéro de séquence
                         string sqlSeq = @"
                             IF NOT EXISTS (
                                 SELECT 1 FROM SUNITE_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
@@ -78,37 +79,29 @@ public class UniteAdd : IHttpHandler, IRequiresSessionState
                             WHERE PROJET_CODE = @projet;";
 
                         int numero;
-                        using (SqlCommand cmdSeq = new SqlCommand(sqlSeq, conn, tx))
+                        using (var cmdSeq = new SqlCommand(sqlSeq, conn, tx))
                         {
                             cmdSeq.Parameters.AddWithValue("@projet", projetCode);
-                            object scalar = cmdSeq.ExecuteScalar();
-                            numero = Convert.ToInt32(scalar);
+                            numero = Convert.ToInt32(cmdSeq.ExecuteScalar());
                         }
 
-                        // -----------------------------------------------------------
-                        // 2) Construction du code : UN-{PROJET}-{00001}
-                        // -----------------------------------------------------------
+                        // 2) Construction du code : UNT-{PROJET}-{00001}
                         code = string.Format("UNT-{0}-{1:D5}", projetCode, numero);
 
-                        // -----------------------------------------------------------
-                        // 3) Vérification anti-doublon (ceinture + bretelles)
-                        // -----------------------------------------------------------
-                        using (SqlCommand cmdCheck = new SqlCommand(
+                        // 3) Vérification anti-doublon
+                        using (var cmdCheck = new SqlCommand(
                             "SELECT COUNT(1) FROM SUNITE WHERE CODE = @code", conn, tx))
                         {
                             cmdCheck.Parameters.AddWithValue("@code", code);
-                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
-                            if (exists > 0)
+                            if (Convert.ToInt32(cmdCheck.ExecuteScalar()) > 0)
                                 throw new Exception("Le code généré existe déjà, veuillez réessayer.");
                         }
 
-                        // -----------------------------------------------------------
                         // 4) Insertion de l'unité
-                        // -----------------------------------------------------------
                         string sqlInsert = @"
                             INSERT INTO SUNITE (ID, CODE, NOM, ACTIVE, CREATED_BY, CREATED_AT)
                             VALUES (@id, @code, @nom, @active, @userId, GETDATE())";
-                        using (SqlCommand cmd = new SqlCommand(sqlInsert, conn, tx))
+                        using (var cmd = new SqlCommand(sqlInsert, conn, tx))
                         {
                             cmd.Parameters.AddWithValue("@id", newId);
                             cmd.Parameters.AddWithValue("@code", code);
@@ -149,9 +142,7 @@ public class UniteAdd : IHttpHandler, IRequiresSessionState
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
@@ -159,14 +150,13 @@ public class UniteAdd : IHttpHandler, IRequiresSessionState
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
-            if (bool.TryParse(data[key].ToString(), out val))
-                return val;
+            if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
     }
 
-    public bool IsReusable
-    {
-        get { return false; }
-    }
+    public bool IsReusable { get { return false; } }
 }

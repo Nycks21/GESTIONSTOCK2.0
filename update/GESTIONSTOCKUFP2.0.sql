@@ -69,7 +69,32 @@ END
 GO
 
 -- =====================================================
--- 2.b TABLE LOGIN_LOG
+-- 2.b SECURITY_LOG — Journal des actions sensibles
+-- =====================================================
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'SECURITY_LOG')
+BEGIN
+    CREATE TABLE SECURITY_LOG
+    (
+        ID          INT IDENTITY(1,1) PRIMARY KEY,
+        USER_ID     INT NULL,                     -- Auteur de l'action (peut être NULL si erreur système)
+        ACTION      VARCHAR(50) NOT NULL,          -- Ex: USER_CREATE, USER_UPDATE, USER_DELETE
+        DETAILS     NVARCHAR(1000) NULL,
+        IP_ADDRESS  VARCHAR(45) NULL,
+        CREATED_AT  DATETIME NOT NULL DEFAULT GETDATE(),
+
+        CONSTRAINT FK_SECURITY_LOG_USER
+            FOREIGN KEY (USER_ID) REFERENCES USERS(IDUSER)
+    );
+
+    CREATE INDEX IX_SECURITY_LOG_CREATED_AT ON SECURITY_LOG(CREATED_AT DESC);
+    CREATE INDEX IX_SECURITY_LOG_ACTION ON SECURITY_LOG(ACTION);
+
+    PRINT '✓ Table SECURITY_LOG créée';
+END
+GO
+
+-- =====================================================
+-- 2.c TABLE LOGIN_LOG
 -- =====================================================
 IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'LOGIN_LOG')
 BEGIN

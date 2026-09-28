@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="SortieEdit" %>
+﻿﻿<%@ WebHandler Language="C#" Class="SortieEdit" %>
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -15,20 +15,25 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-// ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
             return;
         }
 
-
         try
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             string id = GetString(data, "id");
             if (string.IsNullOrEmpty(id))
@@ -67,8 +72,15 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
                     try
                     {
                         string sqlEntete = @"
-                            UPDATE SSORTIE SET NUMERO = @numero, DATE_SORTIE = @date, DESTINATION = @dest, NOM = @nom, FONCTION = @fonction, NOTES = @notes,
-                                UPDATED_BY = @userId, UPDATED_AT = GETDATE()
+                            UPDATE SSORTIE SET
+                                NUMERO = @numero,
+                                DATE_SORTIE = @date,
+                                DESTINATION = @dest,
+                                NOM = @nom,
+                                FONCTION = @fonction,
+                                NOTES = @notes,
+                                UPDATED_BY = @userId,
+                                UPDATED_AT = GETDATE()
                             WHERE ID = @id AND STATUT = 'BROUILLON' AND DELETION_AT IS NULL";
                         using (var cmd = new SqlCommand(sqlEntete, conn, trans))
                         {
@@ -105,7 +117,6 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
                             if (ligne.ContainsKey("quantiteR") && ligne["quantiteR"] != null)
                                 decimal.TryParse(ligne["quantiteR"].ToString(), out qteR);
 
-                            // ✅ Correction : remplacer l'opérateur ?. par une vérification explicite
                             string observations = "";
                             if (ligne.ContainsKey("observations") && ligne["observations"] != null)
                                 observations = ligne["observations"].ToString();
@@ -126,7 +137,11 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
                         }
 
                         trans.Commit();
-                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Bon de sortie modifié avec succès." }));
+                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                        {
+                            success = true,
+                            message = "Bon de sortie modifié avec succès."
+                        }));
                     }
                     catch
                     {
@@ -139,7 +154,11 @@ public class SortieEdit : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

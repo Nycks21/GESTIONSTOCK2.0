@@ -1,7 +1,8 @@
-﻿<%@ WebHandler Language="C#" Class="FournisseurAdd" %>
+﻿﻿<%@ WebHandler Language="C#" Class="FournisseurAdd" %>
 
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlClient;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -15,8 +16,8 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -29,6 +30,12 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
             // ⚠️ Le CODE n'est plus envoyé par le client : il est généré côté serveur.
             string nom = GetString(data, "nom");
             string adresse = GetString(data, "adresse");
@@ -39,7 +46,7 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
             string siret = GetString(data, "siret");
             bool actif = GetBool(data, "actif", true);
 
-            if (string.IsNullOrEmpty(nom))
+            if (string.IsNullOrWhiteSpace(nom))
             {
                 ctx.Response.Write("{\"success\":false,\"message\":\"Le nom est obligatoire.\"}");
                 return;
@@ -59,14 +66,11 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
             {
                 conn.Open();
 
-                using (SqlTransaction tx = conn.BeginTransaction())
+                using (var tx = conn.BeginTransaction())
                 {
                     try
                     {
-                        // -----------------------------------------------------------
                         // 1) Génération atomique du numéro de séquence pour le projet
-                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT
-                        // -----------------------------------------------------------
                         string sqlSeq = @"
                             IF NOT EXISTS (
                                 SELECT 1 FROM SFOURNISSEUR_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
@@ -86,30 +90,22 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
                         using (var cmdSeq = new SqlCommand(sqlSeq, conn, tx))
                         {
                             cmdSeq.Parameters.AddWithValue("@projet", projetCode);
-                            object scalar = cmdSeq.ExecuteScalar();
-                            numero = Convert.ToInt32(scalar);
+                            numero = Convert.ToInt32(cmdSeq.ExecuteScalar());
                         }
 
-                        // -----------------------------------------------------------
-                        // 2) Construction du code : FO-{PROJET}-{00001}
-                        // -----------------------------------------------------------
+                        // 2) Construction du code : FRS-{PROJET}-{00001}
                         code = string.Format("FRS-{0}-{1:D5}", projetCode, numero);
 
-                        // -----------------------------------------------------------
-                        // 3) Vérification anti-doublon (ceinture + bretelles)
-                        // -----------------------------------------------------------
+                        // 3) Vérification anti-doublon
                         using (var cmdCheck = new SqlCommand(
                             "SELECT COUNT(1) FROM SFOURNISSEUR WHERE CODE = @code", conn, tx))
                         {
                             cmdCheck.Parameters.AddWithValue("@code", code);
-                            int exists = Convert.ToInt32(cmdCheck.ExecuteScalar());
-                            if (exists > 0)
+                            if (Convert.ToInt32(cmdCheck.ExecuteScalar()) > 0)
                                 throw new Exception("Le code généré existe déjà, veuillez réessayer.");
                         }
 
-                        // -----------------------------------------------------------
                         // 4) Insertion du fournisseur
-                        // -----------------------------------------------------------
                         string sqlInsert = @"
                             INSERT INTO SFOURNISSEUR
                                 (ID, CODE, NOM, ADRESSE, TELEPHONE, EMAIL, CONTACT_NOM, CONTACT_TELEPHONE, SIRET, ACTIVE, CREATED_BY, CREATED_AT)
@@ -121,12 +117,12 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
                             cmd.Parameters.AddWithValue("@id", newId);
                             cmd.Parameters.AddWithValue("@code", code);
                             cmd.Parameters.AddWithValue("@nom", nom);
-                            cmd.Parameters.AddWithValue("@adresse", (object)adresse ?? DBNull.Value);
-                            cmd.Parameters.AddWithValue("@telephone", (object)telephone ?? DBNull.Value);
-                            cmd.Parameters.AddWithValue("@email", (object)email ?? DBNull.Value);
-                            cmd.Parameters.AddWithValue("@contactNom", (object)contactNom ?? DBNull.Value);
-                            cmd.Parameters.AddWithValue("@contactTelephone", (object)contactTelephone ?? DBNull.Value);
-                            cmd.Parameters.AddWithValue("@siret", (object)siret ?? DBNull.Value);
+                            cmd.Parameters.AddWithValue("@adresse", string.IsNullOrEmpty(adresse) ? (object)DBNull.Value : adresse);
+                            cmd.Parameters.AddWithValue("@telephone", string.IsNullOrEmpty(telephone) ? (object)DBNull.Value : telephone);
+                            cmd.Parameters.AddWithValue("@email", string.IsNullOrEmpty(email) ? (object)DBNull.Value : email);
+                            cmd.Parameters.AddWithValue("@contactNom", string.IsNullOrEmpty(contactNom) ? (object)DBNull.Value : contactNom);
+                            cmd.Parameters.AddWithValue("@contactTelephone", string.IsNullOrEmpty(contactTelephone) ? (object)DBNull.Value : contactTelephone);
+                            cmd.Parameters.AddWithValue("@siret", string.IsNullOrEmpty(siret) ? (object)DBNull.Value : siret);
                             cmd.Parameters.AddWithValue("@actif", actif ? 1 : 0);
                             cmd.Parameters.AddWithValue("@userId", userId);
                             cmd.ExecuteNonQuery();
@@ -163,9 +159,7 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
 
     private string GetString(Dictionary<string, object> data, string key)
     {
-        if (data.ContainsKey(key) && data[key] != null)
-            return data[key].ToString();
-        return null;
+        return data.ContainsKey(key) && data[key] != null ? data[key].ToString() : null;
     }
 
     private bool GetBool(Dictionary<string, object> data, string key, bool defaultValue)
@@ -173,14 +167,13 @@ public class FournisseurAdd : IHttpHandler, IRequiresSessionState
         if (data.ContainsKey(key) && data[key] != null)
         {
             bool val;
-            if (bool.TryParse(data[key].ToString(), out val))
-                return val;
+            if (bool.TryParse(data[key].ToString(), out val)) return val;
+            string s = data[key].ToString().Trim();
+            if (s == "1") return true;
+            if (s == "0") return false;
         }
         return defaultValue;
     }
 
-    public bool IsReusable
-    {
-        get { return false; }
-    }
+    public bool IsReusable { get { return false; } }
 }

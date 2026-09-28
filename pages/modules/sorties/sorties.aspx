@@ -95,10 +95,6 @@
                 <i class="fas fa-plus"></i>
                 <span data-i18n="sorties.btn.add">Nouveau bon</span>
               </button>
-              <button class="btn-modern btn-outline-success" onclick="openImportModal(event)" type="button" disabled>
-                <i class="fas fa-file-import"></i>
-                <span data-i18n="sorties.btn.import">Importer</span>
-              </button>
               <button class="btn-modern btn-primary" onclick="exportSortiesPDF()" type="button">
                 <i class="fas fa-file-pdf"></i>
                 <span data-i18n="sorties.btn.pdf">PDF</span>

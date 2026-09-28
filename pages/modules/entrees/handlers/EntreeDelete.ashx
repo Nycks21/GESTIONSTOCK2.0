@@ -1,4 +1,4 @@
-﻿<%@ WebHandler Language="C#" Class="EntreeDelete" %>
+﻿﻿<%@ WebHandler Language="C#" Class="EntreeDelete" %>
 using System;
 using System.Collections.Generic;
 using System.Configuration;
@@ -15,8 +15,8 @@ public class EntreeDelete : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -29,10 +29,16 @@ public class EntreeDelete : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
             // ─────────────────────────────────────────────────────────
             // ✅ VÉRIFICATION DU MOT DE PASSE DE SUPPRESSION (obligatoire)
-            //    La comparaison se fait UNIQUEMENT côté serveur,
-            //    jamais dans le JavaScript.
+            //    Double protection : CSRF + mot de passe serveur.
+            //    La comparaison se fait UNIQUEMENT côté serveur.
             // ─────────────────────────────────────────────────────────
             string password = null;
             if (data.ContainsKey("password") && data["password"] != null)
@@ -68,7 +74,10 @@ public class EntreeDelete : IHttpHandler, IRequiresSessionState
             if (data.ContainsKey("id") && data["id"] != null)
                 id = data["id"].ToString();
             if (string.IsNullOrEmpty(id))
-                throw new Exception("ID manquant");
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant.\"}");
+                return;
+            }
 
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
@@ -98,14 +107,21 @@ public class EntreeDelete : IHttpHandler, IRequiresSessionState
                 }
 
                 // Suppression logique
-                string sql = "UPDATE SENTREE SET DELETION_AT = GETDATE(), DELETION_BY = @userId WHERE ID = @id AND STATUT = 'BROUILLON'";
+                string sql = @"
+                    UPDATE SENTREE
+                    SET DELETION_AT = GETDATE(),
+                        DELETION_BY = @userId
+                    WHERE ID = @id AND STATUT = 'BROUILLON'";
                 using (var cmd = new SqlCommand(sql, conn))
                 {
                     cmd.Parameters.AddWithValue("@id", id);
                     cmd.Parameters.AddWithValue("@userId", userId);
                     int rows = cmd.ExecuteNonQuery();
                     if (rows == 0)
-                        throw new Exception("Impossible de supprimer : le bon est déjà validé.");
+                    {
+                        ctx.Response.Write("{\"success\":false,\"message\":\"Impossible de supprimer : le bon est déjà validé.\"}");
+                        return;
+                    }
                 }
             }
 

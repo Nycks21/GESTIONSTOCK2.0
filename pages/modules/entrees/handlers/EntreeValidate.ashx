@@ -14,8 +14,9 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité CRITIQUE : Session + Token CSRF + Origin/Referer
+        //    Cette action modifie SSTOCK et MSTOCK → protection renforcée indispensable.
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -26,9 +27,19 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
         {
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var data = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
             string id = data.ContainsKey("id") ? data["id"].ToString() : null;
             if (string.IsNullOrEmpty(id))
-                throw new Exception("ID manquant");
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant.\"}");
+                return;
+            }
 
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
@@ -41,6 +52,7 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                     try
                     {
                         string userName = GetUserName(conn, trans, userId);
+
                         // 1. Vérifier le statut et récupérer le numéro
                         string checkSql = "SELECT STATUT, NUMERO FROM SENTREE WHERE ID = @id";
                         string statut = null;
@@ -179,7 +191,12 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                         }
 
                         // 4. Mettre à jour le statut du bon
-                        string updateStatut = "UPDATE SENTREE SET STATUT = 'VALIDE', VALIDE_BY = @userId, VALIDE_AT = GETDATE() WHERE ID = @id";
+                        string updateStatut = @"
+                            UPDATE SENTREE
+                            SET STATUT = 'VALIDE',
+                                VALIDE_BY = @userId,
+                                VALIDE_AT = GETDATE()
+                            WHERE ID = @id";
                         using (var cmd = new SqlCommand(updateStatut, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", id);
@@ -188,7 +205,11 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
                         }
 
                         trans.Commit();
-                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Bon validé et stock mis à jour." }));
+                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                        {
+                            success = true,
+                            message = "Bon validé et stock mis à jour."
+                        }));
                     }
                     catch
                     {
@@ -201,7 +222,11 @@ public class EntreeValidate : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

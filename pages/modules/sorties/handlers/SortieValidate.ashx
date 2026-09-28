@@ -14,8 +14,9 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ 1. Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ 1. Sécurité CRITIQUE : Session + Token CSRF + Origin/Referer
+        //    Cette action DÉDUIT du stock (SSTOCK + MSTOCK) → protection obligatoire.
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -37,11 +38,20 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
 
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
+
             string id = null;
             if (data.ContainsKey("id") && data["id"] != null)
                 id = data["id"].ToString();
             if (string.IsNullOrEmpty(id))
-                throw new Exception("ID manquant");
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"ID manquant.\"}");
+                return;
+            }
 
             int userId = AuthHelper.GetUserId(ctx);
             string connStr = AuthHelper.ConnectionString;
@@ -54,8 +64,12 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                     try
                     {
                         string userName = GetUserName(conn, trans, userId);
+
                         // Vérifier statut et récupérer le numéro
-                        string checkSql = "SELECT STATUT, NUMERO FROM SSORTIE WITH (UPDLOCK, HOLDLOCK) WHERE ID = @id AND DELETION_AT IS NULL";
+                        string checkSql = @"
+                            SELECT STATUT, NUMERO
+                            FROM SSORTIE WITH (UPDLOCK, HOLDLOCK)
+                            WHERE ID = @id AND DELETION_AT IS NULL";
                         string statut = null;
                         string numero = null;
                         using (var cmd = new SqlCommand(checkSql, conn, trans))
@@ -75,7 +89,8 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                         // Récupérer les lignes (quantité R)
                         string lignesSql = @"
                             SELECT ARTICLE_ID, QUANTITE_R
-                            FROM MLSORTIE WHERE BON_SORTIE_ID = @id AND DELETION_AT IS NULL";
+                            FROM MLSORTIE
+                            WHERE BON_SORTIE_ID = @id AND DELETION_AT IS NULL";
                         var lignes = new List<Dictionary<string, object>>();
                         using (var cmd = new SqlCommand(lignesSql, conn, trans))
                         {
@@ -133,6 +148,7 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                             decimal disponible = 0;
                             foreach (var stock in stocks)
                                 disponible += Convert.ToDecimal(stock["quantite"]);
+
                             if (disponible < qteR)
                             {
                                 throw new Exception("Stock insuffisant pour l'article " + articleId +
@@ -186,7 +202,12 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                         }
 
                         // Mettre à jour le statut
-                        string updateStatut = "UPDATE SSORTIE SET STATUT = 'VALIDE', VALIDE_BY = @userId, VALIDE_AT = GETDATE() WHERE ID = @id";
+                        string updateStatut = @"
+                            UPDATE SSORTIE
+                            SET STATUT = 'VALIDE',
+                                VALIDE_BY = @userId,
+                                VALIDE_AT = GETDATE()
+                            WHERE ID = @id";
                         using (var cmd = new SqlCommand(updateStatut, conn, trans))
                         {
                             cmd.Parameters.AddWithValue("@id", id);
@@ -195,7 +216,11 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
                         }
 
                         trans.Commit();
-                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = true, message = "Bon de sortie validé et stock mis à jour." }));
+                        ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+                        {
+                            success = true,
+                            message = "Bon de sortie validé et stock mis à jour."
+                        }));
                     }
                     catch
                     {
@@ -208,7 +233,11 @@ public class SortieValidate : IHttpHandler, IRequiresSessionState
         catch (Exception ex)
         {
             ctx.Response.StatusCode = 500;
-            ctx.Response.Write(new JavaScriptSerializer().Serialize(new { success = false, message = ex.Message.Replace("\"", "\\\"") }));
+            ctx.Response.Write(new JavaScriptSerializer().Serialize(new
+            {
+                success = false,
+                message = ex.Message.Replace("\"", "\\\"")
+            }));
         }
     }
 

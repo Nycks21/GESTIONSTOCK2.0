@@ -94,10 +94,6 @@
                 <i class="fas fa-plus"></i>
                 <span data-i18n="entrees.btn.add">Nouveau bon</span>
               </button>
-              <button class="btn btn-outline-secondary btn-sm" onclick="openImportModal(event)" type="button" disabled>
-                <i class="fas fa-file-import"></i>
-                <span data-i18n="entrees.btn.import">Importer</span>
-              </button>
               <button class="btn btn-primary btn-sm" onclick="exportEntreesPDF()" type="button">
                 <i class="fas fa-file-pdf"></i>
                 <span data-i18n="entrees.btn.pdf">PDF</span>

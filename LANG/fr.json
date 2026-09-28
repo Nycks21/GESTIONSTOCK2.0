@@ -600,6 +600,8 @@
   "articles.server.fk_guid_not_found": "{label} introuvable (GUID).",
   "articles.server.fk_not_found": "{label} introuvable : \"{value}\"",
   "articles.server.import_summary": "{inserted} article(s) ajouté(s), {updated} mise(s) à jour, {skipped} ignoré(s) ({errors} erreur(s)).",
+  "articles.server.delete_used": "Impossible de supprimer, l'article est utilisé dans des bons d'entrée ou de sortie.",
+  "articles.server.deleted": "Article supprimé.",
   "articles.import.duplicate_in_file": "Code en doublon dans le fichier",
   "articles.confirm.delete_title": "Supprimer ?",
   "articles.confirm.delete_text": "Cette action est irréversible (suppression logique).",

@@ -1,4 +1,4 @@
-﻿﻿<%@ WebHandler Language="C#" Class="SortieAdd" %>
+﻿﻿﻿﻿<%@ WebHandler Language="C#" Class="SortieAdd" %>
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -15,8 +15,8 @@ public class SortieAdd : IHttpHandler, IRequiresSessionState
         ctx.Response.Charset = "utf-8";
         ctx.Response.Cache.SetNoStore();
 
-        // ✅ Authentification : tous les rôles authentifiés (0 à 4)
-        if (!AuthHelper.RequireApiAuth(ctx, -1))
+        // ✅ Sécurité renforcée : Session + Token CSRF + Origin/Referer
+        if (!AuthHelper.RequireCsrfSafePost(ctx, -1))
         {
             ctx.Response.StatusCode = 403;
             ctx.Response.Write("{\"success\":false,\"message\":\"Accès non autorisé\"}");
@@ -28,6 +28,12 @@ public class SortieAdd : IHttpHandler, IRequiresSessionState
             string json = new System.IO.StreamReader(ctx.Request.InputStream).ReadToEnd();
             var serializer = new JavaScriptSerializer();
             var data = serializer.Deserialize<Dictionary<string, object>>(json);
+
+            if (data == null)
+            {
+                ctx.Response.Write("{\"success\":false,\"message\":\"Corps de requête invalide.\"}");
+                return;
+            }
 
             // ⚠️ Le NUMERO n'est plus envoyé par le client : il est généré côté serveur.
             string dateSortieStr = GetString(data, "dateSortie");
@@ -65,11 +71,7 @@ public class SortieAdd : IHttpHandler, IRequiresSessionState
                 {
                     try
                     {
-                        // -----------------------------------------------------------
                         // 1) Génération atomique du numéro de séquence pour le projet
-                        //    UPDLOCK + HOLDLOCK verrouillent la ligne jusqu'au COMMIT,
-                        //    ce qui empêche toute collision entre utilisateurs simultanés.
-                        // -----------------------------------------------------------
                         string sqlSeq = @"
                             IF NOT EXISTS (
                                 SELECT 1 FROM SSORTIE_SEQUENCE WITH (UPDLOCK, HOLDLOCK)
@@ -93,14 +95,10 @@ public class SortieAdd : IHttpHandler, IRequiresSessionState
                             seq = Convert.ToInt32(scalar);
                         }
 
-                        // -----------------------------------------------------------
                         // 2) Construction du numéro : SOR-{PROJET}-{00001}
-                        // -----------------------------------------------------------
                         numero = string.Format("SOR-{0}-{1:D5}", projetCode, seq);
 
-                        // -----------------------------------------------------------
-                        // 3) Vérification anti-doublon (ceinture + bretelles)
-                        // -----------------------------------------------------------
+                        // 3) Vérification anti-doublon
                         using (var cmdCheck = new SqlCommand(
                             "SELECT COUNT(1) FROM SSORTIE WHERE NUMERO = @numero", conn, trans))
                         {
@@ -110,9 +108,7 @@ public class SortieAdd : IHttpHandler, IRequiresSessionState
                                 throw new Exception("Le numéro généré existe déjà, veuillez réessayer.");
                         }
 
-                        // -----------------------------------------------------------
                         // 4) Création de l'entête avec STATUT = 'BROUILLON'
-                        // -----------------------------------------------------------
                         string sqlEntete = @"
                             INSERT INTO SSORTIE (ID, NUMERO, DATE_SORTIE, DESTINATION, NOM, FONCTION, NOTES, STATUT, CREATED_BY, CREATED_AT)
                             VALUES (@id, @numero, @date, @dest, @nom, @fonction, @notes, 'BROUILLON', @userId, GETDATE())";
@@ -129,9 +125,7 @@ public class SortieAdd : IHttpHandler, IRequiresSessionState
                             cmd.ExecuteNonQuery();
                         }
 
-                        // -----------------------------------------------------------
                         // 5) Insertion des lignes
-                        // -----------------------------------------------------------
                         foreach (Dictionary<string, object> ligne in lignes)
                         {
                             string articleId = null;
