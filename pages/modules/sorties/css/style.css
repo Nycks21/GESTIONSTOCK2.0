@@ -42,3 +42,35 @@
 body.dark-mode .toast-item.success { background: #16A34A; }
 body.dark-mode .toast-item.error   { background: #DC2626; }
 body.dark-mode .toast-item.info    { background: #0891B2; }
+
+/* ═══════════════════════════════════════════════════════════
+   Champs gelés — visuel uniforme, découplé du JS
+   ═══════════════════════════════════════════════════════════ */
+.fld-frozen {
+    background-color: #e9ecef !important;
+    color:            #6c757d !important;
+    cursor:           not-allowed !important;
+    border-color:     #dee2e6 !important;
+    pointer-events:   none !important;
+    user-select:      none;
+}
+.fld-frozen * {
+    background-color: #e9ecef !important;
+    color:            #6c757d !important;
+    cursor:           not-allowed !important;
+    pointer-events:   none !important;
+}
+
+/* Champs éditables en EDIT — surbrillance jaune */
+#sortieModal.mode-edit .fld-editable {
+    background-color: #fff8e1 !important;
+    border-color:     #ffc107 !important;
+    cursor:           text    !important;
+}
+
+/* Boutons ligne désactivés */
+#sortieModal.mode-edit .btn-icon,
+#sortieModal.mode-view .btn-icon {
+    pointer-events: none !important;
+    opacity:        0.45 !important;
+}

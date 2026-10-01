@@ -100,9 +100,6 @@
                      data-i18n-attr="placeholder:accuses.search_placeholder"
                      placeholder="Rechercher par numéro, destination…" autocomplete="off" />
             </div>
-            <select id="destination-filter" class="form-control toolbar-select">
-              <option value="" data-i18n="accuses.filter.all_destinations">Toutes destinations</option>
-            </select>
             <select id="rows-per-page-top" class="form-control toolbar-select">
               <option value="10"  data-i18n="accuses.rows_per_page.10">10 par page</option>
               <option value="25"  data-i18n="accuses.rows_per_page.25">25 par page</option>

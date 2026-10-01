@@ -16,7 +16,7 @@ public partial class Login : Page
     string connStr = "";
 
     // ═══════════════════════════════════════════════════════════
-    // PROTECTION 1 : verrouillage par session (comportement existant)
+    // PROTECTION 1 : verrouillage par session
     // ═══════════════════════════════════════════════════════════
     const int MAX_ATTEMPTS = 5;
     const int LOCKOUT_SECONDS = 60;
@@ -25,13 +25,15 @@ public partial class Login : Page
 
     // ═══════════════════════════════════════════════════════════
     // PROTECTION 2 : rate-limit SERVEUR (indépendant de la session)
-    // Basé sur la table LOGIN_LOG existante.
-    // Empêche le contournement par création de nouvelles sessions
-    // ou par attaque distribuée (plusieurs IP).
     // ═══════════════════════════════════════════════════════════
-    const int SERVER_MAX_FAILED_BY_USERNAME = 10;  // 10 échecs / 15 min pour un username
-    const int SERVER_MAX_FAILED_BY_IP       = 20;  // 20 échecs / 15 min pour une IP
-    const int SERVER_WINDOW_MINUTES         = 15;  // Fenêtre glissante
+    const int SERVER_MAX_FAILED_BY_USERNAME = 10;
+    const int SERVER_MAX_FAILED_BY_IP       = 20;
+    const int SERVER_WINDOW_MINUTES         = 15;
+
+    // ✅ Durée d'affichage du toast AVANT redirection (temps de lecture)
+    //    Justifiée par : lecture du message + perception de la transition
+    //    NE PAS confondre avec un délai artificiel pour "voir le spinner".
+    const int SUCCESS_TRANSITION_MS = 1500;
 
     protected void Page_Load(object sender, EventArgs e)
     {
@@ -90,7 +92,7 @@ public partial class Login : Page
                 lblUserLimitInfo.Visible = true;
             }
 
-                        string msg = Request.QueryString["msg"];
+            string msg = Request.QueryString["msg"];
 
             if (msg == "maintenance")
                 ShowNotification("Vous avez été déconnecté pour cause de maintenance.", "warning");
@@ -201,12 +203,7 @@ public partial class Login : Page
     }
 
     // ============================================================
-    // ✅ NOUVEAU : RATE-LIMIT SERVEUR (indépendant de la session)
-    // ------------------------------------------------------------
-    // Compte les tentatives ÉCHOUÉES récentes dans LOGIN_LOG :
-    //   - par USERNAME → empêche l'attaque distribuée sur un compte
-    //   - par IP       → empêche l'attaque distribuée sur plusieurs comptes
-    // Retourne true si la limite est atteinte.
+    // RATE-LIMIT SERVEUR (indépendant de la session)
     // ============================================================
     private bool IsServerRateLimited(string username, string ip, out string reason)
     {
@@ -217,7 +214,6 @@ public partial class Login : Page
             {
                 conn.Open();
 
-                // ── Comptage par USERNAME ──
                 if (!string.IsNullOrEmpty(username))
                 {
                     string sqlUser = @"
@@ -238,7 +234,6 @@ public partial class Login : Page
                     }
                 }
 
-                // ── Comptage par IP ──
                 if (!string.IsNullOrEmpty(ip))
                 {
                     string sqlIp = @"
@@ -260,7 +255,7 @@ public partial class Login : Page
                 }
             }
         }
-        catch { /* En cas d'erreur, ne pas bloquer */ }
+        catch { }
 
         return false;
     }
@@ -276,9 +271,7 @@ public partial class Login : Page
             return;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        // PROTECTION 1 (existant) : verrouillage par session
-        // ═══════════════════════════════════════════════════════════
+        // ── PROTECTION 1 : verrouillage par session ──
         DateTime lockoutEnd = Session[SK_LOCKOUT_END] as DateTime? ?? DateTime.MinValue;
         if (DateTime.Now < lockoutEnd)
         {
@@ -293,18 +286,13 @@ public partial class Login : Page
             Session.Remove(SK_LOCKOUT_END);
         }
 
-        // ═══════════════════════════════════════════════════════════
-        // ✅ PROTECTION 2 (nouveau) : rate-limit SERVEUR
-        //    Indépendant de la session → impossible à contourner
-        //    par création de nouvelles sessions.
-        // ═══════════════════════════════════════════════════════════
+        // ── PROTECTION 2 : rate-limit SERVEUR ──
         string earlyUsername = (txtUsername.Text ?? "").Trim();
         string earlyIp = Request.UserHostAddress ?? "";
 
         string rateReason;
         if (IsServerRateLimited(earlyUsername, earlyIp, out rateReason))
         {
-            // Message générique (ne pas révéler la raison réelle)
             LogLoginAttempt(earlyUsername, false,
                 rateReason == "username"
                     ? "Rate-limit username atteint (serveur)"
@@ -313,9 +301,7 @@ public partial class Login : Page
             return;
         }
 
-        // ═══════════════════════════════════════════════════════════
-        // Vérifications licence / utilisateurs
-        // ═══════════════════════════════════════════════════════════
+        // ── Licence / utilisateurs ──
         var licenceInfo = AuthHelper.GetLicenceInfo();
         if (!licenceInfo.IsValid)
         {
@@ -344,10 +330,6 @@ public partial class Login : Page
                               out errorMessage, out minutesLeft,
                               out accountNotFound, out accountDeleted, out accountInactive))
         {
-            // ═══════════════════════════════════════════════════════
-            // Messages GÉNÉRIQUES (anti-énumération de comptes)
-            // Les détails réels sont UNIQUEMENT dans les logs.
-            // ═══════════════════════════════════════════════════════
             if (accountNotFound)
             {
                 LogLoginAttempt(usernameOrEmail, false, "Compte inexistant - CX2100");
@@ -369,7 +351,6 @@ public partial class Login : Page
                 return;
             }
 
-            // Mot de passe incorrect OU compte bloqué temporairement
             int attempts = (Session[SK_ATTEMPTS] as int? ?? 0) + 1;
             Session[SK_ATTEMPTS] = attempts;
 
@@ -400,7 +381,6 @@ public partial class Login : Page
         // ════════════════════════════════════════════════════════════
         // ✅ AUTHENTIFICATION RÉUSSIE
         // ════════════════════════════════════════════════════════════
-
         LogLoginAttempt(usernameOrEmail, true, "Connexion réussie");
 
         ShowSuccessNotification("Bienvenue " + nomComplet + " !");
@@ -435,7 +415,6 @@ public partial class Login : Page
             return;
         }
 
-        // Préparer les données de session à transférer
         var classesAutorisees = "[]";
         var matieresAutorisees = "[]";
 
@@ -473,57 +452,38 @@ public partial class Login : Page
             Response.Cookies.Set(expiredCookie);
         }
 
+        // ════════════════════════════════════════════════════════════
+        // ✅ TRANSITION VISUELLE + REDIRECTION
+        // ─────────────────────────────────────────────────────────
+        // Séquence :
+        //   1. Toast affiché (déjà fait ci-dessus)
+        //   2. Overlay + flou + spinner déclenchés
+        //   3. Attente courte (lecture du toast) — justifiée UX
+        //   4. Redirection vers EstablishSession.aspx → index.aspx
+        //
+        // Le toast apparaît AU-DESSUS (z-index 9999)
+        // L'overlay + flou apparaît EN-DESSOUS (z-index 9998)
+        // ════════════════════════════════════════════════════════════
         string redirectScript = @"
+            // 1. Toast sauvegardé (repris après rechargement complet si besoin)
             sessionStorage.setItem('loginToast', 'success|Authentification réussie - Bienvenue !');
-            setTimeout(function() {
+
+            // 2. Overlay + flou + spinner
+            if (typeof showLoginLoadingSpinner === 'function') {
+                showLoginLoadingSpinner();
+            }
+
+            // 3. Attente courte pour lecture du toast, puis redirection
+            setTimeout(function () {
                 window.isRedirecting = true;
                 window.location.href = '/pages/accueil/EstablishSession.aspx?t=" + transferToken + @"';
-            }, 1500);";
+            }, " + SUCCESS_TRANSITION_MS + @");";
         ScriptManager.RegisterStartupScript(this, GetType(), "redirectAfterLogin", redirectScript, true);
     }
 
     // ============================================================
-    // COMPTES À REBOURS
+    // COMPTE À REBOURS (verrouillage session)
     // ============================================================
-    private void StartLoginCountdown(int seconds)
-    {
-        string script = @"
-            (function() {
-                var btn = document.getElementById('" + btnLogin.ClientID + @"');
-                if (!btn) return;
-                var remaining = " + seconds + @";
-                var originalText = btn.value;
-                btn.disabled = true;
-                btn.style.opacity = '0.6';
-                btn.style.cursor = 'not-allowed';
-                btn.style.backgroundColor = '#6c757d';
-                var interval = setInterval(function() {
-                    remaining--;
-                    if (remaining <= 0) {
-                        clearInterval(interval);
-                        btn.disabled = false;
-                        btn.style.opacity = '1';
-                        btn.style.cursor = 'pointer';
-                        btn.style.backgroundColor = '#28a745';
-                        btn.style.animation = 'pulse-green 1.5s infinite';
-                        btn.value = originalText;
-                        if (typeof showNotification === 'function') {
-                            showNotification('Vous pouvez maintenant vous connecter', 'success', 3000);
-                        }
-                    } else {
-                        var minutes = Math.floor(remaining / 60);
-                        var secs = remaining % 60;
-                        if (minutes > 0) {
-                            btn.value = '⏳ Patientez ' + minutes + ' min ' + secs + 's';
-                        } else {
-                            btn.value = '⏳ Patientez ' + secs + 's';
-                        }
-                    }
-                }, 1000);
-            })();";
-        ScriptManager.RegisterStartupScript(this, GetType(), "loginCountdown", script, true);
-    }
-
     private void StartCountdownScript(int secondsLeft)
     {
         string script = @"
@@ -554,14 +514,6 @@ public partial class Login : Page
 
     // ============================================================
     // AUTHENTIFICATION LOCALE
-    // ------------------------------------------------------------
-    // ✅ ORDRE CORRIGÉ :
-    //   1. Utilisateur trouvé ?
-    //   2. Compte supprimé ?
-    //   3. Compte actif ?
-    //   4. BLOCKED_UNTIL encore actif ?  ← AVANT le mot de passe
-    //   5. Vérification mot de passe
-    //   6. Rehash si nécessaire
     // ============================================================
     private bool AuthenticateUser(string usernameOrEmail, string password,
                                   out int idUser, out int roleId, out string nomComplet,
@@ -625,11 +577,6 @@ public partial class Login : Page
                         return false;
                     }
 
-                    // ═══════════════════════════════════════════════════
-                    // ✅ VÉRIFICATION BLOCKED_UNTIL — AVANT le mot de passe
-                    // Un compte bloqué ne doit jamais faire l'objet
-                    // d'une vérification de mot de passe (anti brute-force).
-                    // ═══════════════════════════════════════════════════
                     if (hasBlockedUntilColumn && rd["BLOCKED_UNTIL"] != DBNull.Value)
                     {
                         DateTime blockedUntil = Convert.ToDateTime(rd["BLOCKED_UNTIL"]);
@@ -641,9 +588,6 @@ public partial class Login : Page
                         }
                     }
 
-                    // ═══════════════════════════════════════════════════
-                    // ✅ Vérification du mot de passe
-                    // ═══════════════════════════════════════════════════
                     string storedPwd = rd["PWD"] != DBNull.Value ? rd["PWD"].ToString() : "";
                     bool needsRehash;
                     if (!PasswordHelper.VerifyPassword(storedPwd, password, out needsRehash))

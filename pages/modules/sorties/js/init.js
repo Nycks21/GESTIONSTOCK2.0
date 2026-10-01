@@ -13,61 +13,63 @@ window.sortData = function (field) {
 };
 
 $(document).ready(function () {
-    // Chargement initial
+    // Chargement initial : dropdowns → liste → handlers UI
     loadDropdownsSortie().then(function () {
         loadSorties();
-        initUIControls();
+        initUIControls();   // ✅ gère TOUS les handlers filtres/tri/page
     });
 
-    // Filtres
-    $('#search-filter').on('input', debounce(function () {
-        AppState.filters.search = this.value.trim();
-        AppState.page = 1;
-        applyFiltersSortie();
-    }, 350));
+    // ✅ Fermeture des modales via bouton × — utilise les vraies fonctions
+    //    (évite que le body reste en overflow:hidden)
+    $(document).on('click', '.modal .close', function () {
+        var $modal = $(this).closest('.modal');
+        var modalId = $modal.attr('id');
 
-    $('#destination-filter').on('change', function () {
-        AppState.filters.destination = this.value;
-        AppState.page = 1;
-        applyFiltersSortie();
+        if (modalId === 'sortieModal' && typeof closeSortieModal === 'function') {
+            closeSortieModal();
+        } else if (modalId === 'modalImport' && typeof closeImportModal === 'function') {
+            closeImportModal();
+        } else {
+            $modal.hide();
+            document.body.style.overflow = '';
+        }
     });
 
-    $('#statut-filter').on('change', function () {
-        AppState.filters.statut = this.value;
-        AppState.page = 1;
-        applyFiltersSortie();
-    });
-
-    $('#btnResetFilters').on('click', function () {
-        resetFiltersSortie();
-    });
-
-    // Fermeture des modales par croix
-    $('.modal .close').on('click', function () {
-        $(this).closest('.modal').hide();
-    });
-
-    // Import (optionnel)
+    // ─── Import Excel (optionnel) ───
     window.openImportModal = function (e) {
         if (e) e.preventDefault();
-        document.getElementById('modalImport').style.display = 'flex';
-        document.getElementById('excelFile').value = '';
-        document.getElementById('fileNameDisplay').value = '';
-        document.getElementById('btnLaunchImport').disabled = true;
+        var m = document.getElementById('modalImport');
+        if (m) m.style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+
+        var f = document.getElementById('excelFile');
+        var d = document.getElementById('fileNameDisplay');
+        var b = document.getElementById('btnLaunchImport');
+        if (f) f.value = '';
+        if (d) d.value = '';
+        if (b) b.disabled = true;
     };
+
     window.closeImportModal = function () {
-        document.getElementById('modalImport').style.display = 'none';
-        document.getElementById('excelFile').value = '';
-        document.getElementById('fileNameDisplay').value = '';
-        document.getElementById('btnLaunchImport').disabled = true;
+        var m = document.getElementById('modalImport');
+        if (m) m.style.display = 'none';
+        document.body.style.overflow = '';
+
+        var f = document.getElementById('excelFile');
+        var d = document.getElementById('fileNameDisplay');
+        var b = document.getElementById('btnLaunchImport');
+        if (f) f.value = '';
+        if (d) d.value = '';
+        if (b) b.disabled = true;
     };
+
     window.launchImport = function () {
         // À implémenter si nécessaire
     };
 });
 
 // ============================================================
-// FONCTIONS DE FILTRAGE
+// FONCTIONS DE FILTRAGE (exposées pour les onclick HTML)
 // ============================================================
 
 function applyFiltersSortie() {
@@ -76,9 +78,12 @@ function applyFiltersSortie() {
 }
 
 function resetFiltersSortie() {
-    document.getElementById('search-filter').value = '';
-    document.getElementById('destination-filter').value = '';
-    document.getElementById('statut-filter').value = '';
+    var s = document.getElementById('search-filter');
+    var d = document.getElementById('destination-filter');
+    var t = document.getElementById('statut-filter');
+    if (s) s.value = '';
+    if (d) d.value = '';
+    if (t) t.value = '';
     AppState.filters = { search: '', destination: '', statut: '' };
     AppState.page = 1;
     loadSorties({ silent: true });

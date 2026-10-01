@@ -1,17 +1,15 @@
 ﻿<%@ Page Language="C#" AutoEventWireup="true" CodeFile="Login.aspx.cs" Inherits="Login" %>
-
-  <!DOCTYPE html>
-  <html lang="fr">
-
-  <head>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
-    <title>Connexion</title>
+    <title>Connexion — UFP</title>
 
-    <!-- Google Font: Source Sans Pro -->
+    <!-- Google Font -->
     <link rel="stylesheet" href="../pages/_assets/css/family.css?v=<%= AuthHelper.Version %>" />
     <!-- Font Awesome -->
     <link rel="stylesheet" href="../pages/_assets/css/all.min.css?v=<%= AuthHelper.Version %>" />
@@ -23,603 +21,456 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css" />
     <link rel="stylesheet" href="css/style.css?v=<%= AuthHelper.Version %>" />
 
-    <!-- ════════════════════════════════════════════════════════════════
-         ✅ jQuery + Toastr chargés ICI, dans le <head>, de façon SYNCHRONE.
-         Raison : ScriptManager.RegisterStartupScript (côté serveur) injecte
-         systématiquement son code juste avant </form>. Si Toastr n'est
-         chargé qu'après </form> (en bas de body), un toast déclenché juste
-         après une connexion réussie risque de s'exécuter AVANT que Toastr
-         n'existe encore — d'où l'ancien repli sur un alert() natif du
-         navigateur. En chargeant ces deux scripts ici, ils sont disponibles
-         dès le tout début du rendu du <body>, donc bien avant n'importe quel
-         script injecté plus tard dans la page. Plus aucun pari de timing.
-         ════════════════════════════════════════════════════════════════ -->
     <script src="../pages/_assets/js/jquery.min.js?v=<%= AuthHelper.Version %>"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
 
     <style>
-      .d-block {
-        display: block;
-      }
+        .d-block { display: block; }
+        .mb-2 { margin-bottom: 8px; }
 
-      .mb-2 {
-        margin-bottom: 8px;
-      }
-
-      .licence-warning {
-        background-color: #fff3cd;
-        border: 2px solid #ffc107;
-        border-radius: 6px;
-        color: #856404;
-        padding: 12px 16px;
-        font-weight: 600;
-        font-size: 13px;
-        display: block;
-        margin-bottom: 10px;
-        text-align: center;
-      }
-
-      .licence-error {
-        background-color: #fde8e8;
-        border: 2px solid #dc3545;
-        border-radius: 6px;
-        color: #dc3545;
-        padding: 12px 16px;
-        font-weight: 600;
-        font-size: 13px;
-        display: block;
-        margin-bottom: 10px;
-        text-align: center;
-      }
-
-      .error-box-red {
-        background-color: #fde8e8;
-        border: 2px solid #dc3545;
-        border-radius: 6px;
-        color: #dc3545;
-        padding: 12px 16px;
-        font-weight: 600;
-        font-size: 13px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        text-align: center;
-        gap: 10px;
-        margin: 10px 0;
-      }
-
-      .error-box-red::before {
-        content: "⚠️ ";
-        font-size: 16px;
-        flex-shrink: 0;
-      }
-
-      @keyframes pulse-green {
-
-        0%,
-        100% {
-          box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.4);
+        .toast-login {
+            background-color: #28a745 !important;
+            border-radius: 12px !important;
+            box-shadow: 0 12px 32px rgba(40, 167, 69, 0.35) !important;
         }
+        .toast-login .toast-title { font-weight: 700; font-size: 15px; }
+        .toast-login .toast-message { font-size: 13px; opacity: 0.95; }
 
-        50% {
-          box-shadow: 0 0 0 10px rgba(40, 167, 69, 0);
+        /* ✅ Toast toujours au-dessus de l'overlay de chargement */
+        #toast-container { z-index: 9999 !important; }
+
+        body.login-page {
+            background: url('../img/bg.png') no-repeat center center fixed !important;
+            background-size: cover !important;
+            position: relative;
+            min-height: 100vh;
         }
-      }
-
-      /* Toastr override */
-      .toast-success {
-        background-color: #28a745 !important;
-      }
-
-      .toast-error {
-        background-color: #dc3545 !important;
-      }
-
-      .toast-warning {
-        background-color: #ffc107 !important;
-      }
-
-      .toast-info {
-        background-color: #17a2b8 !important;
-      }
-
-      /* Toast personnalisé */
-      .toast-login {
-        background-color: #28a745 !important;
-        border-radius: 8px !important;
-        box-shadow: 0 4px 20px rgba(40, 167, 69, 0.3) !important;
-      }
-
-      .toast-login .toast-title {
-        font-weight: 600;
-        font-size: 15px;
-        letter-spacing: 0.5px;
-      }
-
-      .toast-login .toast-message {
-        font-size: 13px;
-        opacity: 0.95;
-      }
-
-      /* Focus sur les champs */
-      .input-group.focused .form-control {
-        border-color: #28a745;
-        box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.1);
-      }
-
-      .input-group.focused .input-group-text {
-        border-color: #28a745;
-        background-color: #f0fff4;
-      }
+        body.login-page::before {
+            content: '';
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            background:
+                radial-gradient(ellipse at 15% 10%, rgba(249, 214, 90, 0.18), transparent 55%),
+                radial-gradient(ellipse at 85% 90%, rgba(26, 43, 86, 0.42), transparent 60%),
+                linear-gradient(135deg, rgba(26, 43, 86, 0.55), rgba(10, 20, 45, 0.65));
+            pointer-events: none;
+        }
+        body.login-page .login-box,
+        body.login-page .logo-zoom-overlay,
+        body.login-page .login-loading-overlay {
+            position: relative;
+            z-index: 2;
+        }
+        body.login-page .login-corner-logo { z-index: 100; }
     </style>
 
-    <!-- ════════════════════════════════════════════════════════════════
-         ✅ FONCTIONS WRAPPER — DÉFINIES MAINTENANT DANS LE <head>
-         pour être disponibles AVANT que ScriptManager.RegisterStartupScript
-         n'injecte son code juste avant </form>.
-         ════════════════════════════════════════════════════════════════ -->
     <script>
-      // ═════════════════════════════════════════════════════════════════════════
-      // CONFIGURATION TOASTR
-      // ═════════════════════════════════════════════════════════════════════════
-
-      toastr.options = {
-        "closeButton": true,
-        "debug": false,
-        "newestOnTop": false,
-        "progressBar": true,
-        "positionClass": "toast-top-right",
-        "preventDuplicates": false,
-        "onclick": null,
-        "showDuration": 300,
-        "hideDuration": 1000,
-        "timeOut": 10000,
-        "extendedTimeOut": 10000,
-        "showEasing": "swing",
-        "hideEasing": "linear",
-        "showMethod": "fadeIn",
-        "hideMethod": "fadeOut"
-      };
-
-      // ════════════════════════════════════════════════════════════════
-      // ✅ NOTIFICATIONS — POINT D'ENTRÉE UNIQUE (Toastr exclusivement)
-      // ════════════════════════════════════════════════════════════════
-      function showNotification(message, type, duration) {
-        type = type || 'info';
-        duration = duration || 10000;
-
-        if (typeof toastr !== 'undefined') {
-          toastr.options.timeOut = duration;
-          toastr.options.extendedTimeOut = Math.min(duration, 1000);
-
-          switch (type) {
-            case 'success': toastr.success(message, '✅ Succès'); break;
-            case 'error': toastr.error(message, '❌ Erreur'); break;
-            case 'warning': toastr.warning(message, '⚠️ Attention'); break;
-            default: toastr.info(message, 'ℹ️ Information');
-          }
-          return;
-        }
-
-        // Repli professionnel (jamais un alert() natif)
-        showFallbackToast(message, type, duration);
-      }
-
-      // ✅ Toast de succès spécifique à la connexion (style "Login — Utilisateur authentifié")
-      function showLoginSuccessNotification(message) {
-        if (typeof toastr !== 'undefined') {
-          toastr.options.timeOut = 10000;
-          toastr.options.extendedTimeOut = 10000;
-          toastr.options.progressBar = true;
-          toastr.success(
-            '<div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">' +
-            '<span style="font-size:16px;">👤</span> ' +
-            '<span>Utilisateur authentifié</span>' +
-            '<span style="font-size:12px;opacity:0.6;margin:0 4px;">•</span>' +
-            '<span style="font-size:13px;font-weight:400;opacity:0.85;">' + message + '</span>' +
-            '</div>',
-            'Login'
-          );
-          return;
-        }
-
-        showFallbackToast('👤 Utilisateur authentifié — ' + message, 'success', 3000);
-      }
-
-      // ════════════════════════════════════════════════════════════════
-      // ✅ Repli interne (DOM/CSS pur) — utilisé UNIQUEMENT si Toastr n'a
-      // pas pu être chargé. Reproduit le style des toasts (coin supérieur
-      // droit, couleur selon le type, disparition automatique). Ne bloque
-      // jamais l'interface (contrairement à alert()/confirm()).
-      // ════════════════════════════════════════════════════════════════
-      var _fallbackToastContainer = null;
-
-      function showFallbackToast(message, type, duration) {
-        var colors = {
-          success: '#28a745',
-          error: '#dc3545',
-          warning: '#ffc107',
-          info: '#17a2b8'
+        toastr.options = {
+            "closeButton": true, "debug": false, "newestOnTop": false,
+            "progressBar": true, "positionClass": "toast-top-right",
+            "preventDuplicates": false, "onclick": null,
+            "showDuration": 300, "hideDuration": 1000,
+            "timeOut": 10000, "extendedTimeOut": 10000,
+            "showEasing": "swing", "hideEasing": "linear",
+            "showMethod": "fadeIn", "hideMethod": "fadeOut"
         };
-        var color = colors[type] || colors.info;
 
-        if (!_fallbackToastContainer) {
-          _fallbackToastContainer = document.createElement('div');
-          _fallbackToastContainer.style.cssText =
-            'position:fixed;top:20px;right:20px;z-index:99999;' +
-            'display:flex;flex-direction:column;gap:10px;max-width:320px;';
-          document.body.appendChild(_fallbackToastContainer);
+        function showNotification(message, type, duration) {
+            type = type || 'info';
+            duration = duration || 10000;
+            if (typeof toastr !== 'undefined') {
+                toastr.options.timeOut = duration;
+                toastr.options.extendedTimeOut = Math.min(duration, 1000);
+                switch (type) {
+                    case 'success': toastr.success(message, '✅ Succès'); break;
+                    case 'error':   toastr.error(message,   '❌ Erreur');  break;
+                    case 'warning': toastr.warning(message, '⚠️ Attention'); break;
+                    default:        toastr.info(message,    'ℹ️ Information');
+                }
+                return;
+            }
+            showFallbackToast(message, type, duration);
         }
 
-        var toast = document.createElement('div');
-        toast.style.cssText =
-          'background:' + color + ';color:#fff;padding:14px 18px;border-radius:8px;' +
-          'box-shadow:0 4px 16px rgba(0,0,0,0.25);font-size:13px;line-height:1.4;' +
-          'opacity:0;transform:translateX(20px);transition:opacity .3s ease,transform .3s ease;';
-        toast.textContent = message;
+        function showLoginSuccessNotification(message) {
+            if (typeof toastr !== 'undefined') {
+                toastr.options.timeOut = 10000;
+                toastr.options.extendedTimeOut = 10000;
+                toastr.options.progressBar = true;
+                toastr.success(
+                    '<div style="font-size:14px;font-weight:500;display:flex;align-items:center;gap:6px;">' +
+                    '<span style="font-size:16px;">👤</span> ' +
+                    '<span>Utilisateur authentifié</span>' +
+                    '<span style="font-size:12px;opacity:0.6;margin:0 4px;">•</span>' +
+                    '<span style="font-size:13px;font-weight:400;opacity:0.85;">' + message + '</span>' +
+                    '</div>', 'Login');
+                return;
+            }
+            showFallbackToast('👤 Utilisateur authentifié — ' + message, 'success', 3000);
+        }
 
-        _fallbackToastContainer.appendChild(toast);
-        requestAnimationFrame(function () {
-          toast.style.opacity = '1';
-          toast.style.transform = 'translateX(0)';
-        });
+        var _fallbackToastContainer = null;
+        function showFallbackToast(message, type, duration) {
+            var colors = { success:'#28a745', error:'#dc3545', warning:'#ffc107', info:'#17a2b8' };
+            var color = colors[type] || colors.info;
+            if (!_fallbackToastContainer) {
+                _fallbackToastContainer = document.createElement('div');
+                _fallbackToastContainer.style.cssText =
+                    'position:fixed;top:20px;right:20px;z-index:9999;' +
+                    'display:flex;flex-direction:column;gap:10px;max-width:320px;';
+                document.body.appendChild(_fallbackToastContainer);
+            }
+            var toast = document.createElement('div');
+            toast.style.cssText =
+                'background:' + color + ';color:#fff;padding:14px 18px;border-radius:8px;' +
+                'box-shadow:0 4px 16px rgba(0,0,0,0.25);font-size:13px;line-height:1.4;' +
+                'opacity:0;transform:translateX(20px);transition:opacity .3s ease,transform .3s ease;';
+            toast.textContent = message;
+            _fallbackToastContainer.appendChild(toast);
+            requestAnimationFrame(function () {
+                toast.style.opacity = '1'; toast.style.transform = 'translateX(0)';
+            });
+            setTimeout(function () {
+                toast.style.opacity = '0'; toast.style.transform = 'translateX(20px)';
+                setTimeout(function () { toast.remove(); }, 300);
+            }, duration);
+        }
 
-        setTimeout(function () {
-          toast.style.opacity = '0';
-          toast.style.transform = 'translateX(20px)';
-          setTimeout(function () { toast.remove(); }, 300);
-        }, duration);
-      }
+        // ════════════════════════════════════════════════════════════
+        // ✅ GARDE ANTI-RETOUR-ARRIÈRE (logique d'origine préservée)
+        // ════════════════════════════════════════════════════════════
+        window.isRedirecting = false;
 
-      // ════════════════════════════════════════════════════════════════
-      // ✅ GARDE ANTI-RETOUR-ARRIÈRE CORRIGÉ
-      // ════════════════════════════════════════════════════════════════
-      // BUG CORRIGÉ : le garde anti-retour-arrière forçait systématiquement
-      // location.replace('/auth/Login.aspx') sur tout événement "popstate",
-      // y compris ceux déclenchés involontairement pendant la redirection
-      // post-connexion (postback ASP.NET classique qui modifie le DOM/l'historique).
-      // Résultat : le toast "Utilisateur authentifié" s'affichait, mais la
-      // redirection vers le dashboard était annulée et on restait bloqué sur Login.
-      //
-      // Solution : on introduit un indicateur global "isRedirecting". Le garde
-      // anti-retour ne renvoie vers Login.aspx que si AUCUNE redirection légitime
-      // n'est en cours. La fonction redirectTo() (utilisée après connexion) lève
-      // ce drapeau avant de naviguer.
-      window.isRedirecting = false;
-
-      function redirectTo(url) {
-        window.isRedirecting = true;
-        window.location.href = url;
-      }
-
-      (function () {
-        history.pushState(null, document.title, location.href);
-        window.addEventListener('popstate', function (event) {
-          if (window.isRedirecting) {
-            // Une redirection légitime est en cours (ex: après connexion) :
-            // on laisse la navigation suivre son cours normalement.
-            return;
-          }
-          history.pushState(null, document.title, location.href);
-          location.replace('/auth/Login.aspx');
-        }, false);
-      })();
+        (function () {
+            history.pushState(null, document.title, location.href);
+            window.addEventListener('popstate', function () {
+                if (window.isRedirecting) return;
+                history.pushState(null, document.title, location.href);
+                location.replace('/auth/Login.aspx');
+            }, false);
+        })();
     </script>
-  </head>
+</head>
 
-  <body class="hold-transition login-page"
-    style="background: url('../img/bg.png') no-repeat center center fixed; background-size: cover;">
+<body class="hold-transition login-page">
+
     <div class="login-box">
-      <div class="card card-outline card-primary">
-        <div class="card-header text-center">
-          <img src="../img/logo1.png" alt="Logo" style="width: 130px; height: 100px; position: relative;" />
-          <hr />
-          <h4 style="color: #13245C">Unité de Facilitation de projet</h4>
-          <hr />
-          <!-- ✅ Nom du projet (lu depuis Web.config : ProjectCode) -->
-          <div class="project-name-badge">
-            <i class="fas fa-project-diagram"></i>
-            <span class="project-label">Projet :</span>
-            <span class="project-code">
-              <%= AuthHelper.GetProjectCode(this.Context) %>
-            </span>
-          </div>
+        <div class="login-card">
 
-          <hr />
-          <a class="h2"><b>Gestion de Stock</b></a>
-        </div>
-        <div class="card-body-login" style="background-color: #f6f6f6">
-          <form id="form1" runat="server" style="gap:10px">
-            <asp:HiddenField ID="hfTimerEnabled" runat="server" Value="false" />
-            <asp:Label ID="lblLicenceInfo" runat="server" ForeColor="#856404" CssClass="mb-2 d-block licence-warning"
-              Font-Bold="true" Visible="false"></asp:Label>
-            <asp:Label ID="lblUserLimitInfo" runat="server" ForeColor="#dc3545" CssClass="mb-2 d-block licence-error"
-              Font-Bold="true" Visible="false"></asp:Label>
-            <asp:Label ID="lblMessage" runat="server" CssClass="mb-2 d-block error-box-red" Font-Bold="true"
-              Visible="false"></asp:Label>
-            <asp:Panel ID="pnlErreur" runat="server" Visible="false" CssClass="error-box">
-              <asp:Label ID="lblErreur" runat="server"></asp:Label>
-            </asp:Panel>
-            <div class="input-group mb-3">
-              <asp:TextBox ID="txtUsername" CssClass="form-control" runat="server" Placeholder="Nom d'utilisateur ou adresse mail"
-                autocomplete="username"></asp:TextBox>
-              <div class="input-group-append">
-                <div class="input-group-text">
-                  <span class="fas fa-user"></span>
+            <div class="login-card__header">
+                <div class="login-logo-wrap">
+                    <img src="../img/logo1.png" alt="Logo UFP" class="login-logo" />
                 </div>
-              </div>
-            </div>
-            <div class="input-group mb-3">
-              <asp:TextBox ID="txtPassword" CssClass="form-control" runat="server" TextMode="Password"
-                Placeholder="Mot de passe" autocomplete="current-password"></asp:TextBox>
-              <div class="input-group-append">
-                <div class="input-group-text" id="togglePasswordBtn" style="cursor:pointer;"
-                  title="Afficher / masquer le mot de passe">
-                  <span class="fas fa-eye" id="togglePasswordIcon"></span>
+
+                <h1 class="title-anim" aria-label="Unité de Facilitation de Projet">
+                    <span aria-hidden="true"><span class="c-yellow">U</span>nité de <span class="c-navy">F</span>acilitation de <span class="c-yellow">P</span>rojet</span>
+                </h1>
+
+                <div class="project-name-badge">
+                    <i class="fas fa-project-diagram"></i>
+                    <span class="project-label">Projet :</span>
+                    <span class="project-code"><%= AuthHelper.GetProjectCode(this.Context) %></span>
                 </div>
-              </div>
-            </div>
-            <div id="capsLockWarning"
-              style="display:none;color:#856404;background:#fff3cd;border:1px solid #ffc107;border-radius:4px;padding:4px 10px;font-size:12px;margin-bottom:12px;">
-              <i class="fas fa-exclamation-triangle"></i> Verrouillage majuscules activé
-            </div>
-            <div class="row">
-              <div class="col-12">
-                <asp:Button ID="btnLogin" CssClass="btn btn-primary btn-block" runat="server" Text="Connexion"
-                  OnClick="btnLogin_Click" OnClientClick="return onLoginButtonClick();" />
-              </div>
+
+                <div class="login-subtitle">
+                    <span class="login-subtitle__line"></span>
+                    <span class="login-subtitle__text">Gestion de Stock</span>
+                    <span class="login-subtitle__line"></span>
+                </div>
             </div>
 
-            <!-- ═══════════════════════════════════════════════════════════
-            ✅ BADGE VERSION — affiché sous le bouton Connexion
-            La version provient de Web.config (appSettings → Version)
-             ═══════════════════════════════════════════════════════════ -->
-            <div class="login-version-badge">
-              <i class="fas fa-code-branch"></i>
-              <span>Version&nbsp;: v<%= AuthHelper.Version %></span>
+            <div class="login-card__body">
+                <form id="form1" runat="server">
+
+                    <asp:HiddenField ID="hfTimerEnabled" runat="server" Value="false" />
+
+                    <asp:Label ID="lblLicenceInfo" runat="server" ForeColor="#856404"
+                               CssClass="mb-2 d-block licence-warning" Font-Bold="true" Visible="false"></asp:Label>
+                    <asp:Label ID="lblUserLimitInfo" runat="server" ForeColor="#dc3545"
+                               CssClass="mb-2 d-block licence-error" Font-Bold="true" Visible="false"></asp:Label>
+                    <asp:Label ID="lblMessage" runat="server"
+                               CssClass="mb-2 d-block error-box-red" Font-Bold="true" Visible="false"></asp:Label>
+                    <asp:Panel ID="pnlErreur" runat="server" Visible="false" CssClass="error-box">
+                        <asp:Label ID="lblErreur" runat="server"></asp:Label>
+                    </asp:Panel>
+
+                    <!-- Champ Identifiant -->
+                    <div class="modern-field">
+                        <span class="modern-field__icon"><i class="fas fa-user"></i></span>
+                        <asp:TextBox ID="txtUsername" CssClass="modern-field__input" runat="server"
+                                     Placeholder="Nom d'utilisateur ou email"
+                                     autocomplete="username"></asp:TextBox>
+                    </div>
+
+                    <!-- Champ Mot de passe -->
+                    <div class="modern-field">
+                        <span class="modern-field__icon"><i class="fas fa-lock"></i></span>
+                        <asp:TextBox ID="txtPassword" CssClass="modern-field__input" runat="server"
+                                     TextMode="Password" Placeholder="Mot de passe"
+                                     autocomplete="current-password"></asp:TextBox>
+                        <button type="button" class="modern-field__toggle" id="togglePasswordBtn"
+                                title="Afficher / masquer le mot de passe" aria-label="Afficher le mot de passe">
+                            <i class="fas fa-eye" id="togglePasswordIcon"></i>
+                        </button>
+                    </div>
+
+                    <!-- Avertissement Caps Lock -->
+                    <div id="capsLockWarning" class="caps-warning">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <span>Verrouillage majuscules activé</span>
+                    </div>
+
+                    <!-- Bouton Connexion (enveloppé pour le reflet lumineux) -->
+                    <div class="btn-login-wrap">
+                        <asp:Button ID="btnLogin" CssClass="btn-login" runat="server" Text="Se connecter"
+                                    OnClick="btnLogin_Click" OnClientClick="return onLoginButtonClick();" />
+                    </div>
+
+                    <!-- Badge version -->
+                    <div class="login-version-badge">
+                        <i class="fas fa-code-branch"></i>
+                        <span>Version <%= AuthHelper.Version %></span>
+                    </div>
+                </form>
             </div>
-          </form>
+
+            <div class="login-card__footer">
+                <i class="fas fa-shield-alt"></i>
+                <span>Connexion sécurisée · MOZH &copy; <%= DateTime.Now.Year %></span>
+            </div>
         </div>
-      </div>
     </div>
 
-    <!-- ═══ SPINNER ═══ -->
-    <div id="spinnerOverlay" aria-hidden="true" style="display:none;visibility:hidden;">
-      <div class="spinner"></div>
-    </div>
-
-    <!-- ✅ SCRIPTS -->
-    <!-- jQuery et Toastr déjà chargés dans le <head> (voir explication plus haut) -->
-    <!-- Bootstrap 4 -->
     <script src="../pages/_assets/js/bootstrap.bundle.min.js?v=<%= AuthHelper.Version %>"></script>
-    <!-- AdminLTE App -->
     <script src="../pages/_assets/js/adminlte.min.js?v=<%= AuthHelper.Version %>"></script>
 
     <script>
-      // ✅ Démarrer le vérificateur de blocage
-      if (typeof startBlockChecker === 'function') {
-        startBlockChecker();
-      }
+        if (typeof startBlockChecker === 'function') startBlockChecker();
 
-      // ════════════════════════════════════════════════════════════════
-      // ✅ NOUVELLE FONCTIONNALITÉ : Afficher / masquer le mot de passe
-      // ════════════════════════════════════════════════════════════════
-      document.addEventListener('DOMContentLoaded', function () {
-        var toggleBtn = document.getElementById('togglePasswordBtn');
-        var toggleIcon = document.getElementById('togglePasswordIcon');
-        var passwordField = document.getElementById('<%= txtPassword.ClientID %>');
-
-        if (toggleBtn && passwordField) {
-          toggleBtn.addEventListener('click', function () {
-            var isHidden = passwordField.type === 'password';
-            passwordField.type = isHidden ? 'text' : 'password';
-            toggleIcon.classList.toggle('fa-eye', !isHidden);
-            toggleIcon.classList.toggle('fa-eye-slash', isHidden);
-          });
-        }
-      });
-
-      // ════════════════════════════════════════════════════════════════
-      // ✅ NOUVELLE FONCTIONNALITÉ : Se souvenir de moi (nom d'utilisateur)
-      // ════════════════════════════════════════════════════════════════
-      const REMEMBER_KEY = 'gs_remembered_username';
-
-      document.addEventListener('DOMContentLoaded', function () {
-        var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
-        var rememberBox = document.getElementById('chkRememberMe');
-        if (!usernameField || !rememberBox) return;
-
-        // Pré-remplir si un nom d'utilisateur a été mémorisé précédemment
-        var saved = localStorage.getItem(REMEMBER_KEY);
-        if (saved && !usernameField.value) {
-          usernameField.value = saved;
-          rememberBox.checked = true;
-        }
-      });
-
-      function persistRememberMe() {
-        var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
-        var rememberBox = document.getElementById('chkRememberMe');
-        if (!usernameField || !rememberBox) return;
-
-        if (rememberBox.checked) {
-          localStorage.setItem(REMEMBER_KEY, usernameField.value.trim());
-        } else {
-          localStorage.removeItem(REMEMBER_KEY);
-        }
-      }
-
-      // ════════════════════════════════════════════════════════════════
-      // ✅ NOUVELLE FONCTIONNALITÉ : Spinner sur le bouton pendant la connexion
-      // ════════════════════════════════════════════════════════════════
-      var loginSubmitting = false;
-
-      function onLoginButtonClick() {
-        if (loginSubmitting) {
-          return false; // empêche un double-clic d'envoyer deux postbacks
-        }
-
-        var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
-        var passwordField = document.getElementById('<%= txtPassword.ClientID %>');
-
-        // Validation minimale côté client
-        if (!usernameField.value.trim() || !passwordField.value.trim()) {
-          showNotification('Veuillez remplir tous les champs.', 'warning', 5000);
-          return false;
-        }
-
-        persistRememberMe();
-
-        var btn = document.getElementById('<%= btnLogin.ClientID %>');
-        if (btn) {
-          loginSubmitting = true;
-          btn.dataset.originalText = btn.value;
-          btn.value = '⏳ Connexion en cours...';
-          btn.style.opacity = '0.75';
-          btn.style.cursor = 'wait';
-        }
-
-        return true;
-      }
-
-      // ✅ Effet de focus sur les champs
-      document.addEventListener('DOMContentLoaded', function () {
-        var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
-        var passwordField = document.getElementById('<%= txtPassword.ClientID %>');
-
-        if (usernameField) {
-          usernameField.addEventListener('focus', function () {
-            this.parentElement.parentElement.classList.add('focused');
-          });
-          usernameField.addEventListener('blur', function () {
-            this.parentElement.parentElement.classList.remove('focused');
-          });
-
-          // Focus automatique intelligent
-          if (usernameField.value && passwordField) {
-            passwordField.focus();
-          } else {
-            usernameField.focus();
-          }
-        }
-
-        if (passwordField) {
-          passwordField.addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-              document.getElementById('<%= btnLogin.ClientID %>').click();
+        // ════════════════════════════════════════════════════════════
+        // Toggle password
+        // ════════════════════════════════════════════════════════════
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggleBtn = document.getElementById('togglePasswordBtn');
+            var toggleIcon = document.getElementById('togglePasswordIcon');
+            var passwordField = document.getElementById('<%= txtPassword.ClientID %>');
+            if (toggleBtn && passwordField) {
+                toggleBtn.addEventListener('click', function () {
+                    var isHidden = passwordField.type === 'password';
+                    passwordField.type = isHidden ? 'text' : 'password';
+                    toggleIcon.classList.toggle('fa-eye', !isHidden);
+                    toggleIcon.classList.toggle('fa-eye-slash', isHidden);
+                    toggleBtn.setAttribute('aria-label', isHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+                });
             }
-          });
+        });
 
-          // ════════════════════════════════════════════════════════
-          // ✅ NOUVELLE FONCTIONNALITÉ : avertissement Verrouillage Majuscules
-          // ════════════════════════════════════════════════════════
-          var capsWarning = document.getElementById('capsLockWarning');
-
-          function checkCapsLock(e) {
-            if (!capsWarning) return;
-            var isCapsOn = typeof e.getModifierState === 'function' && e.getModifierState('CapsLock');
-            capsWarning.style.display = isCapsOn ? 'block' : 'none';
-          }
-          passwordField.addEventListener('keydown', checkCapsLock);
-          passwordField.addEventListener('keyup', checkCapsLock);
-          passwordField.addEventListener('blur', function () {
-            if (capsWarning) capsWarning.style.display = 'none';
-          });
+        // ════════════════════════════════════════════════════════════
+        // Remember me
+        // ════════════════════════════════════════════════════════════
+        const REMEMBER_KEY = 'gs_remembered_username';
+        document.addEventListener('DOMContentLoaded', function () {
+            var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
+            var rememberBox = document.getElementById('chkRememberMe');
+            if (!usernameField || !rememberBox) return;
+            var saved = localStorage.getItem(REMEMBER_KEY);
+            if (saved && !usernameField.value) {
+                usernameField.value = saved;
+                rememberBox.checked = true;
+            }
+        });
+        function persistRememberMe() {
+            var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
+            var rememberBox = document.getElementById('chkRememberMe');
+            if (!usernameField || !rememberBox) return;
+            if (rememberBox.checked) localStorage.setItem(REMEMBER_KEY, usernameField.value.trim());
+            else localStorage.removeItem(REMEMBER_KEY);
         }
 
-        // ✅ Filet de sécurité : si la page se recharge après un postback
-        var btn = document.getElementById('<%= btnLogin.ClientID %>');
-        if (btn && !window.isRedirecting) {
-          loginSubmitting = false;
-          btn.style.opacity = '1';
-          btn.style.cursor = 'pointer';
-          if (btn.dataset.originalText) {
-            btn.value = btn.dataset.originalText;
-          }
+        // ════════════════════════════════════════════════════════════
+        // LOGIN SUBMIT — désactivation différée
+        // ════════════════════════════════════════════════════════════
+        var loginSubmitting = false;
+
+        function onLoginButtonClick() {
+            if (loginSubmitting) return false;
+
+            var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
+            var passwordField = document.getElementById('<%= txtPassword.ClientID %>');
+
+            if (!usernameField.value.trim() || !passwordField.value.trim()) {
+                showNotification('Veuillez remplir tous les champs.', 'warning', 5000);
+                return false;
+            }
+
+            persistRememberMe();
+
+            setTimeout(function () {
+                var btn = document.getElementById('<%= btnLogin.ClientID %>');
+                if (!btn) return;
+                loginSubmitting = true;
+                btn.dataset.originalText = btn.value;
+                btn.value = '⏳ Connexion…';
+                btn.classList.add('btn-login--loading');
+                btn.disabled = true;
+            }, 0);
+
+            return true;
         }
-      });
+
+        // ════════════════════════════════════════════════════════════
+        // ✅ TRANSITION DE CONNEXION RÉUSSIE
+        // ─────────────────────────────────────────────────────────
+        // Appelée depuis Login.aspx.cs APRÈS confirmation serveur
+        // de l'authentification. Ne touche à AUCUNE logique métier.
+        //
+        // Actions :
+        //   1. Floute le contenu de la page (body.is-loading)
+        //   2. Affiche l'overlay sombre + le spinner
+        //   3. Désactive tous les champs pour empêcher toute interaction
+        //
+        // Le toast est déjà affiché par le serveur AVANT cet appel
+        // → il reste visible au-dessus (z-index 9999 > 9998).
+        // ════════════════════════════════════════════════════════════
+        function showLoginLoadingSpinner() {
+            var overlay = document.getElementById('loginLoadingOverlay');
+            if (!overlay) return;
+            if (overlay.classList.contains('is-active')) return;  // anti-double
+
+            // 1. Flou de la page + blocage global
+            document.body.classList.add('is-loading');
+
+            // 2. Overlay + spinner
+            overlay.classList.add('is-active');
+            overlay.setAttribute('aria-hidden', 'false');
+
+            // 3. Blocage des inputs
+            var form = document.getElementById('form1');
+            if (form) {
+                var fields = form.querySelectorAll('input, select, textarea, button');
+                for (var i = 0; i < fields.length; i++) fields[i].disabled = true;
+            }
+        }
+
+        // ════════════════════════════════════════════════════════════
+        // Focus effects + Caps Lock + Enter + Reset après postback
+        // ════════════════════════════════════════════════════════════
+        document.addEventListener('DOMContentLoaded', function () {
+            var usernameField = document.getElementById('<%= txtUsername.ClientID %>');
+            var passwordField = document.getElementById('<%= txtPassword.ClientID %>');
+
+            function bindFocus(el) {
+                if (!el) return;
+                el.addEventListener('focus', function () { this.closest('.modern-field').classList.add('is-focused'); });
+                el.addEventListener('blur',  function () { this.closest('.modern-field').classList.remove('is-focused'); });
+            }
+            bindFocus(usernameField);
+            bindFocus(passwordField);
+
+            if (usernameField && passwordField) {
+                if (usernameField.value) passwordField.focus(); else usernameField.focus();
+            }
+
+            if (passwordField) {
+                passwordField.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') document.getElementById('<%= btnLogin.ClientID %>').click();
+                });
+
+                var capsWarning = document.getElementById('capsLockWarning');
+                function checkCapsLock(e) {
+                    if (!capsWarning) return;
+                    var isCapsOn = typeof e.getModifierState === 'function' && e.getModifierState('CapsLock');
+                    capsWarning.classList.toggle('is-visible', isCapsOn);
+                }
+                passwordField.addEventListener('keydown', checkCapsLock);
+                passwordField.addEventListener('keyup', checkCapsLock);
+                passwordField.addEventListener('blur', function () {
+                    if (capsWarning) capsWarning.classList.remove('is-visible');
+                });
+            }
+
+            // Reset du bouton après rechargement (postback échoué)
+            var btn = document.getElementById('<%= btnLogin.ClientID %>');
+            if (btn && !window.isRedirecting) {
+                loginSubmitting = false;
+                btn.classList.remove('btn-login--loading');
+                btn.disabled = false;
+                if (btn.dataset.originalText) btn.value = btn.dataset.originalText;
+                else btn.value = 'Se connecter';
+            }
+        });
     </script>
-    <!-- ═══════════════════════════════════════════════════════════
-         ✅ LOGO PERSONNEL — coin bas droit (fixed)
-         Chemin : ../img/logo2.png  (= /img/logo2.png depuis /auth/)
-         ═══════════════════════════════════════════════════════════ -->
-    <!-- ═══════════════════════════════════════════════════════════
-     ✅ LOGO PERSONNEL — coin bas droit (cliquable pour agrandir)
-     Chemin : ../img/logo2.png
-     ═══════════════════════════════════════════════════════════ -->
-    <div class="login-corner-logo" id="loginLogoTrigger" role="button" tabindex="0" aria-label="Agrandir le logo"
-      title="Cliquer pour agrandir">
-      <img src="../img/logo2.png" alt="Logo" />
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         LOGO COIN BAS DROIT + Modale Zoom
+         ═══════════════════════════════════════════════════════════════ -->
+    <div class="login-corner-logo" id="loginLogoTrigger" role="button" tabindex="0"
+         aria-label="Agrandir le logo" title="Cliquer pour agrandir">
+        <img src="../img/logo2.png" alt="Logo" />
     </div>
 
-    <!-- ═══════════════════════════════════════════════════════════
-     ✅ MODALE D'AGRANDISSEMENT
-     ═══════════════════════════════════════════════════════════ -->
-    <div id="logoZoomOverlay" class="logo-zoom-overlay" aria-hidden="true" role="dialog" aria-modal="true"
-      aria-label="Logo agrandi">
-      <button type="button" class="logo-zoom-close" id="logoZoomClose" aria-label="Fermer">&times;</button>
-      <img src="../img/logo2.png" alt="Logo" class="logo-zoom-image" />
+    <div id="logoZoomOverlay" class="logo-zoom-overlay" aria-hidden="true"
+         role="dialog" aria-modal="true" aria-label="Logo agrandi">
+        <button type="button" class="logo-zoom-close" id="logoZoomClose" aria-label="Fermer">&times;</button>
+        <img src="../img/logo2.png" alt="Logo" class="logo-zoom-image" />
     </div>
-    <!-- ═══ SCRIPT ZOOM LOGO ═══ -->
+
     <script>
-      (function () {
-        'use strict';
+        (function () {
+            'use strict';
+            var trigger = document.getElementById('loginLogoTrigger');
+            var overlay = document.getElementById('logoZoomOverlay');
+            var closeBtn = document.getElementById('logoZoomClose');
+            if (!trigger || !overlay) return;
 
-        var trigger = document.getElementById('loginLogoTrigger');
-        var overlay = document.getElementById('logoZoomOverlay');
-        var closeBtn = document.getElementById('logoZoomClose');
-
-        if (!trigger || !overlay) return;
-
-        function openZoom() {
-          overlay.classList.add('show');
-          overlay.setAttribute('aria-hidden', 'false');
-          document.body.style.overflow = 'hidden';
-          if (closeBtn) closeBtn.focus();
-        }
-
-        function closeZoom() {
-          overlay.classList.remove('show');
-          overlay.setAttribute('aria-hidden', 'true');
-          document.body.style.overflow = '';
-          trigger.focus();
-        }
-
-        // Clic sur le logo → ouvrir
-        trigger.addEventListener('click', function (e) {
-          e.preventDefault();
-          openZoom();
-        });
-
-        // Clavier (accessibilité) : Entrée / Espace
-        trigger.addEventListener('keydown', function (e) {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            openZoom();
-          }
-        });
-
-        // Bouton ✕ → fermer
-        if (closeBtn) {
-          closeBtn.addEventListener('click', function (e) {
-            e.stopPropagation();
-            closeZoom();
-          });
-        }
-
-        // Clic sur l'arrière-plan → fermer
-        overlay.addEventListener('click', function (e) {
-          if (e.target === overlay) closeZoom();
-        });
-
-        // Touche Échap → fermer
-        document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape' && overlay.classList.contains('show')) {
-            closeZoom();
-          }
-        });
-      })();
+            function openZoom() {
+                overlay.classList.add('show');
+                overlay.setAttribute('aria-hidden', 'false');
+                document.body.style.overflow = 'hidden';
+                if (closeBtn) closeBtn.focus();
+            }
+            function closeZoom() {
+                overlay.classList.remove('show');
+                overlay.setAttribute('aria-hidden', 'true');
+                document.body.style.overflow = '';
+                trigger.focus();
+            }
+            trigger.addEventListener('click', function (e) { e.preventDefault(); openZoom(); });
+            trigger.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openZoom(); }
+            });
+            if (closeBtn) closeBtn.addEventListener('click', function (e) { e.stopPropagation(); closeZoom(); });
+            overlay.addEventListener('click', function (e) { if (e.target === overlay) closeZoom(); });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && overlay.classList.contains('show')) closeZoom();
+            });
+        })();
     </script>
-  </body>
 
-  </html>
+    <!-- ═══════════════════════════════════════════════════════════════
+         OVERLAY DE TRANSITION — affiché uniquement après
+         authentification réussie.
+         z-index: 9998 (sous le toast qui est à 9999)
+         ═══════════════════════════════════════════════════════════════ -->
+    <div id="loginLoadingOverlay" class="login-loading-overlay"
+         aria-hidden="true" role="status" aria-live="polite">
+        <div class="login-loading-content">
+            <div class="login-loading-spinner">
+                <div class="login-loading-spinner__ring"></div>
+                <div class="login-loading-spinner__icon">
+                    <i class="fas fa-check"></i>
+                </div>
+            </div>
+            <div class="login-loading-text">
+                <h3>Connexion réussie</h3>
+                <p>Chargement de votre espace…</p>
+            </div>
+            <div class="login-loading-bar">
+                <div class="login-loading-bar__fill"></div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

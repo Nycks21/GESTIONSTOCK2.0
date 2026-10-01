@@ -106,6 +106,10 @@ function createPaginationControls(totalPages) {
 // ============================================================
 // LIGNES
 // ============================================================
+// ⚠️ IMPORTANT : les classes CSS des inputs sont synchronisées
+//    avec celles déclarées dans crud.js → EDITABLE_IN_EDIT
+//    (.ligne-quantite-r est le SEUL champ actif en EDIT)
+// ============================================================
 function ajouterLigne(articleId, qteD, qteR, obs) {
     var tbody = document.getElementById('lignesBody');
     if (!tbody) return;
@@ -128,11 +132,15 @@ function ajouterLigne(articleId, qteD, qteR, obs) {
                 optionsHtml +
             '</select>' +
         '</td>' +
-        '<td><input type="number" class="form-control form-control-sm ligne-qted" step="0.01" min="0" value="' + (qteD || '') + '" required /></td>' +
-        '<td><input type="number" class="form-control form-control-sm ligne-qter" step="0.01" min="0" value="' + (qteR || '') + '" /></td>' +
-        '<td><input type="text" class="form-control form-control-sm ligne-obs" value="' + (obs || '') + '" /></td>' +
+        '<td><input type="number" class="form-control form-control-sm ligne-quantite-d" ' +
+            'step="0.01" min="0" value="' + (qteD || '') + '" required /></td>' +
+        '<td><input type="number" class="form-control form-control-sm ligne-quantite-r" ' +
+            'step="0.01" min="0" value="' + (qteR || '') + '" /></td>' +
+        '<td><input type="text" class="form-control form-control-sm ligne-observations" ' +
+            'value="' + (obs || '') + '" /></td>' +
         '<td style="text-align:center;">' +
-            '<button type="button" class="btn-icon btn-danger" onclick="supprimerLigne(this)" title="Supprimer la ligne">' +
+            '<button type="button" class="btn-icon btn-danger" onclick="supprimerLigne(this)" ' +
+                'title="Supprimer la ligne">' +
                 '<i class="fas fa-trash"></i>' +
             '</button>' +
         '</td>';
@@ -154,7 +162,8 @@ function reindexerLignes() {
     var rows = document.querySelectorAll('#lignesBody tr');
     rows.forEach(function (tr, i) {
         tr.dataset.index = i;
-        tr.querySelector('td:first-child').textContent = i + 1;
+        var firstCell = tr.querySelector('td:first-child');
+        if (firstCell) firstCell.textContent = i + 1;
     });
 }
 
@@ -162,20 +171,34 @@ function getLignesFromModal() {
     var lignes = [];
     document.querySelectorAll('#lignesBody tr').forEach(function (tr) {
         var articleSelect = tr.querySelector('.ligne-article');
+        var qteDInput     = tr.querySelector('.ligne-quantite-d');
+        var qteRInput     = tr.querySelector('.ligne-quantite-r');
+        var obsInput      = tr.querySelector('.ligne-observations');
+
         var articleId = articleSelect ? articleSelect.value : '';
-        var qteD = parseFloat(tr.querySelector('.ligne-qted').value) || 0;
-        var qteR = parseFloat(tr.querySelector('.ligne-qter').value) || 0;
-        var obs  = tr.querySelector('.ligne-obs') ? tr.querySelector('.ligne-obs').value : '';
+        var qteD = qteDInput ? (parseFloat(qteDInput.value) || 0) : 0;
+        var qteR = qteRInput ? (parseFloat(qteRInput.value) || 0) : 0;
+        var obs  = obsInput  ? obsInput.value : '';
+
         if (articleId && qteD > 0) {
-            lignes.push({ articleId: articleId, quantiteD: qteD, quantiteR: qteR, observations: obs });
+            lignes.push({
+                articleId:    articleId,
+                quantiteD:    qteD,
+                quantiteR:    qteR,
+                observations: obs
+            });
         }
     });
     return lignes;
 }
 
 function resetFilters() {
-    document.getElementById('search-filter').value = '';
-    document.getElementById('statut-filter').value = '';
+    var s = document.getElementById('search-filter');
+    var d = document.getElementById('destination-filter');
+    var t = document.getElementById('statut-filter');
+    if (s) s.value = '';
+    if (d) d.value = '';
+    if (t) t.value = '';
     AppState.filters.search      = '';
     AppState.filters.destination = '';
     AppState.filters.statut      = '';
@@ -183,22 +206,31 @@ function resetFilters() {
     loadSorties({ silent: true });
 }
 
+// ============================================================
+// HANDLERS UNIQUES (filtres, tri, taille de page)
+// ============================================================
 function initUIControls() {
+    // Fermeture modale par Échap
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') {
             closeModal('sortieModal');
             closeModal('modalImport');
         }
     });
+
+    // Empêche la soumission native du formulaire
     var form = document.getElementById('sortieForm');
     if (form) {
         form.setAttribute('novalidate', 'novalidate');
         form.addEventListener('submit', function (e) { e.preventDefault(); });
     }
+
+    // Sécurité : boutons sans type → type="button" (évite submit accidentel)
     document.querySelectorAll('button').forEach(function (btn) {
         if (!btn.getAttribute('type')) btn.setAttribute('type', 'button');
     });
 
+    // ─── Taille de page ───
     var rowsSelect = document.getElementById('rows-per-page-top');
     if (rowsSelect) {
         rowsSelect.addEventListener('change', function () {
@@ -209,6 +241,7 @@ function initUIControls() {
         });
     }
 
+    // ─── Recherche (debounce) ───
     var searchInput = document.getElementById('search-filter');
     if (searchInput) {
         var timeoutId = null;
@@ -222,6 +255,18 @@ function initUIControls() {
             }, 300);
         });
     }
+
+    // ─── Filtre destination ───
+    var destFilter = document.getElementById('destination-filter');
+    if (destFilter) {
+        destFilter.addEventListener('change', function () {
+            AppState.filters.destination = this.value;
+            AppState.page = 1;
+            loadSorties({ silent: true });
+        });
+    }
+
+    // ─── Filtre statut ───
     var statutFilter = document.getElementById('statut-filter');
     if (statutFilter) {
         statutFilter.addEventListener('change', function () {
@@ -230,11 +275,14 @@ function initUIControls() {
             loadSorties({ silent: true });
         });
     }
+
+    // ─── Reset filtres ───
     var resetBtn = document.getElementById('btnResetFilters');
     if (resetBtn) {
         resetBtn.addEventListener('click', function () { resetFilters(); });
     }
 
+    // ─── Tri colonnes (délégation, pas d'onclick inline requis) ───
     window.sortData = function (field) {
         if (AppState.sortField === field) {
             AppState.sortOrder = AppState.sortOrder === 'ASC' ? 'DESC' : 'ASC';
@@ -246,13 +294,18 @@ function initUIControls() {
     };
 }
 
+// ============================================================
+// EXPOSITIONS
+// ============================================================
 window.showSpinner              = showSpinner;
 window.hideSpinner              = hideSpinner;
+window.forceHideSpinner         = forceHideSpinner;
 window.showModal                = showModal;
 window.closeModal               = closeModal;
 window.createPaginationControls = createPaginationControls;
 window.ajouterLigne             = ajouterLigne;
 window.supprimerLigne           = supprimerLigne;
+window.reindexerLignes          = reindexerLignes;
 window.getLignesFromModal       = getLignesFromModal;
 window.initUIControls           = initUIControls;
 window.resetFilters             = resetFilters;

@@ -250,7 +250,7 @@
                   <small style="display:block;margin-top:6px;font-size:12px;color:#17a2b8;line-height:1.4;">
                     <i class="fas fa-info-circle"></i>
                     <span data-i18n="saisies.modal.beneficiaire_info">
-                      Rempli automatiquement avec <strong>votre nom</strong>.
+                      Rempli automatiquement avec votre nom d'utilisateur.
                       Ce nom sera enregistré comme bénéficiaire de la demande.
                     </span>
                   </small>
